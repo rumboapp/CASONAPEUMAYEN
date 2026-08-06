@@ -29,7 +29,7 @@ var HOJAS = {
    Esto era el origen del bug de reservas duplicadas: Sheets convertía
    "2026-08-07" en un objeto Date con hora local y las comparaciones fallaban. */
 var COLS_TEXTO = {
-  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado'],
+  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono'],
   Fichas: ['nacimiento', 'fecha'],
   Aseo: ['actualizado'],
   Sesiones: ['expira'],
@@ -349,7 +349,7 @@ function cargarTablero(token, desde, hasta) {
     .map(function (r) {
       return {
         id: r.id, recurso: r.recurso, idUnidad: r.idUnidad, huesped: r.huesped,
-        telefono: r.telefono, email: r.email || '', canal: r.canal,
+        telefono: String(r.telefono || ''), email: r.email || '', canal: r.canal,
         firmada: firmadas.indexOf(r.id) > -1,
         checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
         estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
@@ -357,8 +357,12 @@ function cargarTablero(token, desde, hasta) {
         notas: r.notas || ''
       };
     });
+  var todas = leer_('Reservas').filter(function (r) { return r.estado !== 'cancelada'; });
   return {
     recursos: recursos_(), reservas: reservas, hoy: hoy_(),
+    // Reservas que existen en la planilla pero no se pueden ubicar en el
+    // calendario porque su fecha quedó ilegible: se avisa en pantalla.
+    ilegibles: todas.filter(function (r) { return !ymd_(r.checkIn) || !ymd_(r.checkOut); }).length,
     cfg: {
       altaIni: String(config_('temporadaAltaInicio', '12-15')),
       altaFin: String(config_('temporadaAltaFin', '03-15')),
@@ -483,7 +487,7 @@ function panelHoy(token, fecha) {
   var todas = leer_('Reservas').filter(function (r) { return r.estado !== 'cancelada'; });
   var mapear = function (r) {
     return {
-      id: r.id, huesped: r.huesped, telefono: r.telefono, canal: r.canal,
+      id: r.id, huesped: r.huesped, telefono: String(r.telefono || ''), canal: r.canal,
       recurso: nombre(r.recurso), estado: r.estado, notas: r.notas || '',
       addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
       saldo: (Number(r.total) || 0) - (Number(r.anticipo) || 0),
@@ -576,6 +580,45 @@ function fichaDe(token, idReserva) {
   sesion_(token);
   var f = leer_('Fichas').filter(function (x) { return x.idReserva === idReserva; })[0];
   return f ? { nombre: f.nombre, documento: f.documento, firmaUrl: f.firmaUrl, fecha: String(f.fecha) } : null;
+}
+
+/* ===================== REGLAMENTO =====================
+   Fuente única de las normas: las usan la ficha de recepción y la página
+   que firma el huésped, así nunca se desincronizan. Para cambiar una regla
+   se edita solo acá. */
+function reglamento() {
+  var entrada = String(config_('checkIn', '15:00'));
+  var salida = String(config_('checkOut', '11:00'));
+  return {
+    es: [
+      'Check-in desde las ' + entrada + ' y check-out hasta las ' + salida + '.',
+      'Horario de silencio de 22:00 a 09:00. Después de esa hora, la música y las ' +
+      'conversaciones solo en el espacio común y en voz baja.',
+      'No se admiten mascotas.',
+      'No se permite fumar dentro de las habitaciones ni de las carpas.',
+      'El consumo de alcohol está permitido solo en el espacio común.',
+      'Las personas no registradas como huéspedes no pueden pernoctar.',
+      'El huésped es responsable de los daños al mobiliario o al equipamiento.',
+      'En las habitaciones compartidas se pide cuidar el descanso de los demás: ' +
+      'evitar ruidos y luces fuertes cuando alguien esté durmiendo.',
+      'Cancelación: sin costo hasta 72 horas antes de la llegada; 50% de devolución ' +
+      'entre 24 y 72 horas; sin devolución con menos de 24 horas o si no se presenta.'
+    ],
+    en: [
+      'Check-in from ' + entrada + ' and check-out until ' + salida + '.',
+      'Quiet hours from 10:00 pm to 9:00 am. After that, music and conversation only ' +
+      'in the common area and at a low volume.',
+      'Pets are not allowed.',
+      'Smoking is not allowed inside the rooms or the tents.',
+      'Alcohol may be consumed in the common area only.',
+      'People not registered as guests may not stay overnight.',
+      'Guests are responsible for any damage to the furniture or equipment.',
+      'In shared rooms please respect other guests’ rest: avoid noise and bright ' +
+      'lights while someone is sleeping.',
+      'Cancellation: free of charge up to 72 hours before arrival; 50% refund between ' +
+      '24 and 72 hours; no refund with less than 24 hours or in case of a no-show.'
+    ]
+  };
 }
 
 /* ===================== FIRMA A DISTANCIA =====================

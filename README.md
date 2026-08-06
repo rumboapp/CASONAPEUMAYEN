@@ -69,6 +69,10 @@ Para las filas que ya quedaron dañadas, ejecuta desde el editor:
 - `repararReservas()` — solo informa cuáles están ilegibles (no borra nada).
 - `repararReservas(true)` — elimina esas filas para volver a cargarlas.
 
+El calendario ahora muestra un aviso amarillo cuando hay reservas en ese
+estado, así que no hay que adivinar por qué una reserva "desapareció". Esas
+filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
+
 ## Cómo se usa el calendario
 
 - **Crear**: haz clic en un día libre, o mantén apretado y arrastra sobre
@@ -93,6 +97,10 @@ carpeta de Drive llamada *Casona Peumayén — Fichas*:
   WhatsApp (usa el teléfono cargado en la reserva) o por correo. El huésped lo
   abre sin clave, ve su reserva, lee las normas de convivencia, las acepta y
   firma desde su teléfono.
+
+Las normas que se muestran en los dos casos son **exactamente las mismas**:
+salen de la función `reglamento()` en `Code.gs`, que es el único lugar donde
+hay que editarlas. Ahí también se cambian de una vez para los dos idiomas.
 
 La página del huésped está **en español e inglés**: detecta el idioma del
 teléfono y además tiene un botón ES/EN. El enlace solo da acceso a esa reserva

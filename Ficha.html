@@ -152,16 +152,6 @@ var T = {
     faltaFirma:'Falta tu firma.',
     faltaNombre:'Escribe tu nombre completo y tu documento.',
     enviando:'Enviando…',
-    reglas:[
-      'Horario de silencio de 22:00 a 09:00. Después de esa hora, la música y las conversaciones solo en el espacio común y en voz baja.',
-      'No se admiten mascotas.',
-      'No se permite fumar dentro de las habitaciones ni de las carpas.',
-      'El consumo de alcohol está permitido solo en el espacio común.',
-      'Las personas no registradas como huéspedes no pueden pernoctar.',
-      'El huésped es responsable de los daños al mobiliario o al equipamiento.',
-      'Cancelación: sin costo hasta 72 horas antes de la llegada; 50% de devolución entre 24 y 72 horas; sin devolución con menos de 24 horas o si no se presenta.'
-    ],
-    horario:function(a,b){ return 'Check-in desde las '+a+' · Check-out hasta las '+b+'.'; }
   },
   en:{
     cargando:'Loading…', tuReserva:'Your booking', aNombre:'Name', aUnidad:'Accommodation',
@@ -180,20 +170,13 @@ var T = {
     faltaFirma:'Your signature is missing.',
     faltaNombre:'Please enter your full name and ID number.',
     enviando:'Sending…',
-    reglas:[
-      'Quiet hours from 10:00 pm to 9:00 am. After that, music and conversation only in the common area and at a low volume.',
-      'Pets are not allowed.',
-      'Smoking is not allowed inside the rooms or the tents.',
-      'Alcohol may be consumed in the common area only.',
-      'People not registered as guests may not stay overnight.',
-      'Guests are responsible for any damage to the furniture or equipment.',
-      'Cancellation: free of charge up to 72 hours before arrival; 50% refund between 24 and 72 hours; no refund with less than 24 hours or in case of a no-show.'
-    ],
-    horario:function(a,b){ return 'Check-in from '+a+' · Check-out until '+b+'.'; }
   }
 };
 
 var IDIOMA = (navigator.language || 'es').toLowerCase().indexOf('es') === 0 ? 'es' : 'en';
+/* Las normas vienen del servidor para que sean exactamente las mismas que
+   se muestran en recepción: una sola fuente, en los dos idiomas. */
+var REGLAS = { es: [], en: [] };
 var DATOS = null, CTX = null, pintando = false, firmado = false;
 
 function $(id){ return document.getElementById(id); }
@@ -209,13 +192,10 @@ function aplicarIdioma(){
   $('bEn').classList.toggle('on', IDIOMA==='en');
 
   var ul = $('listaReglas'); ul.innerHTML='';
-  t.reglas.forEach(function(r){ var li=document.createElement('li'); li.textContent=r; ul.appendChild(li); });
-  if (DATOS){
-    var li=document.createElement('li');
-    li.textContent = t.horario(DATOS.horaEntrada, DATOS.horaSalida);
-    ul.appendChild(li);
-    pintarFechas();
-  }
+  (REGLAS[IDIOMA] || []).forEach(function(r){
+    var li=document.createElement('li'); li.textContent=r; ul.appendChild(li);
+  });
+  if (DATOS) pintarFechas();
 }
 $('bEs').onclick=function(){ IDIOMA='es'; aplicarIdioma(); };
 $('bEn').onclick=function(){ IDIOMA='en'; aplicarIdioma(); };
@@ -233,11 +213,21 @@ function pintarFechas(){
 }
 
 function llamar(fn, args, ok, mal){
-  var r = google.script.run.withSuccessHandler(ok).withFailureHandler(mal);
-  r[fn].apply(r, args);
+  try{
+    var r = google.script.run.withSuccessHandler(ok).withFailureHandler(mal);
+    r[fn].apply(r, args);
+  }catch(e){
+    // Nunca dejar la página en blanco por una llamada que no se pudo hacer.
+    if (mal) mal(e); else console.error(e);
+  }
 }
 
 aplicarIdioma();
+
+llamar('reglamento', [], function(g){
+  REGLAS = g || { es:[], en:[] };
+  aplicarIdioma();
+}, function(){ /* si falla, la página igual funciona */ });
 
 llamar('fichaPublicaCargar', [TOKEN], function(d){
   DATOS = d;

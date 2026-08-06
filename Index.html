@@ -181,8 +181,13 @@
 
   #firma{border:1px dashed var(--line);border-radius:6px;width:100%;height:130px;
     touch-action:none;background:#fcfcfd;display:block}
-  .chk{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--tx2)}
-  .chk input{width:auto;margin-top:2px}
+  .chk{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--tx);
+    background:var(--ac-soft);padding:11px;border-radius:7px}
+  .chk input{width:auto;margin-top:2px;flex:none}
+  .reglas{font-size:12.5px;color:var(--tx);max-height:180px;overflow-y:auto;
+    border:1px solid var(--line);border-radius:7px;padding:11px 11px 11px 26px;background:var(--bg)}
+  .reglas li{margin-bottom:7px}
+  .reglas li:last-child{margin-bottom:0}
 
   .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
     background:var(--tx);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;
@@ -222,7 +227,27 @@
     transition:background-color .13s ease, color .13s ease, border-color .13s ease,
                box-shadow .13s ease, opacity .13s ease, transform .09s ease;
   }
-  .btn:active,.nav-ico:active,.segs button:active{transform:translateY(1px)}
+  /* Hundido al presionar: se aplica a todo lo que se puede tocar. */
+  .btn:active,.nav-ico:active,.segs button:active,nav button:active,
+  .x:active,.daterow:active,.dp .days button:active{
+    transform:translateY(1px) scale(.985);
+  }
+  .btn:active{filter:brightness(.94)}
+  .cell:active:not(.busy){background:var(--ac-soft)}
+  .bar:active{transform:scale(.99)}
+
+  /* Botón ocupado: se atenúa y muestra un girito, sin cambiar de tamaño. */
+  .btn[disabled],.btn.ocupado{opacity:.65;cursor:progress}
+  .btn.ocupado::after{content:'';width:12px;height:12px;margin-left:8px;
+    border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;
+    display:inline-block;vertical-align:-2px;animation:girar .65s linear infinite}
+  .btn.gh.ocupado::after{border-color:var(--line);border-top-color:var(--ac)}
+
+  /* Esqueleto mientras carga un panel. */
+  .esqueleto{background:linear-gradient(90deg,var(--line2) 25%,#f7f8fa 37%,var(--line2) 63%);
+    background-size:400% 100%;animation:brillo 1.2s ease infinite;border-radius:6px;height:14px}
+  .esqueleto+.esqueleto{margin-top:9px}
+  @keyframes brillo{from{background-position:100% 50%}to{background-position:0 50%}}
   .bar:hover{filter:brightness(1.08);box-shadow:0 2px 6px rgba(0,0,0,.22)}
   .hkc:hover{box-shadow:0 2px 8px rgba(0,0,0,.07)}
   .calwrap{scroll-behavior:smooth}
@@ -282,6 +307,9 @@
         </select>
         <div class="hint">Haz clic y arrastra sobre los días libres para crear una reserva</div>
       </div>
+      <div id="avisoIleg" class="hide"
+        style="background:#fdf1de;border:1px solid #e8cfa2;color:#7a5312;border-radius:8px;
+               padding:11px 13px;margin-bottom:12px;font-size:13px"></div>
       <div class="calwrap"><div class="cal" id="cal"></div></div>
       <div class="leg">
         <span><i style="background:var(--ok)"></i>Confirmada</span>
@@ -513,9 +541,14 @@
         <div class="fld"><label>Contacto de emergencia</label><input id="fEme"></div>
       </div>
       <div class="fld">
-        <label class="chk"><input type="checkbox" id="fAcc">
-          Acepto el reglamento de convivencia: silencio de 22:00 a 09:00, no se admiten
-          mascotas, y soy responsable de los daños al mobiliario o equipamiento.</label>
+        <label style="display:block;font-size:12px;color:var(--tx2);margin-bottom:6px;font-weight:500">
+          Normas de convivencia y condiciones de la estadía</label>
+        <ul class="reglas" id="fReglas"><li class="muted">Cargando…</li></ul>
+        <label class="chk" style="margin-top:10px">
+          <input type="checkbox" id="fAcc">
+          <span>El huésped leyó y acepta las normas de convivencia y las condiciones
+          de la estadía detalladas arriba.</span>
+        </label>
       </div>
       <div class="fld">
         <label>Firma del huésped</label>
@@ -600,6 +633,26 @@ function srvPub(fn){
   };
 }
 function fallo(e){ toast(e && e.message ? e.message : String(e), true); }
+
+/* Marca un botón como ocupado mientras corre la promesa, para que se note
+   que el sistema está trabajando y no se pueda apretar dos veces. */
+function ocupado(idBoton, promesa){
+  var b=$(idBoton);
+  if(b){ b.classList.add('ocupado'); b.disabled=true; }
+  var soltar=function(){ if(b){ b.classList.remove('ocupado'); b.disabled=false; } };
+  return promesa.then(function(v){ soltar(); return v; },
+                      function(e){ soltar(); throw e; });
+}
+
+/* Esqueleto de carga: da sensación de fluidez mientras llegan los datos. */
+function esqueleto(id, lineas){
+  var el=$(id); if(!el) return;
+  var h='';
+  for(var i=0;i<(lineas||3);i++){
+    h+='<div class="esqueleto" style="width:'+(88-i*13)+'%"></div>';
+  }
+  el.innerHTML=h;
+}
 
 /* ==================================================================
    Login
@@ -724,6 +777,13 @@ function cargarCal(){
     }
     CAL.recursos=d.recursos||[]; CAL.reservas=d.reservas||[];
     CAL.hoy=d.hoy||fmtHoy(); CAL.cfg=d.cfg||{};
+    var av=$('avisoIleg');
+    if(d.ilegibles){
+      av.textContent = d.ilegibles+' reserva(s) están guardadas en la planilla pero no se '+
+        'pueden mostrar porque su fecha quedó ilegible. Ejecuta repararReservas() desde el '+
+        'editor de Apps Script para revisarlas.';
+      av.classList.remove('hide');
+    } else av.classList.add('hide');
     pintarCal();
   }).catch(function(e){ quitar(); fallo(e); });
 }
@@ -980,7 +1040,7 @@ function abrirReserva(r){
   RANGO={ in:r.checkIn, out:r.checkOut };
   $('rTit').textContent='Reserva de '+r.huesped+(r.firmada?'  ·  ficha firmada':'');
   opcionesRecurso(r.recurso);
-  $('rNom').value=r.huesped; $('rTel').value=r.telefono||'';
+  $('rNom').value=r.huesped; $('rTel').value=String(r.telefono||'');
   $('rMail').value=r.email||''; $('rCan').value=r.canal||'whatsapp';
   $('rEst').value=r.estado; $('rTot').value=r.total; $('rAnt').value=r.anticipo;
   $('rNot').value=r.notas||'';
@@ -1007,7 +1067,7 @@ $('rGuardar').onclick=function(){
     estado:$('rEst').value, total:+$('rTot').value||0, anticipo:+$('rAnt').value||0,
     addon:$('rAddon').checked, addonFecha:$('rAddonF').value, notas:$('rNot').value
   };
-  srv('guardarReserva')(datos).then(function(){
+  ocupado('rGuardar', srv('guardarReserva')(datos)).then(function(){
     cerrar('mRes'); toast(RES?'Reserva actualizada':'Reserva creada'); cargarCal();
   }).catch(function(e){
     $('rErr').textContent=e.message||String(e); $('rErr').classList.remove('hide');
@@ -1089,11 +1149,12 @@ function tabla(cont, filas, cols, vacio){
 }
 
 function cargarHoy(){
+  ['tLleg','tSal','tCasa','tAdd'].forEach(function(x){ esqueleto(x,2); });
   srv('panelHoy')('').then(function(d){
     d = d || {};
     ['llegadas','salidas','enCasa','addons'].forEach(function(k){ if(!d[k]) d[k]=[]; });
     var comunes=[
-      ['Huésped', function(r){ return '<b>'+r.huesped+'</b>'+(r.telefono?'<br><span class="muted">'+r.telefono+'</span>':''); }],
+      ['Huésped', function(r){ return '<b>'+r.huesped+'</b>'+(r.telefono?'<br><span class="muted">'+String(r.telefono)+'</span>':''); }],
       ['Unidad',  function(r){ return r.recurso; }],
       ['Estado',  function(r){ return '<span class="tag '+r.estado+'">'+etq(r.estado)+'</span>'; }]
     ];
@@ -1111,7 +1172,7 @@ function cargarHoy(){
       ['Huésped', function(r){ return r.huesped; }],
       ['Unidad',  function(r){ return r.recurso; }],
       ['Llegada', function(r){ return largo(r.checkIn); }],
-      ['Agendado',function(r){ return r.addonFecha? r.addonFecha.replace('T',' ') : '<span class="muted">por coordinar</span>'; }]
+      ['Agendado',function(r){ return r.addonFecha? String(r.addonFecha).replace('T',' ') : '<span class="muted">por coordinar</span>'; }]
     ], 'Sin programas de tinaja + sushi pendientes.');
   }).catch(fallo);
 }
@@ -1123,6 +1184,7 @@ function etq(e){
    Aseo
    ================================================================== */
 function cargarAseo(){
+  esqueleto('hk',3);
   srv('panelAseo')().then(function(lista){
     lista = lista || [];
     var c=$('hk'); c.innerHTML='';
@@ -1156,6 +1218,7 @@ function cargarAseo(){
    Equipo
    ================================================================== */
 function cargarEquipo(){
+  esqueleto('tEq',2);
   srv('listarEquipo')().then(function(l){
     tabla('tEq', l || [], [
       ['Usuario', function(r){ return r.nombre; }],
@@ -1175,11 +1238,13 @@ $('fEq').addEventListener('submit', function(e){
    ================================================================== */
 $('rEnviar').onclick=function(){
   if(!RES) return;
-  srv('linkFicha')(RES.id).then(function(d){
+  ocupado('rEnviar', srv('linkFicha')(RES.id)).then(function(d){
     $('lkUrl').value=d.url;
     var msg='Hola '+RES.huesped+'! Antes de tu llegada a Casona Peumayén, '+
             'completa tu registro y firma aquí: '+d.url;
-    var tel=(RES.telefono||'').replace(/[^0-9]/g,'');
+    // Sheets convierte a número un teléfono de puros dígitos, y un número
+    // no tiene .replace: por eso siempre se fuerza a texto antes de limpiarlo.
+    var tel=String(RES.telefono||'').replace(/[^0-9]/g,'');
     var wa=$('lkWa');
     wa.href='https://wa.me/'+tel+'?text='+encodeURIComponent(msg);
     wa.textContent = tel ? 'Enviar por WhatsApp' : 'Abrir WhatsApp';
@@ -1207,6 +1272,7 @@ $('lkCopiar').onclick=function(){
 var UNI=null, CAMA=null;
 
 function cargarInventario(){
+  esqueleto('invLista',4);
   srv('inventarioAdmin')().then(function(lista){
     lista = lista || [];
     var c=$('invLista'); c.innerHTML='';
@@ -1288,11 +1354,11 @@ $('uPorCama').addEventListener('change', function(){
 
 $('uGuardar').onclick=function(){
   $('uErr').classList.add('hide');
-  srv('guardarUnidad')({
+  ocupado('uGuardar', srv('guardarUnidad')({
     id: UNI?UNI.id:'', nombre:$('uNom').value.trim(), grupo:$('uGrupo').value,
     bano:$('uBano').value, capacidad:+$('uCap').value||1, porCama:$('uPorCama').checked,
     precioBase:+$('uPb').value||0, precioAlta:+$('uPa').value||0
-  }).then(function(){
+  })).then(function(){
     cerrar('mUni'); toast('Guardado'); cargarInventario(); cargarCal();
   }).catch(function(e){ $('uErr').textContent=e.message||String(e); $('uErr').classList.remove('hide'); });
 };
@@ -1308,10 +1374,10 @@ function abrirCama(u, cm){
 }
 $('cGuardar').onclick=function(){
   $('cErr').classList.add('hide');
-  srv('guardarCama')({
+  ocupado('cGuardar', srv('guardarCama')({
     id: CAMA?CAMA.id:'', idUnidad: UNI.id, nombre:$('cNom').value.trim(),
     precioBase:+$('cPb').value||0, precioAlta:+$('cPa').value||0
-  }).then(function(){
+  })).then(function(){
     cerrar('mCama'); toast('Guardado'); cargarInventario(); cargarCal();
   }).catch(function(e){ $('cErr').textContent=e.message||String(e); $('cErr').classList.remove('hide'); });
 };
@@ -1344,8 +1410,20 @@ function prepararFirma(){
 }
 $('fLimpiar').onclick=function(){ var c=$('firma'); CTX.clearRect(0,0,c.width,c.height); };
 
+var REGLAS=null;
+function pintarReglas(){
+  var ul=$('fReglas'); ul.innerHTML='';
+  (REGLAS||[]).forEach(function(t){
+    var li=document.createElement('li'); li.textContent=t; ul.appendChild(li);
+  });
+}
+
 function abrirFicha(r){
   cerrar('mRes');
+  if(REGLAS) pintarReglas();
+  else srv('reglamento')().then(function(g){
+    REGLAS=(g&&g.es)||[]; pintarReglas();
+  }).catch(function(){ $('fReglas').innerHTML='<li class="muted">No se pudo cargar el reglamento.</li>'; });
   $('fNom').value=r.huesped||''; $('fDoc').value=''; $('fNac').value='';
   $('fNacim').value=''; $('fPro').value=''; $('fDes').value='';
   $('fMot').value=''; $('fEme').value=''; $('fAcc').checked=false;
@@ -1367,12 +1445,12 @@ $('fGuardar').onclick=function(){
   var c=$('firma');
   var vacio=!CTX.getImageData(0,0,c.width,c.height).data.some(function(v,i){ return i%4===3 && v>0; });
   if(vacio){ errFicha('Falta la firma del huésped.'); return; }
-  srv('guardarFicha')(RES.id, {
+  ocupado('fGuardar', srv('guardarFicha')(RES.id, {
     nombre:$('fNom').value, documento:$('fDoc').value, nacionalidad:$('fNac').value,
     nacimiento:$('fNacim').value, procedencia:$('fPro').value, destino:$('fDes').value,
     motivo:$('fMot').value, emergencia:$('fEme').value, acepta:true,
     firma:c.toDataURL('image/png')
-  }).then(function(){
+  })).then(function(){
     cerrar('mFicha'); toast('Check-in registrado'); cargarCal();
   }).catch(function(e){ errFicha(e.message||String(e)); });
 };
