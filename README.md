@@ -54,6 +54,21 @@ Implementar**. La URL no cambia.
 Si no puedes entrar, la pantalla de acceso tiene un enlace
 *"¿No puedes entrar? Revisar la instalación"* que dice exactamente qué falta.
 
+### Si una reserva sale en la planilla pero no en el calendario
+
+Le pasó a la primera versión: se agregaron columnas **en medio** del
+encabezado de `Reservas` y las filas ya guardadas quedaron corridas, así que
+sus fechas dejaron de poder leerse y el calendario no podía dibujarlas.
+
+Ya no vuelve a ocurrir: `setup()` ahora solo **agrega** las columnas que
+falten al final y nunca reordena las que ya existen, y las escrituras se
+hacen buscando cada columna por su nombre y no por su posición.
+
+Para las filas que ya quedaron dañadas, ejecuta desde el editor:
+
+- `repararReservas()` — solo informa cuáles están ilegibles (no borra nada).
+- `repararReservas(true)` — elimina esas filas para volver a cargarlas.
+
 ## Cómo se usa el calendario
 
 - **Crear**: haz clic en un día libre, o mantén apretado y arrastra sobre

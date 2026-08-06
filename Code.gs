@@ -14,7 +14,9 @@ var TZ = 'America/Santiago';
 var HOJAS = {
   Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa'],
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'email', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'tokenFicha', 'creado', 'creadoPor'],
+  // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
+  // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha'],
   Aseo: ['idUnidad', 'estado', 'responsable', 'notas', 'actualizado'],
   Fichas: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'procedencia', 'destino', 'motivo', 'emergencia', 'firmaUrl', 'fecha'],
   Usuarios: ['nombre', 'rol', 'pinHash', 'activo'],
@@ -80,8 +82,29 @@ function leer_(nombre) {
   return out;
 }
 
+/* Encabezado REAL de la hoja. Nunca se escribe por posición fija: siempre
+   según los nombres que la hoja tiene hoy, para que agregar columnas más
+   adelante no descoloque las filas ya guardadas. */
+function cabecera_(nombre) {
+  var sh = hoja_(nombre);
+  var ancho = Math.max(sh.getLastColumn(), 1);
+  var cab = sh.getRange(1, 1, 1, ancho).getValues()[0]
+    .map(function (c) { return String(c).trim(); });
+
+  var faltan = HOJAS[nombre].filter(function (c) { return cab.indexOf(c) === -1; });
+  if (!faltan.length) return cab;
+
+  if (cab.join('') === '') {                       // hoja recién creada
+    sh.getRange(1, 1, 1, HOJAS[nombre].length).setValues([HOJAS[nombre]]);
+    return HOJAS[nombre].slice();
+  }
+  sh.getRange(1, cab.length + 1, 1, faltan.length).setValues([faltan]);
+  return cab.concat(faltan);
+}
+
 function insertar_(nombre, obj) {
-  hoja_(nombre).appendRow(HOJAS[nombre].map(function (c) {
+  var cab = cabecera_(nombre);
+  hoja_(nombre).appendRow(cab.map(function (c) {
     return obj[c] === undefined || obj[c] === null ? '' : obj[c];
   }));
 }
@@ -146,12 +169,14 @@ function esAlta_(fechaYmd) {
 function setup() {
   var ss = ss_();
 
+  // Migración sin pérdidas: agrega las columnas que falten al final y deja
+  // intactas las que ya existen, para no descolocar los datos guardados.
   Object.keys(HOJAS).forEach(function (nombre) {
     var sh = ss.getSheetByName(nombre) || ss.insertSheet(nombre);
-    sh.getRange(1, 1, 1, HOJAS[nombre].length).setValues([HOJAS[nombre]]);
     sh.setFrozenRows(1);
+    var cab = cabecera_(nombre);
     (COLS_TEXTO[nombre] || []).forEach(function (col) {
-      var c = HOJAS[nombre].indexOf(col) + 1;
+      var c = cab.indexOf(col) + 1;
       if (c > 0) sh.getRange(1, c, sh.getMaxRows(), 1).setNumberFormat('@');
     });
   });
@@ -212,6 +237,38 @@ function setup() {
   }
 
   return ss.getUrl();
+}
+
+/* Repara las reservas que quedaron con las columnas corridas.
+   Ejecutar desde el editor. Sin argumentos solo INFORMA lo que encontró;
+   con repararReservas(true) borra las filas que no se pueden recuperar.
+
+   El caso conocido: una versión anterior agregó columnas en medio del
+   encabezado, así que las filas guardadas antes quedaron desplazadas y sus
+   fechas dejaron de leerse. Esas reservas existen en la planilla pero el
+   calendario no puede dibujarlas. */
+function repararReservas(borrar) {
+  var malas = leer_('Reservas').filter(function (r) {
+    return !ymd_(r.checkIn) || !ymd_(r.checkOut);
+  });
+  if (!malas.length) {
+    Logger.log('Todo en orden: no hay reservas con fechas ilegibles.');
+    return { revisadas: 0, borradas: 0 };
+  }
+
+  Logger.log(malas.length + ' reserva(s) con fechas ilegibles:');
+  malas.forEach(function (r) {
+    Logger.log('  · ' + r.id + '  huésped="' + r.huesped + '"  checkIn="' + r.checkIn + '"');
+  });
+
+  if (!borrar) {
+    Logger.log('\nNo se borró nada. Puedes corregir esas filas a mano en la planilla, ' +
+      'o volver a ejecutar como repararReservas(true) para eliminarlas y cargarlas de nuevo.');
+    return { revisadas: malas.length, borradas: 0 };
+  }
+  malas.forEach(function (r) { borrar_('Reservas', 'id', r.id); });
+  Logger.log('\nSe eliminaron ' + malas.length + ' fila(s). Vuelve a cargar esas reservas en el calendario.');
+  return { revisadas: malas.length, borradas: malas.length };
 }
 
 /* Crear o cambiar el PIN de un usuario desde el editor si te quedas fuera del sistema. */
@@ -687,7 +744,18 @@ function diagnostico() {
     out.unidades = leer_('Unidades').filter(function (u) { return u.activa; }).length;
     if (!out.usuarios) { out.ok = false; out.mensaje = 'No hay usuarios cargados: ejecuta setup().'; return out; }
     if (!out.unidades) { out.ok = false; out.mensaje = 'No hay habitaciones cargadas: ejecuta setup().'; return out; }
-    out.mensaje = 'Todo en orden: ' + out.usuarios + ' usuario(s) y ' + out.unidades + ' unidades.';
+
+    var reservas = leer_('Reservas');
+    out.reservas = reservas.length;
+    out.ilegibles = reservas.filter(function (r) { return !ymd_(r.checkIn) || !ymd_(r.checkOut); }).length;
+    if (out.ilegibles) {
+      out.ok = false;
+      out.mensaje = out.ilegibles + ' reserva(s) tienen fechas ilegibles y por eso no aparecen ' +
+        'en el calendario. Ejecuta repararReservas() desde el editor para revisarlas.';
+      return out;
+    }
+    out.mensaje = 'Todo en orden: ' + out.usuarios + ' usuario(s), ' + out.unidades +
+      ' unidades y ' + out.reservas + ' reserva(s).';
   } catch (e) {
     out.ok = false;
     out.mensaje = 'Error: ' + e.message + '. Lo más probable es que falte ejecutar setup().';

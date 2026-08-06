@@ -66,25 +66,25 @@
   .hint{margin-left:auto;font-size:12.5px;color:var(--tx3)}
 
   /* ---------- Calendario ---------- */
-  .calwrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:calc(100vh - 190px)}
+  .calwrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:calc(100vh - 196px)}
   .cal{display:grid;position:relative;width:100%}
   /* Sin esto, el nombre de un huésped largo ensancha la columna de ese día. */
   .cal > *{min-width:0}
-  .cal > *{min-height:34px}
+  .cal > *{min-height:44px}
   .hd{position:sticky;top:0;z-index:6;background:var(--surface);
-    border-bottom:1px solid var(--line);font-size:11.5px;color:var(--tx2);
-    display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 2px}
+    border-bottom:1px solid var(--line);font-size:12px;color:var(--tx2);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;padding:7px 2px}
   .hd.corner{left:0;z-index:8;border-right:1px solid var(--line)}
-  .hd .dn{font-weight:600;color:var(--tx);font-size:13px}
+  .hd .dn{font-weight:600;color:var(--tx);font-size:16px;line-height:1.2}
   .hd.wknd{background:#fafbfc}
   .hd.today .dn{color:var(--ac)}
 
   .rname{position:sticky;left:0;z-index:5;background:var(--surface);
     border-right:1px solid var(--line);border-bottom:1px solid var(--line2);
-    padding:6px 10px;font-size:12.5px;display:flex;align-items:center;gap:6px;
+    padding:6px 12px;font-size:13.5px;display:flex;align-items:center;gap:6px;
     white-space:nowrap;overflow:hidden}
   .rname > span{overflow:hidden;text-overflow:ellipsis}
-  .rname .sub{color:var(--tx2);font-size:11.5px;flex:none}
+  .rname .sub{color:var(--tx2);font-size:12.5px;flex:none}
   .grp{position:sticky;left:0;z-index:7;background:#f0f2f5;border-bottom:1px solid var(--line);
     padding:5px 10px;font-size:11px;font-weight:600;letter-spacing:.06em;
     text-transform:uppercase;color:var(--tx2);min-height:26px !important;display:flex;align-items:center}
@@ -98,8 +98,8 @@
   .cell.sel{background:var(--ac-soft) !important;box-shadow:inset 0 0 0 1px var(--ac)}
   .cell.drop{background:var(--ac-soft) !important}
 
-  .bar{z-index:3;min-height:0 !important;margin:3px 2px;border-radius:5px;padding:0 8px;color:#fff;
-    font-size:12px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;
+  .bar{z-index:3;min-height:0 !important;margin:4px 2px;border-radius:6px;padding:0 9px;color:#fff;
+    font-size:13px;font-weight:500;display:flex;align-items:center;overflow:hidden;white-space:nowrap;
     cursor:grab;text-overflow:ellipsis;box-shadow:0 1px 2px rgba(0,0,0,.16)}
   .bar:active{cursor:grabbing}
   .bar.confirmada{background:var(--ok)}
@@ -194,6 +194,43 @@
     main{padding:12px}
     .hint{display:none}
   }
+
+  /* ---------- Animaciones ----------
+     Todo se apaga si el sistema pide menos movimiento. */
+  @keyframes apagar{from{opacity:0}to{opacity:1}}
+  @keyframes surgir{from{opacity:0;transform:translateY(12px) scale(.97)}
+                    to{opacity:1;transform:none}}
+  @keyframes subir{from{opacity:0;transform:translate(-50%,14px)}
+                   to{opacity:1;transform:translate(-50%,0)}}
+  @keyframes entrarBarra{from{opacity:0;transform:scaleX(.82)}to{opacity:1;transform:none}}
+  @keyframes deslizar{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @keyframes girar{to{transform:rotate(360deg)}}
+
+  @media (prefers-reduced-motion: no-preference){
+    .ov{animation:apagar .15s ease}
+    .mo,.dp{animation:surgir .22s cubic-bezier(.2,.85,.3,1)}
+    .toast{animation:subir .22s cubic-bezier(.2,.85,.3,1)}
+    .bar{animation:entrarBarra .2s cubic-bezier(.2,.85,.3,1) both;transform-origin:left center}
+    .vista,section[id^="v-"]:not(.hide){animation:deslizar .2s ease}
+    .hkc,.tarjeta,.card{animation:deslizar .22s ease both}
+    .cargando-ico{animation:girar .7s linear infinite}
+  }
+
+  /* Transiciones de estado: se sienten instantáneas pero suavizan el cambio. */
+  .btn,.nav-ico,nav button,.segs button,.cell,.bar,.daterow,.dp .days button,
+  .hkc,input,select,textarea,.x{
+    transition:background-color .13s ease, color .13s ease, border-color .13s ease,
+               box-shadow .13s ease, opacity .13s ease, transform .09s ease;
+  }
+  .btn:active,.nav-ico:active,.segs button:active{transform:translateY(1px)}
+  .bar:hover{filter:brightness(1.08);box-shadow:0 2px 6px rgba(0,0,0,.22)}
+  .hkc:hover{box-shadow:0 2px 8px rgba(0,0,0,.07)}
+  .calwrap{scroll-behavior:smooth}
+
+  /* Indicador de carga sobre el calendario */
+  .cargando-ico{width:15px;height:15px;border:2px solid var(--line);
+    border-top-color:var(--ac);border-radius:50%;display:inline-block;vertical-align:-2px}
+  .cal.recargando{opacity:.45;pointer-events:none;transition:opacity .12s ease}
 </style>
 </head>
 <body>
@@ -513,6 +550,7 @@ var DIAS = ['dom','lun','mar','mié','jue','vie','sáb'];
 function ymd(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+function fmtHoy(){ return ymd(new Date()); }
 function aDate(s){ var p=s.split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
 function mas(s,n){ var d=aDate(s); d.setDate(d.getDate()+n); return ymd(d); }
 function noches(a,b){ return Math.round((aDate(b)-aDate(a))/86400000); }
@@ -676,10 +714,18 @@ $('cDias').onchange=function(){ CAL.dias=+this.value; cargarCal(); };
 
 function cargarCal(){
   var fin = mas(CAL.inicio, CAL.dias);
+  $('cal').classList.add('recargando');
+  var quitar=function(){ $('cal').classList.remove('recargando'); };
   srv('cargarTablero')(CAL.inicio, fin).then(function(d){
-    CAL.recursos=d.recursos; CAL.reservas=d.reservas; CAL.hoy=d.hoy; CAL.cfg=d.cfg||{};
+    quitar();
+    if(!d || !d.recursos){
+      toast('El servidor no devolvió datos. Revisa la instalación desde la pantalla de acceso.', true);
+      return;
+    }
+    CAL.recursos=d.recursos||[]; CAL.reservas=d.reservas||[];
+    CAL.hoy=d.hoy||fmtHoy(); CAL.cfg=d.cfg||{};
     pintarCal();
-  }).catch(fallo);
+  }).catch(function(e){ quitar(); fallo(e); });
 }
 
 /* Mapa "recurso|fecha" -> reserva, para saber al instante si un día está ocupado. */
@@ -704,8 +750,8 @@ function pintarCal(){
   var dias=[]; for(var i=0;i<N;i++) dias.push(mas(CAL.inicio,i));
   $('cRng').textContent = corto(dias[0])+' – '+corto(dias[N-1]);
 
-  var anchoDia = N>20 ? 46 : (N>10 ? 62 : 96);
-  cal.style.gridTemplateColumns = '210px repeat('+N+', minmax('+anchoDia+'px, 1fr))';
+  var anchoDia = N>20 ? 58 : (N>10 ? 84 : 128);
+  cal.style.gridTemplateColumns = '230px repeat('+N+', minmax('+anchoDia+'px, 1fr))';
 
   // Encabezado
   var esq=document.createElement('div');
@@ -1033,6 +1079,7 @@ $('dOk').onclick=function(){
    ================================================================== */
 function tabla(cont, filas, cols, vacio){
   var el=$(cont);
+  filas = filas || [];
   if(!filas.length){ el.innerHTML='<div class="empty">'+vacio+'</div>'; return; }
   var h='<table><thead><tr>'+cols.map(function(c){return '<th>'+c[0]+'</th>';}).join('')+'</tr></thead><tbody>';
   filas.forEach(function(f){
@@ -1043,6 +1090,8 @@ function tabla(cont, filas, cols, vacio){
 
 function cargarHoy(){
   srv('panelHoy')('').then(function(d){
+    d = d || {};
+    ['llegadas','salidas','enCasa','addons'].forEach(function(k){ if(!d[k]) d[k]=[]; });
     var comunes=[
       ['Huésped', function(r){ return '<b>'+r.huesped+'</b>'+(r.telefono?'<br><span class="muted">'+r.telefono+'</span>':''); }],
       ['Unidad',  function(r){ return r.recurso; }],
@@ -1075,6 +1124,7 @@ function etq(e){
    ================================================================== */
 function cargarAseo(){
   srv('panelAseo')().then(function(lista){
+    lista = lista || [];
     var c=$('hk'); c.innerHTML='';
     lista.forEach(function(u){
       var d=document.createElement('div'); d.className='hkc';
@@ -1107,7 +1157,7 @@ function cargarAseo(){
    ================================================================== */
 function cargarEquipo(){
   srv('listarEquipo')().then(function(l){
-    tabla('tEq', l, [
+    tabla('tEq', l || [], [
       ['Usuario', function(r){ return r.nombre; }],
       ['Rol',     function(r){ return {admin:'Administración',recepcion:'Recepción',aseo:'Aseo'}[r.rol]||r.rol; }]
     ], 'Sin usuarios.');
@@ -1158,6 +1208,7 @@ var UNI=null, CAMA=null;
 
 function cargarInventario(){
   srv('inventarioAdmin')().then(function(lista){
+    lista = lista || [];
     var c=$('invLista'); c.innerHTML='';
     if(!lista.length){ c.innerHTML='<div class="empty">Sin unidades.</div>'; return; }
     lista.forEach(function(u){
