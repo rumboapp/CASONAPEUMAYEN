@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<base target="_top">
+<style>
+  :root{
+    --bg:#f5f6f8; --surface:#fff; --line:#e4e6ea; --tx:#16191d; --tx2:#6b7280; --tx3:#9aa1ab;
+    --ac:#1f6feb; --ac-soft:#e8f0fe;
+    --urg:#c1362f; --urg-soft:#fdeceb;
+    --ok:#0e8a5f; --ok-soft:#e3f5ec;
+    --esp:#c77700; --esp-soft:#fdf1de;
+    --blo:#6b7280; --blo-soft:#eef0f3;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--tx);-webkit-font-smoothing:antialiased;padding:14px 12px 40px}
+  .wrap{max-width:620px;margin:0 auto}
+  button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  .hide{display:none !important}
+
+  header{margin-bottom:14px}
+  header h1{font-size:18px;font-weight:600}
+  header .f{color:var(--tx2);font-size:13px;margin-top:2px}
+
+  /* Resumen de arriba */
+  .resumen{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px}
+  .rc{background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:11px 8px;text-align:center}
+  .rc b{display:block;font-size:21px;line-height:1.15}
+  .rc span{font-size:11px;color:var(--tx2)}
+  .rc.pend b{color:var(--urg)}
+  .rc.list b{color:var(--ok)}
+
+  h2.sec{font-size:12px;font-weight:600;color:var(--tx2);text-transform:uppercase;
+    letter-spacing:.06em;margin:20px 0 9px}
+  h2.sec:first-of-type{margin-top:0}
+
+  /* Tarjeta de alojamiento */
+  .u{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--line);
+    border-radius:11px;padding:13px 14px;margin-bottom:10px;
+    display:flex;align-items:center;gap:12px;
+    transition:box-shadow .15s ease, transform .09s ease, border-color .15s ease}
+  .u:active{transform:scale(.99)}
+  .u .txt{flex:1;min-width:0}
+  .u .nom{font-weight:600;font-size:15px}
+  .u .det{font-size:12.5px;color:var(--tx2);margin-top:3px}
+  .u .det b{color:var(--tx);font-weight:500}
+
+  .u.sucia{border-left-color:var(--urg);background:var(--urg-soft)}
+  .u.limpia{border-left-color:var(--ok)}
+  .u.bloqueada{border-left-color:var(--blo);opacity:.72}
+  .u.espera{border-left-color:var(--esp)}
+
+  .pill{font-size:11px;font-weight:600;padding:4px 9px;border-radius:20px;white-space:nowrap}
+  .pill.sucia{background:var(--urg);color:#fff}
+  .pill.limpia{background:var(--ok-soft);color:var(--ok)}
+  .pill.bloqueada{background:var(--blo-soft);color:var(--blo)}
+  .pill.espera{background:var(--esp-soft);color:var(--esp)}
+
+  .acc{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap}
+  .b{padding:9px 15px;border-radius:8px;font-size:13.5px;font-weight:600;
+    transition:transform .09s ease, filter .13s ease, background-color .13s ease}
+  .b:active{transform:translateY(1px) scale(.98)}
+  .b.limpiar{background:var(--ok);color:#fff;flex:1}
+  .b.sucia{background:var(--surface);border:1px solid var(--line);color:var(--tx2)}
+  .b.bloq{background:var(--surface);border:1px solid var(--line);color:var(--tx2)}
+  .b[disabled]{opacity:.55;cursor:progress}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:11px;
+    padding:13px 14px;margin-bottom:10px}
+  .vacio{color:var(--tx3);font-size:13px;padding:6px 2px}
+  .quien{margin-bottom:16px}
+  .quien label{display:block;font-size:12px;color:var(--tx2);margin-bottom:5px;font-weight:500}
+  .quien input{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px;
+    font:inherit;background:var(--surface);outline:none}
+  .quien input:focus{border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-soft)}
+
+  .cargando{text-align:center;color:var(--tx2);padding:50px 20px}
+  .err{background:#fdeceb;border:1px solid #f0c4c1;color:#8f2b25;border-radius:9px;
+    padding:12px;font-size:13.5px;margin-bottom:12px}
+  .pie{text-align:center;color:var(--tx3);font-size:11.5px;margin-top:22px}
+
+  .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);
+    background:var(--tx);color:#fff;padding:11px 20px;border-radius:9px;font-size:13.5px;
+    box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:50}
+  @keyframes subir{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
+  @keyframes aparecer{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: no-preference){
+    .toast{animation:subir .22s cubic-bezier(.2,.85,.3,1)}
+    .u,.card{animation:aparecer .2s ease both}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Aseo · Casona Peumayén</h1>
+    <div class="f" id="fecha"></div>
+  </header>
+
+  <div id="cargando" class="cargando">Cargando…</div>
+  <div id="error" class="err hide"></div>
+
+  <div id="app" class="hide">
+    <div class="quien">
+      <label>¿Quién está trabajando? (para dejar registrado quién limpió)</label>
+      <input id="quien" placeholder="Tu nombre" autocomplete="name">
+    </div>
+
+    <div class="resumen">
+      <div class="rc pend"><b id="nPend">0</b><span>Por limpiar</span></div>
+      <div class="rc list"><b id="nList">0</b><span>Listas</span></div>
+      <div class="rc"><b id="nLleg">0</b><span>Llegan hoy</span></div>
+    </div>
+
+    <div id="lista"></div>
+    <div class="pie">Se actualiza solo cada 2 minutos. Recepción ve al instante lo que marcas.</div>
+  </div>
+</div>
+
+<script>
+var CLAVE = '<?= clave ?>';
+var DATOS = null;
+
+function $(id){ return document.getElementById(id); }
+
+function llamar(fn, args, ok, mal){
+  try{
+    var r = google.script.run.withSuccessHandler(ok).withFailureHandler(mal);
+    r[fn].apply(r, args);
+  }catch(e){ if(mal) mal(e); }
+}
+
+function toast(m){
+  var t=document.createElement('div');
+  t.className='toast'; t.textContent=m;
+  document.body.appendChild(t);
+  setTimeout(function(){ t.remove(); }, 2000);
+}
+
+var ETIQ = {
+  sucia:'Por limpiar', limpia:'Limpia', bloqueada:'Fuera de servicio'
+};
+
+/* Una habitación "espera" cuando el huésped todavía no se va: aún no se
+   puede entrar a limpiarla, así que se muestra distinto a las urgentes. */
+function claseVisual(u){
+  if (u.estado === 'bloqueada') return 'bloqueada';
+  if (u.estado === 'sucia') return 'sucia';
+  if (u.estado === 'limpia' && (u.situacion === 'sale' || u.situacion === 'sale_y_llega')) return 'espera';
+  return 'limpia';
+}
+function etiquetaVisual(u){
+  var c = claseVisual(u);
+  if (c === 'espera') return 'Sale hoy';
+  return ETIQ[u.estado] || u.estado;
+}
+
+function pintar(){
+  var d = DATOS;
+  var f = new Date(d.fecha + 'T12:00:00');
+  var txt = f.toLocaleDateString('es-CL', { weekday:'long', day:'numeric', month:'long' });
+  $('fecha').textContent = txt.charAt(0).toUpperCase() + txt.slice(1);
+
+  var pend = d.unidades.filter(function(u){ return u.estado==='sucia'; }).length;
+  var list = d.unidades.filter(function(u){ return u.estado==='limpia'; }).length;
+  var lleg = d.unidades.filter(function(u){ return u.llegaHoy; }).length;
+  $('nPend').textContent = pend;
+  $('nList').textContent = list;
+  $('nLleg').textContent = lleg;
+
+  var grupos = [
+    { t:'Limpiar ahora', f:function(u){ return u.estado==='sucia'; } },
+    { t:'Cuando se vayan', f:function(u){ return u.estado!=='sucia' && u.estado!=='bloqueada' &&
+        (u.situacion==='sale' || u.situacion==='sale_y_llega'); } },
+    { t:'Listas para recibir', f:function(u){ return u.estado==='limpia' &&
+        (u.situacion==='llega' || u.situacion==='salio_y_llega'); } },
+    { t:'Sin movimiento hoy', plegable:true, f:function(u){ return true; } }
+  ];
+
+  var cont = $('lista'); cont.innerHTML='';
+  var usadas = {};
+
+  grupos.forEach(function(g){
+    var items = d.unidades.filter(function(u){ return !usadas[u.id] && g.f(u); });
+    items.forEach(function(u){ usadas[u.id]=true; });
+    if(!items.length) return;
+
+    var h=document.createElement('h2'); h.className='sec'; h.textContent=g.t;
+    var caja=cont;
+    if(g.plegable){
+      h.style.cursor='pointer';
+      h.innerHTML = g.t+' <span style="color:var(--tx3);font-weight:500">('+items.length+
+        ') <span id="flecha">mostrar</span></span>';
+      var envoltura=document.createElement('div');
+      envoltura.className='hide';
+      h.onclick=function(){
+        var oculto=envoltura.classList.toggle('hide');
+        h.querySelector('#flecha').textContent = oculto ? 'mostrar' : 'ocultar';
+      };
+      cont.appendChild(h);
+      cont.appendChild(envoltura);
+      caja=envoltura;
+    } else {
+      cont.appendChild(h);
+    }
+
+    items.forEach(function(u){
+      var cl = claseVisual(u);
+      var div=document.createElement('div');
+      div.className='u '+cl;
+
+      var detalle = u.detalle;
+      if (u.huespedSale && (u.situacion==='sale'||u.situacion==='sale_y_llega'))
+        detalle += ' · sale <b>'+u.huespedSale+'</b> a las '+d.horaSalida;
+      if (u.huespedLlega)
+        detalle += ' · llega <b>'+u.huespedLlega+'</b> a las '+d.horaEntrada;
+
+      div.innerHTML =
+        '<div class="txt"><div class="nom">'+u.nombre+'</div>'+
+        '<div class="det">'+detalle+'</div></div>'+
+        '<span class="pill '+cl+'">'+etiquetaVisual(u)+'</span>';
+
+      var acc=document.createElement('div');
+      acc.className='acc';
+      acc.style.width='100%';
+
+      if (u.estado !== 'limpia'){
+        acc.appendChild(boton('Marcar limpia','limpiar',u,'limpia'));
+      }
+      if (u.estado !== 'sucia'){
+        acc.appendChild(boton('Está sucia','sucia',u,'sucia'));
+      }
+      if (u.estado !== 'bloqueada'){
+        acc.appendChild(boton('Fuera de servicio','bloq',u,'bloqueada'));
+      } else {
+        acc.appendChild(boton('Volver a habilitar','sucia',u,'sucia'));
+      }
+
+      div.style.flexWrap='wrap';
+      div.appendChild(acc);
+      caja.appendChild(div);
+    });
+  });
+}
+
+function boton(texto, clase, u, estado){
+  var b=document.createElement('button');
+  b.className='b '+clase; b.textContent=texto;
+  b.onclick=function(){
+    b.disabled=true;
+    llamar('aseoPublicoMarcar', [CLAVE, u.id, estado, ($('quien').value||'Aseo')],
+      function(nuevo){
+        DATOS.unidades = nuevo;
+        pintar();
+        toast(u.nombre + ' → ' + (ETIQ[estado]||estado));
+      },
+      function(e){ b.disabled=false; toast(e.message||'No se pudo guardar'); });
+  };
+  return b;
+}
+
+function cargar(silencioso){
+  llamar('aseoPublicoCargar', [CLAVE], function(d){
+    DATOS = d;
+    $('cargando').classList.add('hide');
+    $('error').classList.add('hide');
+    $('app').classList.remove('hide');
+    pintar();
+  }, function(e){
+    $('cargando').classList.add('hide');
+    if(!silencioso){
+      $('error').classList.remove('hide');
+      $('error').textContent = e.message || String(e);
+    }
+  });
+}
+
+try{ $('quien').value = localStorage.getItem('cp_aseo_quien') || ''; }catch(_){}
+$('quien').addEventListener('change', function(){
+  try{ localStorage.setItem('cp_aseo_quien', this.value); }catch(_){}
+});
+
+cargar();
+setInterval(function(){ cargar(true); }, 120000);
+</script>
+</body>
+</html>

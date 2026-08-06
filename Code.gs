@@ -16,7 +16,7 @@ var HOJAS = {
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
   // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
   // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha'],
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal'],
   Aseo: ['idUnidad', 'estado', 'responsable', 'notas', 'actualizado'],
   Fichas: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'procedencia', 'destino', 'motivo', 'emergencia', 'firmaUrl', 'fecha'],
   Usuarios: ['nombre', 'rol', 'pinHash', 'activo'],
@@ -29,11 +29,12 @@ var HOJAS = {
    Esto era el origen del bug de reservas duplicadas: Sheets convertía
    "2026-08-07" en un objeto Date con hora local y las comparaciones fallaban. */
 var COLS_TEXTO = {
-  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono'],
+  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal'],
   Fichas: ['nacimiento', 'fecha'],
   Aseo: ['actualizado'],
   Sesiones: ['expira'],
-  Log: ['fecha']
+  Log: ['fecha'],
+  Config: ['valor']
 };
 
 /* Dos páginas: la interna (Index) y la que se le manda al huésped para que
@@ -45,6 +46,13 @@ function doGet(e) {
     t.token = String(p.f);
     return t.evaluate()
       .setTitle('Casona Peumayén — Registro')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
+  if (p.aseo) {
+    var a = HtmlService.createTemplateFromFile('Aseo');
+    a.clave = String(p.aseo);
+    return a.evaluate()
+      .setTitle('Casona Peumayén — Aseo')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
   return HtmlService.createHtmlOutputFromFile('Index')
@@ -144,6 +152,18 @@ function ymd_(v) {
   if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
   var d = new Date(s);
   return isNaN(d.getTime()) ? '' : Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
+}
+
+/* Sheets guarda "15:00" como una hora, que al leerla vuelve como un objeto
+   Date del 30 de diciembre de 1899. Esto la devuelve siempre como "HH:mm". */
+function hora_(v, porDefecto) {
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return Utilities.formatDate(v, TZ, 'HH:mm');
+  }
+  var s = String(v == null ? '' : v).trim();
+  var m = /^(\d{1,2}):(\d{2})/.exec(s);
+  if (m) return ('0' + m[1]).slice(-2) + ':' + m[2];
+  return porDefecto || '';
 }
 
 function ahora_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm'); }
@@ -406,7 +426,13 @@ function validarFechas_(checkIn, checkOut) {
 function guardarReserva(token, datos) {
   var u = sesion_(token);
   var f = validarFechas_(datos.checkIn, datos.checkOut);
-  if (!datos.recurso) throw new Error('Falta elegir la habitación o cama.');
+  if (!datos.recurso) throw new Error('Falta elegir el alojamiento.');
+  // Una habitación que se vende por camas no se puede reservar entera: sus
+  // filas del calendario son las camas, así que la reserva quedaría invisible.
+  if (!recursos_().some(function (x) { return x.id === datos.recurso; })) {
+    throw new Error('Ese alojamiento no está disponible para reservar. ' +
+      'Si la habitación se vende por camas, elige una cama.');
+  }
   if (!String(datos.huesped || '').trim()) throw new Error('Falta el nombre del huésped.');
 
   // El bloqueo evita que dos personas guarden a la vez y se pisen las reservas.
@@ -446,6 +472,9 @@ function guardarReserva(token, datos) {
 function moverReserva(token, id, recurso, checkIn, checkOut) {
   sesion_(token);
   var f = validarFechas_(checkIn, checkOut);
+  if (!recursos_().some(function (x) { return x.id === recurso; })) {
+    throw new Error('Ese alojamiento no está disponible para reservar.');
+  }
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -461,9 +490,28 @@ function moverReserva(token, id, recurso, checkIn, checkOut) {
   }
 }
 
+/* Estados de una reserva, en el orden en que ocurren de verdad:
+   tentativa → confirmada → en_casa (check-in) → checkout (se fue).
+   cancelada y no_show quedan fuera de esa línea. */
 function cambiarEstado(token, id, estado) {
-  sesion_(token);
-  actualizar_('Reservas', 'id', id, { estado: estado });
+  var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === id; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+
+  var cambios = { estado: estado };
+  if (estado === 'en_casa' && !r.checkInReal) cambios.checkInReal = ahora_();
+  if (estado === 'checkout' && !r.checkOutReal) cambios.checkOutReal = ahora_();
+  actualizar_('Reservas', 'id', id, cambios);
+
+  // Al hacer el check-out la habitación queda sucia sola: así el equipo de
+  // aseo la ve al tiro en su pantalla, sin que nadie tenga que avisarle.
+  if (estado === 'checkout' && r.idUnidad) {
+    guardarOCrear_('Aseo', 'idUnidad', r.idUnidad, {
+      idUnidad: r.idUnidad, estado: 'sucia', responsable: u.nombre,
+      notas: 'Check-out de ' + r.huesped, actualizado: ahora_()
+    });
+  }
+  logCambio_(u.nombre, 'reserva_estado', id + ' -> ' + estado);
   return true;
 }
 
@@ -485,10 +533,12 @@ function panelHoy(token, fecha) {
     return r ? (r.unidad + (r.nombre ? ' — ' + r.nombre : '')) : id;
   };
   var todas = leer_('Reservas').filter(function (r) { return r.estado !== 'cancelada'; });
+  var firmadas = leer_('Fichas').map(function (f) { return f.idReserva; });
   var mapear = function (r) {
     return {
       id: r.id, huesped: r.huesped, telefono: String(r.telefono || ''), canal: r.canal,
       recurso: nombre(r.recurso), estado: r.estado, notas: r.notas || '',
+      firmada: firmadas.indexOf(r.id) > -1,
       addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
       saldo: (Number(r.total) || 0) - (Number(r.anticipo) || 0),
       checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut)
@@ -498,6 +548,9 @@ function panelHoy(token, fecha) {
     fecha: dia,
     llegadas: todas.filter(function (r) { return ymd_(r.checkIn) === dia; }).map(mapear),
     salidas: todas.filter(function (r) { return ymd_(r.checkOut) === dia; }).map(mapear),
+    porLlegar: todas.filter(function (r) {
+      return ymd_(r.checkIn) === dia && r.estado !== 'en_casa' && r.estado !== 'checkout';
+    }).length,
     enCasa: todas.filter(function (r) {
       return ymd_(r.checkIn) < dia && ymd_(r.checkOut) > dia;
     }).map(mapear),
@@ -509,36 +562,111 @@ function panelHoy(token, fecha) {
 
 /* ===================== ASEO ===================== */
 
-function panelAseo(token) {
-  sesion_(token);
+/* Situación de cada alojamiento HOY, pensada para que el equipo de aseo
+   sepa de una mirada qué tiene que hacer y en qué orden. */
+function situacionAseo_() {
+  var dia = hoy_();
   var estados = leer_('Aseo');
-  var hoyStr = hoy_();
   var reservas = leer_('Reservas').filter(function (r) { return r.estado !== 'cancelada'; });
+  var recs = recursos_();
 
   return leer_('Unidades').filter(function (u) { return u.activa; })
     .sort(function (a, b) { return Number(a.orden) - Number(b.orden); })
     .map(function (u) {
       var e = estados.filter(function (x) { return x.idUnidad === u.id; })[0];
       var deUnidad = reservas.filter(function (r) { return r.idUnidad === u.id; });
+
+      var sale = deUnidad.filter(function (r) { return ymd_(r.checkOut) === dia; })[0];
+      var llega = deUnidad.filter(function (r) { return ymd_(r.checkIn) === dia; })[0];
+      var dentro = deUnidad.filter(function (r) {
+        return ymd_(r.checkIn) < dia && ymd_(r.checkOut) > dia && r.estado !== 'checkout';
+      })[0];
+
+      var yaSalio = sale && sale.estado === 'checkout';
+      var situacion, detalle, orden;
+      if (yaSalio && llega) { situacion = 'salio_y_llega'; detalle = 'Ya se fue · llega otro huésped hoy'; orden = 1; }
+      else if (yaSalio) { situacion = 'salio'; detalle = 'Ya se fue'; orden = 2; }
+      else if (sale && llega) { situacion = 'sale_y_llega'; detalle = 'Sale hoy · llega otro huésped hoy'; orden = 3; }
+      else if (sale) { situacion = 'sale'; detalle = 'Sale hoy'; orden = 4; }
+      else if (llega) { situacion = 'llega'; detalle = 'Llega hoy'; orden = 5; }
+      else if (dentro) { situacion = 'ocupada'; detalle = 'Huésped alojado'; orden = 6; }
+      else { situacion = 'libre'; detalle = 'Sin movimiento hoy'; orden = 7; }
+
       return {
         id: u.id, nombre: u.nombre, grupo: u.grupo,
         estado: e ? e.estado : 'limpia',
         responsable: e ? e.responsable : '',
         notas: e ? e.notas : '',
         actualizado: e ? String(e.actualizado) : '',
-        saleHoy: deUnidad.some(function (r) { return ymd_(r.checkOut) === hoyStr; }),
-        llegaHoy: deUnidad.some(function (r) { return ymd_(r.checkIn) === hoyStr; })
+        situacion: situacion, detalle: detalle, orden: orden,
+        saleHoy: !!sale, llegaHoy: !!llega, yaSalio: !!yaSalio,
+        huespedSale: sale ? sale.huesped : '',
+        huespedLlega: llega ? llega.huesped : ''
       };
+    })
+    .sort(function (a, b) {
+      if (a.orden !== b.orden) return a.orden - b.orden;
+      return String(a.nombre).localeCompare(String(b.nombre));
     });
 }
 
+function panelAseo(token) {
+  sesion_(token);
+  return situacionAseo_();
+}
+
+/* Solo tres estados, que es lo que de verdad se usa a diario. */
+var ESTADOS_ASEO = ['sucia', 'limpia', 'bloqueada'];
+
 function marcarAseo(token, idUnidad, estado, notas) {
   var u = sesion_(token);
+  marcarAseo_(idUnidad, estado, u.nombre, notas);
+  return true;
+}
+
+function marcarAseo_(idUnidad, estado, quien, notas) {
+  if (ESTADOS_ASEO.indexOf(estado) === -1) throw new Error('Estado de aseo no válido: ' + estado);
   guardarOCrear_('Aseo', 'idUnidad', idUnidad, {
-    idUnidad: idUnidad, estado: estado, responsable: u.nombre,
+    idUnidad: idUnidad, estado: estado, responsable: quien,
     notas: notas || '', actualizado: ahora_()
   });
-  return true;
+  logCambio_(quien, 'aseo', idUnidad + ' -> ' + estado);
+}
+
+/* ===================== PANTALLA DE ASEO COMPARTIDA =====================
+   Un enlace propio para la persona de aseo: entra sin clave desde su
+   teléfono, ve qué pasa hoy en cada alojamiento y marca lo que va limpiando.
+   Recepción ve el mismo estado al instante. */
+
+function claveAseo_() {
+  var c = String(config_('tokenAseo', ''));
+  if (!c) {
+    c = Utilities.getUuid().replace(/-/g, '');
+    guardarOCrear_('Config', 'clave', 'tokenAseo', { clave: 'tokenAseo', valor: c });
+  }
+  return c;
+}
+
+function linkAseo(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  return { url: ScriptApp.getService().getUrl() + '?aseo=' + claveAseo_() };
+}
+
+function aseoPublicoCargar(clave) {
+  if (!clave || String(clave) !== claveAseo_()) throw new Error('Enlace no válido.');
+  return {
+    fecha: hoy_(),
+    horaSalida: hora_(config_('checkOut'), '11:00'),
+    horaEntrada: hora_(config_('checkIn'), '15:00'),
+    unidades: situacionAseo_()
+  };
+}
+
+function aseoPublicoMarcar(clave, idUnidad, estado, quien) {
+  if (!clave || String(clave) !== claveAseo_()) throw new Error('Enlace no válido.');
+  marcarAseo_(idUnidad, estado, String(quien || 'Aseo'), '');
+  return situacionAseo_();
 }
 
 /* ===================== FICHA DE REGISTRO ===================== */
@@ -569,8 +697,12 @@ function guardarFicha_(idReserva, d) {
   });
   // Si firma antes de llegar, la reserva sigue "confirmada": solo pasa a
   // "en casa" cuando el registro se hace el día de la llegada o después.
+  // Pasa a "en casa" solo si corresponde: el día de la llegada o después, y
+  // únicamente desde un estado previo a la llegada. Firmar no puede devolver
+  // a la casa a alguien que ya hizo el check-out.
   var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
-  if (r && ymd_(r.checkIn) <= hoy_()) {
+  var previos = ['confirmada', 'tentativa'];
+  if (r && previos.indexOf(String(r.estado)) > -1 && ymd_(r.checkIn) <= hoy_()) {
     actualizar_('Reservas', 'id', idReserva, { estado: 'en_casa' });
   }
   return true;
@@ -579,7 +711,13 @@ function guardarFicha_(idReserva, d) {
 function fichaDe(token, idReserva) {
   sesion_(token);
   var f = leer_('Fichas').filter(function (x) { return x.idReserva === idReserva; })[0];
-  return f ? { nombre: f.nombre, documento: f.documento, firmaUrl: f.firmaUrl, fecha: String(f.fecha) } : null;
+  if (!f) return null;
+  return {
+    nombre: f.nombre || '', documento: f.documento || '', nacionalidad: f.nacionalidad || '',
+    nacimiento: String(f.nacimiento || ''), procedencia: f.procedencia || '',
+    destino: f.destino || '', motivo: f.motivo || '', emergencia: f.emergencia || '',
+    firmaUrl: f.firmaUrl || '', fecha: String(f.fecha || '')
+  };
 }
 
 /* ===================== REGLAMENTO =====================
@@ -587,8 +725,8 @@ function fichaDe(token, idReserva) {
    que firma el huésped, así nunca se desincronizan. Para cambiar una regla
    se edita solo acá. */
 function reglamento() {
-  var entrada = String(config_('checkIn', '15:00'));
-  var salida = String(config_('checkOut', '11:00'));
+  var entrada = hora_(config_('checkIn'), '15:00');
+  var salida = hora_(config_('checkOut'), '11:00');
   return {
     es: [
       'Check-in desde las ' + entrada + ' y check-out hasta las ' + salida + '.',
@@ -651,8 +789,8 @@ function fichaPublicaCargar(t) {
     huesped: r.huesped,
     unidad: rec ? (rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '')) : '',
     checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
-    horaEntrada: String(config_('checkIn', '15:00')),
-    horaSalida: String(config_('checkOut', '11:00')),
+    horaEntrada: hora_(config_('checkIn'), '15:00'),
+    horaSalida: hora_(config_('checkOut'), '11:00'),
     firmada: yaFirmo
   };
 }
@@ -804,6 +942,106 @@ function diagnostico() {
     out.mensaje = 'Error: ' + e.message + '. Lo más probable es que falte ejecutar setup().';
   }
   return out;
+}
+
+/* ===================== INFORMES =====================
+   Todo se calcula sobre las reservas ya guardadas: ocupación, ingresos,
+   de dónde llegan los huéspedes y qué alojamiento rinde más. */
+
+function informes(token, desde, hasta) {
+  sesion_(token);
+  var d = ymd_(desde), h = ymd_(hasta);
+  if (!d || !h || h <= d) throw new Error('Rango de fechas inválido.');
+
+  var recs = recursos_();
+  var nombreDe = {};
+  recs.forEach(function (r) { nombreDe[r.id] = r.unidad + (r.nombre ? ' — ' + r.nombre : ''); });
+
+  var dias = Math.round((new Date(h) - new Date(d)) / 86400000);
+  var nochesDisponibles = recs.length * dias;
+
+  var reservas = leer_('Reservas').filter(function (r) {
+    return r.estado !== 'cancelada' && r.estado !== 'no_show' &&
+      chocan_(ymd_(r.checkIn), ymd_(r.checkOut), d, h);
+  });
+  var canceladas = leer_('Reservas').filter(function (r) {
+    return (r.estado === 'cancelada' || r.estado === 'no_show') &&
+      chocan_(ymd_(r.checkIn), ymd_(r.checkOut), d, h);
+  });
+
+  var nochesVendidas = 0, ingresos = 0, abonado = 0, conAddon = 0;
+  var porCanal = {}, porUnidad = {}, porMes = {};
+
+  reservas.forEach(function (r) {
+    var ini = ymd_(r.checkIn), fin = ymd_(r.checkOut);
+    if (!ini || !fin) return;
+    var nTotal = Math.round((new Date(fin) - new Date(ini)) / 86400000) || 1;
+    // Solo la parte de la estadía que cae dentro del rango consultado.
+    var vIni = ini < d ? d : ini, vFin = fin > h ? h : fin;
+    var nDentro = Math.round((new Date(vFin) - new Date(vIni)) / 86400000);
+    if (nDentro <= 0) return;
+
+    var total = Number(r.total) || 0;
+    var proporcion = total * (nDentro / nTotal);
+
+    nochesVendidas += nDentro;
+    ingresos += proporcion;
+    abonado += (Number(r.anticipo) || 0) * (nDentro / nTotal);
+    if (r.addon) conAddon++;
+
+    var canal = String(r.canal || 'sin canal');
+    porCanal[canal] = porCanal[canal] || { canal: canal, reservas: 0, noches: 0, ingresos: 0 };
+    porCanal[canal].reservas++;
+    porCanal[canal].noches += nDentro;
+    porCanal[canal].ingresos += proporcion;
+
+    var un = nombreDe[r.recurso] || r.recurso;
+    porUnidad[un] = porUnidad[un] || { unidad: un, noches: 0, ingresos: 0 };
+    porUnidad[un].noches += nDentro;
+    porUnidad[un].ingresos += proporcion;
+
+    var mes = vIni.slice(0, 7);
+    porMes[mes] = porMes[mes] || { mes: mes, noches: 0, ingresos: 0 };
+    porMes[mes].noches += nDentro;
+    porMes[mes].ingresos += proporcion;
+  });
+
+  var ordenar = function (obj, campo) {
+    return Object.keys(obj).map(function (k) { return obj[k]; })
+      .sort(function (a, b) { return (b[campo] || 0) - (a[campo] || 0); })
+      .map(function (x) {
+        x.ingresos = Math.round(x.ingresos);
+        return x;
+      });
+  };
+
+  var fichas = leer_('Fichas').length;
+
+  return {
+    desde: d, hasta: h, dias: dias,
+    unidadesActivas: recs.length,
+    nochesDisponibles: nochesDisponibles,
+    nochesVendidas: nochesVendidas,
+    ocupacion: nochesDisponibles ? Math.round(nochesVendidas / nochesDisponibles * 1000) / 10 : 0,
+    reservas: reservas.length,
+    canceladas: canceladas.length,
+    ingresos: Math.round(ingresos),
+    abonado: Math.round(abonado),
+    porCobrar: Math.round(ingresos - abonado),
+    // Tarifa media por noche vendida: el indicador clásico de un hotel.
+    tarifaMedia: nochesVendidas ? Math.round(ingresos / nochesVendidas) : 0,
+    // Ingreso por unidad disponible, incluyendo las que quedaron vacías.
+    ingresoPorUnidad: nochesDisponibles ? Math.round(ingresos / nochesDisponibles) : 0,
+    estadiaMedia: reservas.length ? Math.round(nochesVendidas / reservas.length * 10) / 10 : 0,
+    programasGlamping: conAddon,
+    fichasFirmadas: fichas,
+    porCanal: ordenar(porCanal, 'ingresos'),
+    porUnidad: ordenar(porUnidad, 'ingresos'),
+    porMes: Object.keys(porMes).sort().map(function (k) {
+      porMes[k].ingresos = Math.round(porMes[k].ingresos);
+      return porMes[k];
+    })
+  };
 }
 
 /* ===================== EQUIPO ===================== */

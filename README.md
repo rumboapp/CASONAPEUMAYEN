@@ -10,13 +10,14 @@ sin que se pisen las reservas.
 
 ## Los archivos
 
-Son **cuatro**, y se copian tal cual:
+Son **cinco**, y se copian tal cual:
 
 | Archivo | Qué es | Cómo se crea en Apps Script |
 |---|---|---|
 | `Code.gs` | Todo el servidor: datos, reservas, aseo, fichas, usuarios | Archivo → Script |
 | `Index.html` | La aplicación interna del equipo | Archivo → HTML |
 | `Ficha.html` | La página que ve el huésped para firmar desde su teléfono | Archivo → HTML |
+| `Aseo.html` | La pantalla del equipo de aseo, con su propio enlace | Archivo → HTML |
 | `appsscript.json` | Configuración del proyecto | Ya existe; se activa en ⚙️ Configuración → "Mostrar appsscript.json" |
 
 ## Instalación
@@ -25,7 +26,8 @@ Son **cuatro**, y se copian tal cual:
    negocio → **Nuevo proyecto** → ponle "Casona Peumayén".
 2. Borra el contenido del `Code.gs` de ejemplo y pega el de este repositorio.
 3. **Archivo → HTML**, llámalo `Index` (sin escribir `.html`) y pega
-   `Index.html`. Repite con otro llamado `Ficha` y pega `Ficha.html`.
+   `Index.html`. Repite con `Ficha` y con `Aseo`, pegando el archivo del
+   mismo nombre.
 4. ⚙️ **Configuración del proyecto** → marca *Mostrar el archivo de manifiesto
    appsscript.json*. Vuelve al editor, abre `appsscript.json` en la lista de
    archivos de la izquierda y reemplaza su contenido.
@@ -108,6 +110,62 @@ y a nada más, y una vez firmada muestra la confirmación en lugar del formulari
 
 Firmar antes de llegar no adelanta el estado de la reserva: solo pasa a
 *en casa* cuando el registro se hace el día de la llegada o después.
+
+## Estados de una reserva
+
+Se ven en el calendario por color y se cambian con un toque desde la propia
+reserva, sin tener que buscar el campo:
+
+| Estado | Qué significa |
+|---|---|
+| Tentativa | Anotada pero sin confirmar |
+| Confirmada | Confirmada, el huésped todavía no llega |
+| Check-in | El huésped llegó y está alojado |
+| Check-out | El huésped ya se fue |
+| No-show | Nunca llegó |
+
+Al abrir una reserva, arriba aparece en qué punto va y el botón del paso
+siguiente: *Hacer check-in* o *Hacer check-out*. Ese botón guarda además la
+hora real, que después alimenta los informes.
+
+**Al hacer el check-out, el alojamiento se marca solo como sucio**, así el
+equipo de aseo lo ve al instante en su pantalla sin que nadie tenga que
+avisarle.
+
+## Aseo
+
+Solo tres estados, que es lo que se usa a diario: **sucia**, **limpia** y
+**fuera de servicio**.
+
+En la pestaña *Aseo* hay un botón **Enlace para el equipo de aseo**: genera
+una dirección que se le manda a la persona que limpia. La abre desde su
+teléfono, sin clave, y ve los alojamientos ordenados por lo que hay que
+hacer:
+
+1. **Limpiar ahora** — los que ya hicieron check-out.
+2. **Cuando se vayan** — los que salen hoy pero el huésped sigue adentro.
+3. **Listas para recibir** — las que esperan a alguien hoy.
+4. **Sin movimiento hoy** — plegado, para no estorbar.
+
+Escribe su nombre una vez y queda registrado quién limpió cada cosa.
+Recepción ve el cambio al instante, y la pantalla se refresca sola cada dos
+minutos.
+
+## Informes
+
+La pestaña *Informes* (solo administración) calcula sobre las reservas ya
+guardadas, para el período que elijas:
+
+- **Ocupación**: noches vendidas sobre noches disponibles.
+- **Ingresos**, lo ya abonado y lo que queda **por cobrar**.
+- **Tarifa media por noche** y **ingreso por alojamiento disponible**, los dos
+  indicadores que se miran en cualquier hotel.
+- **Estadía media**, cancelaciones y no-shows.
+- Desgloses **por canal** (de dónde llegan de verdad las reservas), **por
+  alojamiento** (cuál rinde más) y **mes a mes**.
+
+Cuando una estadía cruza el borde del período, solo se cuentan las noches
+que caen dentro, para que los totales de meses distintos no se pisen.
 
 ## Agregar habitaciones y carpas
 
