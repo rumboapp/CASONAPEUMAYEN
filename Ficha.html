@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<base target="_top">
+<style>
+  :root{
+    --bg:#f5f6f8; --surface:#fff; --line:#e4e6ea; --tx:#16191d; --tx2:#6b7280; --tx3:#9aa1ab;
+    --ac:#1f6feb; --ac-soft:#e8f0fe; --ok:#0e8a5f; --dan:#c1362f;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--tx);-webkit-font-smoothing:antialiased;padding:16px}
+  .wrap{max-width:560px;margin:0 auto}
+  button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,select{font:inherit;color:inherit;width:100%;padding:11px 12px;border:1px solid var(--line);
+    border-radius:8px;background:var(--surface);outline:none}
+  input:focus{border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-soft)}
+  .hide{display:none !important}
+
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .top h1{font-size:17px;font-weight:600}
+  .lang{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+  .lang button{padding:6px 12px;font-size:12px;color:var(--tx2)}
+  .lang button.on{background:var(--ac);color:#fff;font-weight:500}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px}
+  .card h2{font-size:13px;font-weight:600;margin-bottom:12px;color:var(--tx2);
+    text-transform:uppercase;letter-spacing:.05em}
+  .resumen{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px}
+  .resumen dt{color:var(--tx2)}
+  .resumen dd{font-weight:500;text-align:right}
+
+  .fld{margin-bottom:13px}
+  .fld label{display:block;font-size:12.5px;color:var(--tx2);margin-bottom:5px;font-weight:500}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:480px){.g2{grid-template-columns:1fr}}
+
+  .reglas{font-size:13.5px;color:var(--tx)}
+  .reglas li{margin:0 0 9px 18px}
+  .chk{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;
+    background:var(--ac-soft);padding:13px;border-radius:8px;margin-top:6px}
+  .chk input{width:auto;margin-top:3px;flex:none}
+
+  canvas{border:1px dashed var(--line);border-radius:8px;width:100%;height:170px;
+    touch-action:none;background:#fcfcfd;display:block}
+  .btn{padding:14px;border-radius:8px;background:var(--ac);color:#fff;font-weight:600;width:100%;font-size:15px}
+  .btn:disabled{background:var(--tx3);cursor:default}
+  .btn.gh{background:var(--surface);color:var(--tx2);border:1px solid var(--line);
+    font-weight:500;font-size:13px;padding:8px;width:auto;margin-top:8px}
+  .err{color:var(--dan);font-size:13.5px;margin-top:12px}
+  .cargando,.aviso{text-align:center;color:var(--tx2);padding:40px 20px}
+  .listo{text-align:center;padding:36px 20px}
+  .listo .tic{width:56px;height:56px;border-radius:50%;background:var(--ok);color:#fff;
+    display:grid;place-items:center;font-size:28px;margin:0 auto 16px}
+  .listo h2{font-size:18px;margin-bottom:8px}
+  .listo p{color:var(--tx2);font-size:14px}
+  .pie{text-align:center;color:var(--tx3);font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <h1>Casona Peumayén</h1>
+    <div class="lang">
+      <button id="bEs" class="on">ES</button>
+      <button id="bEn">EN</button>
+    </div>
+  </div>
+
+  <div id="cargando" class="cargando" data-t="cargando">Cargando…</div>
+  <div id="aviso" class="aviso hide"></div>
+
+  <div id="listo" class="listo hide">
+    <div class="tic">✓</div>
+    <h2 data-t="listoTit">¡Registro completo!</h2>
+    <p data-t="listoTxt">Gracias. Ya tenemos tus datos y tu firma; el día de tu llegada solo pasa a buscar la llave.</p>
+  </div>
+
+  <form id="form" class="hide">
+    <div class="card">
+      <h2 data-t="tuReserva">Tu reserva</h2>
+      <dl class="resumen">
+        <dt data-t="aNombre">Nombre</dt><dd id="rHuesped"></dd>
+        <dt data-t="aUnidad">Alojamiento</dt><dd id="rUnidad"></dd>
+        <dt data-t="aLlegada">Llegada</dt><dd id="rIn"></dd>
+        <dt data-t="aSalida">Salida</dt><dd id="rOut"></dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h2 data-t="tusDatos">Tus datos</h2>
+      <div class="fld"><label data-t="lNombre">Nombre completo</label><input id="fNom" required></div>
+      <div class="g2">
+        <div class="fld"><label data-t="lDoc">RUT o pasaporte</label><input id="fDoc" required></div>
+        <div class="fld"><label data-t="lNac">Nacionalidad</label><input id="fNac"></div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label data-t="lNacim">Fecha de nacimiento</label><input id="fNacim" type="date"></div>
+        <div class="fld"><label data-t="lEme">Contacto de emergencia</label><input id="fEme"></div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label data-t="lPro">Ciudad de procedencia</label><input id="fPro"></div>
+        <div class="fld"><label data-t="lDes">Destino al salir</label><input id="fDes"></div>
+      </div>
+      <div class="fld"><label data-t="lMot">Motivo del viaje</label><input id="fMot"></div>
+    </div>
+
+    <div class="card">
+      <h2 data-t="normas">Normas de convivencia</h2>
+      <ul class="reglas" id="listaReglas"></ul>
+      <label class="chk">
+        <input type="checkbox" id="fAcc">
+        <span data-t="acepto">He leído y acepto las normas de convivencia y las condiciones de la estadía.</span>
+      </label>
+    </div>
+
+    <div class="card">
+      <h2 data-t="firma">Firma</h2>
+      <p style="font-size:13px;color:var(--tx2);margin-bottom:9px" data-t="firmaAyuda">
+        Firma con el dedo dentro del recuadro.</p>
+      <canvas id="lienzo"></canvas>
+      <button type="button" class="btn gh" id="bLimpiar" data-t="borrar">Borrar</button>
+    </div>
+
+    <button type="submit" class="btn" id="bEnviar" data-t="enviar">Enviar registro</button>
+    <div class="err hide" id="err"></div>
+    <div class="pie" data-t="pie">Tus datos se usan solo para el registro de huéspedes exigido a los alojamientos.</div>
+  </form>
+</div>
+
+<script>
+var TOKEN = '<?= token ?>';
+
+var T = {
+  es:{
+    cargando:'Cargando…', tuReserva:'Tu reserva', aNombre:'Nombre', aUnidad:'Alojamiento',
+    aLlegada:'Llegada', aSalida:'Salida', tusDatos:'Tus datos',
+    lNombre:'Nombre completo', lDoc:'RUT o pasaporte', lNac:'Nacionalidad',
+    lNacim:'Fecha de nacimiento', lEme:'Contacto de emergencia',
+    lPro:'Ciudad de procedencia', lDes:'Destino al salir', lMot:'Motivo del viaje',
+    normas:'Normas de convivencia',
+    acepto:'He leído y acepto las normas de convivencia y las condiciones de la estadía.',
+    firma:'Firma', firmaAyuda:'Firma con el dedo dentro del recuadro.',
+    borrar:'Borrar', enviar:'Enviar registro',
+    listoTit:'¡Registro completo!',
+    listoTxt:'Gracias. Ya tenemos tus datos y tu firma; el día de tu llegada solo pasa a buscar la llave.',
+    pie:'Tus datos se usan solo para el registro de huéspedes exigido a los alojamientos.',
+    faltaAcepta:'Debes aceptar las normas para continuar.',
+    faltaFirma:'Falta tu firma.',
+    faltaNombre:'Escribe tu nombre completo y tu documento.',
+    enviando:'Enviando…',
+    reglas:[
+      'Horario de silencio de 22:00 a 09:00. Después de esa hora, la música y las conversaciones solo en el espacio común y en voz baja.',
+      'No se admiten mascotas.',
+      'No se permite fumar dentro de las habitaciones ni de las carpas.',
+      'El consumo de alcohol está permitido solo en el espacio común.',
+      'Las personas no registradas como huéspedes no pueden pernoctar.',
+      'El huésped es responsable de los daños al mobiliario o al equipamiento.',
+      'Cancelación: sin costo hasta 72 horas antes de la llegada; 50% de devolución entre 24 y 72 horas; sin devolución con menos de 24 horas o si no se presenta.'
+    ],
+    horario:function(a,b){ return 'Check-in desde las '+a+' · Check-out hasta las '+b+'.'; }
+  },
+  en:{
+    cargando:'Loading…', tuReserva:'Your booking', aNombre:'Name', aUnidad:'Accommodation',
+    aLlegada:'Check-in', aSalida:'Check-out', tusDatos:'Your details',
+    lNombre:'Full name', lDoc:'ID or passport number', lNac:'Nationality',
+    lNacim:'Date of birth', lEme:'Emergency contact',
+    lPro:'Coming from', lDes:'Going to', lMot:'Purpose of trip',
+    normas:'House rules',
+    acepto:'I have read and accept the house rules and the conditions of my stay.',
+    firma:'Signature', firmaAyuda:'Sign with your finger inside the box.',
+    borrar:'Clear', enviar:'Submit registration',
+    listoTit:'You are all set!',
+    listoTxt:'Thank you. We have your details and signature; just pick up your key when you arrive.',
+    pie:'Your details are used only for the guest register required of accommodation providers.',
+    faltaAcepta:'You must accept the house rules to continue.',
+    faltaFirma:'Your signature is missing.',
+    faltaNombre:'Please enter your full name and ID number.',
+    enviando:'Sending…',
+    reglas:[
+      'Quiet hours from 10:00 pm to 9:00 am. After that, music and conversation only in the common area and at a low volume.',
+      'Pets are not allowed.',
+      'Smoking is not allowed inside the rooms or the tents.',
+      'Alcohol may be consumed in the common area only.',
+      'People not registered as guests may not stay overnight.',
+      'Guests are responsible for any damage to the furniture or equipment.',
+      'Cancellation: free of charge up to 72 hours before arrival; 50% refund between 24 and 72 hours; no refund with less than 24 hours or in case of a no-show.'
+    ],
+    horario:function(a,b){ return 'Check-in from '+a+' · Check-out until '+b+'.'; }
+  }
+};
+
+var IDIOMA = (navigator.language || 'es').toLowerCase().indexOf('es') === 0 ? 'es' : 'en';
+var DATOS = null, CTX = null, pintando = false, firmado = false;
+
+function $(id){ return document.getElementById(id); }
+
+function aplicarIdioma(){
+  var t = T[IDIOMA];
+  document.documentElement.lang = IDIOMA;
+  document.querySelectorAll('[data-t]').forEach(function(el){
+    var k = el.getAttribute('data-t');
+    if (typeof t[k] === 'string') el.textContent = t[k];
+  });
+  $('bEs').classList.toggle('on', IDIOMA==='es');
+  $('bEn').classList.toggle('on', IDIOMA==='en');
+
+  var ul = $('listaReglas'); ul.innerHTML='';
+  t.reglas.forEach(function(r){ var li=document.createElement('li'); li.textContent=r; ul.appendChild(li); });
+  if (DATOS){
+    var li=document.createElement('li');
+    li.textContent = t.horario(DATOS.horaEntrada, DATOS.horaSalida);
+    ul.appendChild(li);
+    pintarFechas();
+  }
+}
+$('bEs').onclick=function(){ IDIOMA='es'; aplicarIdioma(); };
+$('bEn').onclick=function(){ IDIOMA='en'; aplicarIdioma(); };
+
+function fecha(s){
+  var p=s.split('-'), d=new Date(+p[0], +p[1]-1, +p[2]);
+  return d.toLocaleDateString(IDIOMA==='es'?'es-CL':'en-GB',
+    { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+}
+function pintarFechas(){
+  $('rHuesped').textContent = DATOS.huesped;
+  $('rUnidad').textContent  = DATOS.unidad;
+  $('rIn').textContent      = fecha(DATOS.checkIn);
+  $('rOut').textContent     = fecha(DATOS.checkOut);
+}
+
+function llamar(fn, args, ok, mal){
+  var r = google.script.run.withSuccessHandler(ok).withFailureHandler(mal);
+  r[fn].apply(r, args);
+}
+
+aplicarIdioma();
+
+llamar('fichaPublicaCargar', [TOKEN], function(d){
+  DATOS = d;
+  $('cargando').classList.add('hide');
+  if (d.firmada){ $('listo').classList.remove('hide'); return; }
+  $('form').classList.remove('hide');
+  $('fNom').value = d.huesped || '';
+  aplicarIdioma();
+  prepararLienzo();
+}, function(e){
+  $('cargando').classList.add('hide');
+  $('aviso').classList.remove('hide');
+  $('aviso').textContent = e.message || String(e);
+});
+
+function prepararLienzo(){
+  var c = $('lienzo');
+  CTX = c.getContext('2d');
+  var ajustar = function(){
+    if (!c.clientWidth) return;
+    var datos = c.width ? CTX.getImageData(0,0,c.width,c.height) : null;
+    c.width = c.clientWidth; c.height = c.clientHeight;
+    CTX.lineWidth=2.2; CTX.lineCap='round'; CTX.lineJoin='round'; CTX.strokeStyle='#16191d';
+    if (datos) CTX.putImageData(datos,0,0);
+  };
+  ajustar();
+  window.addEventListener('resize', ajustar);
+
+  var pos = function(e){ var r=c.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; };
+  c.addEventListener('pointerdown', function(e){
+    pintando=true; firmado=true;
+    $('err').classList.add('hide');
+    c.setPointerCapture(e.pointerId);
+    var p=pos(e); CTX.beginPath(); CTX.moveTo(p.x,p.y);
+  });
+  c.addEventListener('pointermove', function(e){
+    if(!pintando) return;
+    e.preventDefault();
+    var p=pos(e); CTX.lineTo(p.x,p.y); CTX.stroke();
+  });
+  c.addEventListener('pointerup', function(){ pintando=false; });
+}
+
+$('bLimpiar').onclick=function(){
+  var c=$('lienzo'); CTX.clearRect(0,0,c.width,c.height); firmado=false;
+};
+
+$('form').addEventListener('submit', function(e){
+  e.preventDefault();
+  var t = T[IDIOMA];
+  $('err').classList.add('hide');
+  var mostrar = function(m){ $('err').textContent=m; $('err').classList.remove('hide'); };
+
+  if (!$('fNom').value.trim() || !$('fDoc').value.trim()) return mostrar(t.faltaNombre);
+  if (!$('fAcc').checked) return mostrar(t.faltaAcepta);
+  if (!firmado) return mostrar(t.faltaFirma);
+
+  $('bEnviar').disabled = true;
+  $('bEnviar').textContent = t.enviando;
+
+  llamar('fichaPublicaFirmar', [TOKEN, {
+    nombre:$('fNom').value, documento:$('fDoc').value, nacionalidad:$('fNac').value,
+    nacimiento:$('fNacim').value, procedencia:$('fPro').value, destino:$('fDes').value,
+    motivo:$('fMot').value, emergencia:$('fEme').value, acepta:true,
+    firma:$('lienzo').toDataURL('image/png')
+  }], function(){
+    $('form').classList.add('hide');
+    $('listo').classList.remove('hide');
+    window.scrollTo(0,0);
+  }, function(er){
+    $('bEnviar').disabled=false;
+    $('bEnviar').textContent=T[IDIOMA].enviar;
+    mostrar(er.message||String(er));
+  });
+});
+</script>
+</body>
+</html>

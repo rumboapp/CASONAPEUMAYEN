@@ -14,11 +14,12 @@ var TZ = 'America/Santiago';
 var HOJAS = {
   Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa'],
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor'],
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'email', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'tokenFicha', 'creado', 'creadoPor'],
   Aseo: ['idUnidad', 'estado', 'responsable', 'notas', 'actualizado'],
   Fichas: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'procedencia', 'destino', 'motivo', 'emergencia', 'firmaUrl', 'fecha'],
   Usuarios: ['nombre', 'rol', 'pinHash', 'activo'],
   Sesiones: ['token', 'nombre', 'rol', 'expira'],
+  Log: ['fecha', 'usuario', 'accion', 'detalle'],
   Config: ['clave', 'valor']
 };
 
@@ -29,10 +30,21 @@ var COLS_TEXTO = {
   Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado'],
   Fichas: ['nacimiento', 'fecha'],
   Aseo: ['actualizado'],
-  Sesiones: ['expira']
+  Sesiones: ['expira'],
+  Log: ['fecha']
 };
 
-function doGet() {
+/* Dos páginas: la interna (Index) y la que se le manda al huésped para que
+   firme desde su teléfono (Ficha), que se abre con ?f=<token> y no pide clave. */
+function doGet(e) {
+  var p = (e && e.parameter) || {};
+  if (p.f) {
+    var t = HtmlService.createTemplateFromFile('Ficha');
+    t.token = String(p.f);
+    return t.evaluate()
+      .setTitle('Casona Peumayén — Registro')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+  }
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('Casona Peumayén')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
@@ -272,6 +284,7 @@ function recursos_() {
 function cargarTablero(token, desde, hasta) {
   sesion_(token);
   var d = ymd_(desde), h = ymd_(hasta);
+  var firmadas = leer_('Fichas').map(function (f) { return f.idReserva; });
   var reservas = leer_('Reservas')
     .filter(function (r) {
       return r.estado !== 'cancelada' && chocan_(ymd_(r.checkIn), ymd_(r.checkOut), d, h);
@@ -279,7 +292,8 @@ function cargarTablero(token, desde, hasta) {
     .map(function (r) {
       return {
         id: r.id, recurso: r.recurso, idUnidad: r.idUnidad, huesped: r.huesped,
-        telefono: r.telefono, canal: r.canal,
+        telefono: r.telefono, email: r.email || '', canal: r.canal,
+        firmada: firmadas.indexOf(r.id) > -1,
         checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
         estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
         addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
@@ -341,26 +355,26 @@ function guardarReserva(token, datos) {
     verificarLibre_(datos.recurso, f.checkIn, f.checkOut, datos.id);
     var unidad = recursos_().filter(function (x) { return x.id === datos.recurso; })[0];
 
+    var campos = {
+      recurso: datos.recurso, idUnidad: unidad ? unidad.idUnidad : '',
+      huesped: datos.huesped, telefono: datos.telefono || '', email: datos.email || '',
+      canal: datos.canal || 'whatsapp',
+      checkIn: f.checkIn, checkOut: f.checkOut, estado: datos.estado || 'confirmada',
+      total: Number(datos.total) || 0, anticipo: Number(datos.anticipo) || 0,
+      addon: !!datos.addon, addonFecha: datos.addonFecha || '', notas: datos.notas || ''
+    };
+
     if (datos.id) {
-      actualizar_('Reservas', 'id', datos.id, {
-        recurso: datos.recurso, idUnidad: unidad ? unidad.idUnidad : '',
-        huesped: datos.huesped, telefono: datos.telefono || '', canal: datos.canal || 'whatsapp',
-        checkIn: f.checkIn, checkOut: f.checkOut, estado: datos.estado || 'confirmada',
-        total: Number(datos.total) || 0, anticipo: Number(datos.anticipo) || 0,
-        addon: !!datos.addon, addonFecha: datos.addonFecha || '', notas: datos.notas || ''
-      });
+      actualizar_('Reservas', 'id', datos.id, campos);
       return { id: datos.id };
     }
 
     var id = uid_('R');
-    insertar_('Reservas', {
-      id: id, recurso: datos.recurso, idUnidad: unidad ? unidad.idUnidad : '',
-      huesped: datos.huesped, telefono: datos.telefono || '', canal: datos.canal || 'whatsapp',
-      checkIn: f.checkIn, checkOut: f.checkOut, estado: datos.estado || 'confirmada',
-      total: Number(datos.total) || 0, anticipo: Number(datos.anticipo) || 0,
-      addon: !!datos.addon, addonFecha: datos.addonFecha || '', notas: datos.notas || '',
-      creado: ahora_(), creadoPor: u.nombre
-    });
+    campos.id = id;
+    campos.tokenFicha = '';
+    campos.creado = ahora_();
+    campos.creadoPor = u.nombre;
+    insertar_('Reservas', campos);
     return { id: id };
   } finally {
     lock.releaseLock();
@@ -470,6 +484,11 @@ function marcarAseo(token, idUnidad, estado, notas) {
 
 function guardarFicha(token, idReserva, d) {
   sesion_(token);
+  return guardarFicha_(idReserva, d);
+}
+
+/* Compartida por el check-in en recepción y por la firma a distancia. */
+function guardarFicha_(idReserva, d) {
   if (!d.acepta) throw new Error('El huésped debe aceptar el reglamento.');
   if (!d.firma) throw new Error('Falta la firma.');
 
@@ -487,7 +506,12 @@ function guardarFicha(token, idReserva, d) {
     procedencia: d.procedencia || '', destino: d.destino || '', motivo: d.motivo || '',
     emergencia: d.emergencia || '', firmaUrl: archivo.getUrl(), fecha: ahora_()
   });
-  actualizar_('Reservas', 'id', idReserva, { estado: 'en_casa' });
+  // Si firma antes de llegar, la reserva sigue "confirmada": solo pasa a
+  // "en casa" cuando el registro se hace el día de la llegada o después.
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (r && ymd_(r.checkIn) <= hoy_()) {
+    actualizar_('Reservas', 'id', idReserva, { estado: 'en_casa' });
+  }
   return true;
 }
 
@@ -495,6 +519,180 @@ function fichaDe(token, idReserva) {
   sesion_(token);
   var f = leer_('Fichas').filter(function (x) { return x.idReserva === idReserva; })[0];
   return f ? { nombre: f.nombre, documento: f.documento, firmaUrl: f.firmaUrl, fecha: String(f.fecha) } : null;
+}
+
+/* ===================== FIRMA A DISTANCIA =====================
+   Genera un enlace propio de cada reserva para mandar por WhatsApp o correo.
+   El huésped lo abre, lee el reglamento, lo acepta y firma desde su teléfono.
+   El enlace no da acceso a nada más: solo a su propia reserva. */
+
+function linkFicha(token, idReserva) {
+  sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  var t = String(r.tokenFicha || '');
+  if (!t) {
+    t = Utilities.getUuid().replace(/-/g, '');
+    actualizar_('Reservas', 'id', idReserva, { tokenFicha: t });
+  }
+  return { url: ScriptApp.getService().getUrl() + '?f=' + t, token: t };
+}
+
+function fichaPublicaCargar(t) {
+  var r = leer_('Reservas').filter(function (x) {
+    return String(x.tokenFicha) === String(t) && String(t) !== '';
+  })[0];
+  if (!r) throw new Error('Enlace no válido o vencido.');
+  if (r.estado === 'cancelada') throw new Error('Esta reserva fue cancelada.');
+
+  var rec = recursos_().filter(function (x) { return x.id === r.recurso; })[0];
+  var yaFirmo = leer_('Fichas').some(function (f) { return f.idReserva === r.id; });
+  return {
+    huesped: r.huesped,
+    unidad: rec ? (rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '')) : '',
+    checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
+    horaEntrada: String(config_('checkIn', '15:00')),
+    horaSalida: String(config_('checkOut', '11:00')),
+    firmada: yaFirmo
+  };
+}
+
+function fichaPublicaFirmar(t, d) {
+  var r = leer_('Reservas').filter(function (x) {
+    return String(x.tokenFicha) === String(t) && String(t) !== '';
+  })[0];
+  if (!r) throw new Error('Enlace no válido o vencido.');
+  guardarFicha_(r.id, d);
+  return true;
+}
+
+/* ===================== ALOJAMIENTO (habitaciones y carpas) =====================
+   Todo el inventario es editable: se pueden sumar habitaciones del ala nueva
+   o carpas sin tocar el código. */
+
+function inventarioAdmin(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var camas = leer_('Camas');
+  return leer_('Unidades')
+    .sort(function (a, b) { return Number(a.orden) - Number(b.orden); })
+    .map(function (x) {
+      return {
+        id: x.id, nombre: x.nombre, grupo: x.grupo, capacidad: Number(x.capacidad) || 0,
+        bano: x.bano, porCama: !!x.porCama,
+        precioBase: Number(x.precioBase) || 0, precioAlta: Number(x.precioAlta) || 0,
+        orden: Number(x.orden) || 0, activa: !!x.activa,
+        camas: camas.filter(function (c) { return c.idUnidad === x.id; })
+          .sort(function (a, b) { return Number(a.orden) - Number(b.orden); })
+          .map(function (c) {
+            return {
+              id: c.id, nombre: c.nombre, precioBase: Number(c.precioBase) || 0,
+              precioAlta: Number(c.precioAlta) || 0, activa: !!c.activa
+            };
+          })
+      };
+    });
+}
+
+function exigirAdmin_(u) {
+  if (u.rol !== 'admin') throw new Error('Solo administración puede hacer este cambio.');
+}
+
+function guardarUnidad(token, d) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  if (!String(d.nombre || '').trim()) throw new Error('Falta el nombre de la habitación o carpa.');
+
+  var campos = {
+    nombre: d.nombre, grupo: d.grupo || 'Lodge', capacidad: Number(d.capacidad) || 1,
+    bano: d.bano || 'privado', porCama: !!d.porCama,
+    precioBase: Number(d.precioBase) || 0, precioAlta: Number(d.precioAlta) || 0,
+    activa: d.activa === false ? false : true
+  };
+
+  if (d.id) {
+    actualizar_('Unidades', 'id', d.id, campos);
+    logCambio_(u.nombre, 'unidad_editada', d.id);
+    return { id: d.id };
+  }
+  var existentes = leer_('Unidades');
+  campos.id = uid_(campos.grupo === 'Glamping' ? 'G' : 'U');
+  campos.orden = existentes.length + 1;
+  insertar_('Unidades', campos);
+  logCambio_(u.nombre, 'unidad_creada', campos.nombre);
+  return { id: campos.id };
+}
+
+function guardarCama(token, d) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  if (!d.idUnidad) throw new Error('Falta indicar a qué habitación pertenece la cama.');
+  if (!String(d.nombre || '').trim()) throw new Error('Falta el nombre de la cama.');
+
+  var campos = {
+    idUnidad: d.idUnidad, nombre: d.nombre,
+    precioBase: Number(d.precioBase) || 0, precioAlta: Number(d.precioAlta) || 0,
+    activa: d.activa === false ? false : true
+  };
+  if (d.id) {
+    actualizar_('Camas', 'id', d.id, campos);
+    return { id: d.id };
+  }
+  campos.id = uid_('B');
+  campos.orden = leer_('Camas').length + 1;
+  insertar_('Camas', campos);
+  // Una unidad con camas propias se vende por cama.
+  actualizar_('Unidades', 'id', d.idUnidad, { porCama: true });
+  logCambio_(u.nombre, 'cama_creada', d.nombre);
+  return { id: campos.id };
+}
+
+/* No se borra nunca: se archiva, para no perder el historial de reservas. */
+function archivarUnidad(token, id, activa) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  actualizar_('Unidades', 'id', id, { activa: !!activa });
+  leer_('Camas').filter(function (c) { return c.idUnidad === id; })
+    .forEach(function (c) { actualizar_('Camas', 'id', c.id, { activa: !!activa }); });
+  logCambio_(u.nombre, 'unidad_archivada', id + ' activa=' + !!activa);
+  return true;
+}
+
+function archivarCama(token, id, activa) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  actualizar_('Camas', 'id', id, { activa: !!activa });
+  return true;
+}
+
+function logCambio_(quien, accion, detalle) {
+  try { insertar_('Log', { fecha: ahora_(), usuario: quien, accion: accion, detalle: detalle }); }
+  catch (e) { /* el registro de cambios nunca debe impedir la operación */ }
+}
+
+/* ===================== DIAGNÓSTICO =====================
+   Se llama desde la pantalla de acceso para saber si el proyecto quedó
+   bien instalado, en vez de quedarse adivinando por qué no entra. */
+function diagnostico() {
+  var out = { ok: true, hojas: {}, usuarios: 0, unidades: 0, mensaje: '' };
+  try {
+    var ss = ss_();
+    out.planilla = ss.getUrl();
+    Object.keys(HOJAS).forEach(function (n) {
+      out.hojas[n] = !!ss.getSheetByName(n);
+      if (!out.hojas[n]) out.ok = false;
+    });
+    if (!out.ok) { out.mensaje = 'Faltan hojas: ejecuta setup() desde el editor.'; return out; }
+    out.usuarios = leer_('Usuarios').length;
+    out.unidades = leer_('Unidades').filter(function (u) { return u.activa; }).length;
+    if (!out.usuarios) { out.ok = false; out.mensaje = 'No hay usuarios cargados: ejecuta setup().'; return out; }
+    if (!out.unidades) { out.ok = false; out.mensaje = 'No hay habitaciones cargadas: ejecuta setup().'; return out; }
+    out.mensaje = 'Todo en orden: ' + out.usuarios + ' usuario(s) y ' + out.unidades + ' unidades.';
+  } catch (e) {
+    out.ok = false;
+    out.mensaje = 'Error: ' + e.message + '. Lo más probable es que falte ejecutar setup().';
+  }
+  return out;
 }
 
 /* ===================== EQUIPO ===================== */

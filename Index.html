@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <base target="_top">
 <style>
   :root{
@@ -204,8 +205,17 @@
     <p class="s">Gestión de alojamiento</p>
     <div class="fld"><label>Usuario</label><input id="lu" autocomplete="username" required></div>
     <div class="fld"><label>PIN</label><input id="lp" type="password" inputmode="numeric" autocomplete="current-password" required></div>
-    <button class="btn" style="width:100%">Entrar</button>
+    <button class="btn" style="width:100%" id="lbtn">Entrar</button>
     <div class="err hide" id="lerr"></div>
+    <div style="text-align:center;margin-top:14px">
+      <button type="button" id="lDiag"
+        style="font-size:12px;color:var(--tx3);text-decoration:underline">
+        ¿No puedes entrar? Revisar la instalación
+      </button>
+    </div>
+    <div id="lDiagOut" class="hide"
+      style="margin-top:12px;font-size:12.5px;background:var(--bg);border:1px solid var(--line);
+             border-radius:6px;padding:10px;white-space:pre-wrap"></div>
   </form>
 </div>
 
@@ -257,6 +267,19 @@
       <div class="card"><h2>Estado de habitaciones y carpas</h2><div class="hk" id="hk"></div></div>
     </section>
 
+    <!-- ---------- Alojamiento ---------- -->
+    <section id="v-inv" class="hide">
+      <div class="card">
+        <h2>Habitaciones y carpas</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Al agregar una unidad aparece de inmediato como fila nueva en el calendario.
+          Si se vende por camas separadas, agrégale las camas y cada una tendrá su propia fila.
+        </p>
+        <div id="invLista"></div>
+        <button class="btn sm" id="invNueva" style="margin-top:14px">Agregar habitación o carpa</button>
+      </div>
+    </section>
+
     <!-- ---------- Equipo ---------- -->
     <section id="v-eq" class="hide">
       <div class="card" style="max-width:400px">
@@ -295,8 +318,9 @@
       <div class="fld"><label>Habitación / cama</label><select id="rRec"></select></div>
       <div class="g2">
         <div class="fld"><label>Huésped</label><input id="rNom" required></div>
-        <div class="fld"><label>Teléfono</label><input id="rTel" inputmode="tel"></div>
+        <div class="fld"><label>Teléfono (con código país)</label><input id="rTel" inputmode="tel" placeholder="+56 9 1234 5678"></div>
       </div>
+      <div class="fld"><label>Correo</label><input id="rMail" type="email" placeholder="opcional"></div>
       <div class="g2">
         <div class="fld"><label>Canal</label>
           <select id="rCan">
@@ -329,12 +353,34 @@
     </div>
     <footer>
       <div class="left">
-        <button class="btn gh sm hide" id="rFicha">Ficha de registro</button>
+        <button class="btn gh sm hide" id="rEnviar">Enviar ficha al huésped</button>
+        <button class="btn gh sm hide" id="rFicha">Firmar aquí</button>
         <button class="btn gh sm hide" id="rCancelar">Cancelar reserva</button>
       </div>
       <button class="btn gh" data-cerrar="mRes">Cerrar</button>
       <button class="btn" id="rGuardar">Guardar</button>
     </footer>
+  </div>
+</div>
+
+<!-- ==================== MODAL ENVIAR FICHA ==================== -->
+<div class="ov hide" id="mLink">
+  <div class="mo" style="max-width:460px">
+    <header><h3>Ficha de registro del huésped</h3><button class="x" data-cerrar="mLink">×</button></header>
+    <div class="body">
+      <p class="muted" style="font-size:13px;margin-bottom:12px">
+        Manda este enlace al huésped. Al abrirlo verá su reserva, las normas de
+        convivencia y podrá firmar desde su teléfono, en español o inglés.
+      </p>
+      <div class="fld"><label>Enlace</label><input id="lkUrl" readonly onclick="this.select()"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm" id="lkCopiar">Copiar enlace</button>
+        <a class="btn sm gh" id="lkWa" target="_blank" rel="noopener" style="text-decoration:none;display:inline-block">Enviar por WhatsApp</a>
+        <a class="btn sm gh" id="lkMail" style="text-decoration:none;display:inline-block">Enviar por correo</a>
+      </div>
+      <div id="lkEstado" style="margin-top:14px;font-size:13px"></div>
+    </div>
+    <footer><button class="btn gh" data-cerrar="mLink">Cerrar</button></footer>
   </div>
 </div>
 
@@ -355,6 +401,56 @@
         <button class="btn sm" id="dOk">Aplicar</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL UNIDAD ==================== -->
+<div class="ov hide" id="mUni">
+  <div class="mo" style="max-width:460px">
+    <header><h3 id="uniTit">Nueva habitación</h3><button class="x" data-cerrar="mUni">×</button></header>
+    <div class="body">
+      <div class="fld"><label>Nombre</label><input id="uNom" placeholder="Habitación 9 · Matrimonial"></div>
+      <div class="g2">
+        <div class="fld"><label>Sector</label>
+          <select id="uGrupo"><option>Lodge</option><option>Glamping</option></select>
+        </div>
+        <div class="fld"><label>Baño</label>
+          <select id="uBano"><option value="privado">Privado</option><option value="compartido">Compartido</option></select>
+        </div>
+      </div>
+      <div class="fld"><label>Capacidad (personas)</label><input id="uCap" type="number" min="1" value="2"></div>
+      <div class="fld">
+        <label class="chk"><input type="checkbox" id="uPorCama"> Se vende por camas separadas (estilo hostal)</label>
+      </div>
+      <div class="g2" id="uPrecios">
+        <div class="fld"><label>Precio temporada baja</label><input id="uPb" type="number" min="0" step="1000"></div>
+        <div class="fld"><label>Precio temporada alta</label><input id="uPa" type="number" min="0" step="1000"></div>
+      </div>
+      <div class="err hide" id="uErr"></div>
+    </div>
+    <footer>
+      <button class="btn gh" data-cerrar="mUni">Cerrar</button>
+      <button class="btn" id="uGuardar">Guardar</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ==================== MODAL CAMA ==================== -->
+<div class="ov hide" id="mCama">
+  <div class="mo" style="max-width:420px">
+    <header><h3 id="camaTit">Nueva cama</h3><button class="x" data-cerrar="mCama">×</button></header>
+    <div class="body">
+      <div class="fld"><label>Nombre de la cama</label><input id="cNom" placeholder="Litera superior"></div>
+      <div class="g2">
+        <div class="fld"><label>Precio temporada baja</label><input id="cPb" type="number" min="0" step="1000"></div>
+        <div class="fld"><label>Precio temporada alta</label><input id="cPa" type="number" min="0" step="1000"></div>
+      </div>
+      <div class="err hide" id="cErr"></div>
+    </div>
+    <footer>
+      <button class="btn gh" data-cerrar="mCama">Cerrar</button>
+      <button class="btn" id="cGuardar">Guardar</button>
+    </footer>
   </div>
 </div>
 
@@ -443,11 +539,25 @@ document.addEventListener('click', function(e){
   var c=e.target.getAttribute && e.target.getAttribute('data-cerrar');
   if(c) cerrar(c);
 });
+/* Ojo: hay que invocar el método SOBRE el objeto que devuelve withFailureHandler.
+   Si se llama con apply(null, ...) Apps Script pierde los manejadores y la
+   respuesta del servidor nunca llega: la pantalla se queda esperando para siempre. */
 function srv(fn){
   return function(){
     var args=[].slice.call(arguments);
     return new Promise(function(res,rej){
-      google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn].apply(null,[S.token].concat(args));
+      var runner=google.script.run.withSuccessHandler(res).withFailureHandler(rej);
+      runner[fn].apply(runner, [S.token].concat(args));
+    });
+  };
+}
+/* Igual que srv() pero sin token, para la página pública de firma. */
+function srvPub(fn){
+  return function(){
+    var args=[].slice.call(arguments);
+    return new Promise(function(res,rej){
+      var runner=google.script.run.withSuccessHandler(res).withFailureHandler(rej);
+      runner[fn].apply(runner, args);
     });
   };
 }
@@ -456,19 +566,56 @@ function fallo(e){ toast(e && e.message ? e.message : String(e), true); }
 /* ==================================================================
    Login
    ================================================================== */
+/* Cualquier error de JavaScript se muestra en pantalla: nunca "no pasa nada". */
+window.onerror=function(msg){ toast('Error: '+msg, true); };
+
 $('fLogin').addEventListener('submit', function(e){
   e.preventDefault();
   $('lerr').classList.add('hide');
-  google.script.run
+  $('lbtn').disabled=true; $('lbtn').textContent='Entrando…';
+  var listo=function(){ $('lbtn').disabled=false; $('lbtn').textContent='Entrar'; };
+  var falla=function(m){ listo(); $('lerr').textContent=m; $('lerr').classList.remove('hide'); };
+
+  // Si el servidor no responde, avisamos en vez de dejar el botón girando.
+  var reloj=setTimeout(function(){
+    falla('El servidor no respondió. Revisa que la implementación esté actualizada '+
+          '(Implementar → Administrar implementaciones → Editar → Versión: nueva).');
+  }, 20000);
+
+  var run=google.script.run
     .withSuccessHandler(function(r){
+      clearTimeout(reloj);
+      if(!r || !r.token){ falla('Respuesta inesperada del servidor.'); return; }
       S.token=r.token; S.user=r.nombre; S.rol=r.rol;
       try{ localStorage.setItem('cp', JSON.stringify(r)); }catch(_){}
-      iniciar();
+      listo(); iniciar();
     })
     .withFailureHandler(function(e2){
-      $('lerr').textContent = e2.message||String(e2); $('lerr').classList.remove('hide');
+      clearTimeout(reloj);
+      falla(e2 && e2.message ? e2.message : String(e2));
+    });
+  run.entrar($('lu').value, $('lp').value);
+});
+
+$('lDiag').addEventListener('click', function(){
+  var out=$('lDiagOut');
+  out.classList.remove('hide');
+  out.textContent='Revisando…';
+  var run=google.script.run
+    .withSuccessHandler(function(d){
+      var faltan=Object.keys(d.hojas||{}).filter(function(h){ return !d.hojas[h]; });
+      out.textContent =
+        (d.ok?'✓ ':'✗ ')+d.mensaje+
+        (faltan.length?'\nHojas que faltan: '+faltan.join(', '):'')+
+        (d.planilla?'\nPlanilla: '+d.planilla:'');
     })
-    .entrar($('lu').value, $('lp').value);
+    .withFailureHandler(function(e){
+      out.textContent='No se pudo contactar al servidor: '+(e.message||e)+
+        '\n\nCasi siempre es que la implementación web quedó apuntando a una '+
+        'versión antigua del código. Ve a Implementar → Administrar '+
+        'implementaciones → ✏️ Editar → Versión: Nueva descripción → Implementar.';
+    });
+  run.diagnostico();
 });
 
 $('bSalir').addEventListener('click', function(){
@@ -486,10 +633,11 @@ window.addEventListener('load', function(){
 });
 
 var TABS=[
-  {id:'cal',  t:'Calendario', roles:['admin','recepcion']},
-  {id:'hoy',  t:'Hoy',        roles:['admin','recepcion']},
-  {id:'aseo', t:'Aseo',       roles:['admin','recepcion','aseo']},
-  {id:'eq',   t:'Equipo',     roles:['admin']}
+  {id:'cal',  t:'Calendario',  roles:['admin','recepcion']},
+  {id:'hoy',  t:'Hoy',         roles:['admin','recepcion']},
+  {id:'aseo', t:'Aseo',        roles:['admin','recepcion','aseo']},
+  {id:'inv',  t:'Alojamiento', roles:['admin']},
+  {id:'eq',   t:'Equipo',      roles:['admin']}
 ];
 
 function iniciar(){
@@ -514,6 +662,7 @@ function ver(id){
   if(id==='cal')  cargarCal();
   if(id==='hoy')  cargarHoy();
   if(id==='aseo') cargarAseo();
+  if(id==='inv')  cargarInventario();
   if(id==='eq')   cargarEquipo();
 }
 
@@ -769,11 +918,12 @@ function nuevaReserva(rec, entrada, salida){
   RANGO={ in:entrada, out:salida };
   $('rTit').textContent='Nueva reserva';
   opcionesRecurso(rec);
-  $('rNom').value=''; $('rTel').value=''; $('rCan').value='whatsapp';
+  $('rNom').value=''; $('rTel').value=''; $('rMail').value=''; $('rCan').value='whatsapp';
   $('rEst').value='confirmada'; $('rAnt').value=0; $('rNot').value='';
   $('rAddon').checked=false; $('rAddonF').value=''; $('rAddonF').classList.add('hide');
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
+  $('rEnviar').classList.add('hide');
   pintarFechas(); recalcularTotal();
   abrir('mRes');
   setTimeout(function(){ $('rNom').focus(); }, 60);
@@ -782,9 +932,10 @@ function nuevaReserva(rec, entrada, salida){
 function abrirReserva(r){
   RES=r;
   RANGO={ in:r.checkIn, out:r.checkOut };
-  $('rTit').textContent='Reserva de '+r.huesped;
+  $('rTit').textContent='Reserva de '+r.huesped+(r.firmada?'  ·  ficha firmada':'');
   opcionesRecurso(r.recurso);
-  $('rNom').value=r.huesped; $('rTel').value=r.telefono||''; $('rCan').value=r.canal||'whatsapp';
+  $('rNom').value=r.huesped; $('rTel').value=r.telefono||'';
+  $('rMail').value=r.email||''; $('rCan').value=r.canal||'whatsapp';
   $('rEst').value=r.estado; $('rTot').value=r.total; $('rAnt').value=r.anticipo;
   $('rNot').value=r.notas||'';
   $('rAddon').checked=!!r.addon;
@@ -794,6 +945,7 @@ function abrirReserva(r){
   $('rAddonBox').classList.toggle('hide', !(rec && rec.grupo==='Glamping'));
   $('rErr').classList.add('hide');
   $('rFicha').classList.remove('hide'); $('rCancelar').classList.remove('hide');
+  $('rEnviar').classList.remove('hide');
   pintarFechas();
   abrir('mRes');
 }
@@ -804,7 +956,8 @@ $('rGuardar').onclick=function(){
   var datos={
     id: RES?RES.id:'', recurso:$('rRec').value,
     checkIn:RANGO.in, checkOut:RANGO.out,
-    huesped:$('rNom').value.trim(), telefono:$('rTel').value, canal:$('rCan').value,
+    huesped:$('rNom').value.trim(), telefono:$('rTel').value, email:$('rMail').value,
+    canal:$('rCan').value,
     estado:$('rEst').value, total:+$('rTot').value||0, anticipo:+$('rAnt').value||0,
     addon:$('rAddon').checked, addonFecha:$('rAddonF').value, notas:$('rNot').value
   };
@@ -966,6 +1119,151 @@ $('fEq').addEventListener('submit', function(e){
     .then(function(){ $('fEq').reset(); toast('Guardado'); cargarEquipo(); })
     .catch(fallo);
 });
+
+/* ==================================================================
+   Enviar la ficha al huésped para que firme desde su teléfono
+   ================================================================== */
+$('rEnviar').onclick=function(){
+  if(!RES) return;
+  srv('linkFicha')(RES.id).then(function(d){
+    $('lkUrl').value=d.url;
+    var msg='Hola '+RES.huesped+'! Antes de tu llegada a Casona Peumayén, '+
+            'completa tu registro y firma aquí: '+d.url;
+    var tel=(RES.telefono||'').replace(/[^0-9]/g,'');
+    var wa=$('lkWa');
+    wa.href='https://wa.me/'+tel+'?text='+encodeURIComponent(msg);
+    wa.textContent = tel ? 'Enviar por WhatsApp' : 'Abrir WhatsApp';
+    $('lkMail').href='mailto:'+(RES.email||'')+
+      '?subject='+encodeURIComponent('Tu registro en Casona Peumayén')+
+      '&body='+encodeURIComponent(msg);
+    $('lkEstado').innerHTML = RES.firmada
+      ? '<span class="tag confirmada">Ya firmada</span>'
+      : '<span class="muted">Todavía no la firma.</span>';
+    cerrar('mRes'); abrir('mLink');
+  }).catch(fallo);
+};
+
+$('lkCopiar').onclick=function(){
+  var i=$('lkUrl'); i.select(); i.setSelectionRange(0,99999);
+  var listo=false;
+  try{ listo=document.execCommand('copy'); }catch(_){}
+  if(!listo && navigator.clipboard){ navigator.clipboard.writeText(i.value); listo=true; }
+  toast(listo?'Enlace copiado':'Copia el enlace a mano');
+};
+
+/* ==================================================================
+   Alojamiento: agregar o editar habitaciones, carpas y camas
+   ================================================================== */
+var UNI=null, CAMA=null;
+
+function cargarInventario(){
+  srv('inventarioAdmin')().then(function(lista){
+    var c=$('invLista'); c.innerHTML='';
+    if(!lista.length){ c.innerHTML='<div class="empty">Sin unidades.</div>'; return; }
+    lista.forEach(function(u){
+      var d=document.createElement('div');
+      d.style.cssText='border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px'+
+                      (u.activa?'':';opacity:.55');
+      var precio = u.porCama ? '<span class="muted">se vende por cama</span>'
+                             : plata(u.precioBase)+' / '+plata(u.precioAlta);
+      d.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+        '<b style="font-size:13.5px">'+u.nombre+'</b>'+
+        '<span class="tag '+(u.activa?'confirmada':'no_show')+'">'+(u.activa?u.grupo:'archivada')+'</span>'+
+        '<span class="muted" style="font-size:12px">'+u.capacidad+' pax · baño '+u.bano+' · '+precio+'</span>'+
+        '<span style="margin-left:auto;display:flex;gap:6px" class="acc"></span></div>';
+
+      if(u.camas.length){
+        var ul=document.createElement('div');
+        ul.style.cssText='margin-top:9px;padding-left:12px;border-left:2px solid var(--line2)';
+        u.camas.forEach(function(cm){
+          var f=document.createElement('div');
+          f.style.cssText='font-size:12.5px;padding:3px 0;display:flex;gap:8px;align-items:center'+
+                          (cm.activa?'':';opacity:.5');
+          f.innerHTML='<span>'+cm.nombre+'</span><span class="muted">'+plata(cm.precioBase)+' / '+plata(cm.precioAlta)+'</span>';
+          var e=document.createElement('button');
+          e.className='btn gh sm'; e.textContent='Editar'; e.style.marginLeft='auto';
+          e.onclick=function(){ abrirCama(u, cm); };
+          f.appendChild(e);
+          ul.appendChild(f);
+        });
+        d.appendChild(ul);
+      }
+
+      var acc=d.querySelector('.acc');
+      var bEd=document.createElement('button');
+      bEd.className='btn gh sm'; bEd.textContent='Editar';
+      bEd.onclick=function(){ abrirUnidad(u); };
+      acc.appendChild(bEd);
+
+      var bCama=document.createElement('button');
+      bCama.className='btn gh sm'; bCama.textContent='+ Cama';
+      bCama.onclick=function(){ abrirCama(u, null); };
+      acc.appendChild(bCama);
+
+      var bAr=document.createElement('button');
+      bAr.className='btn gh sm'; bAr.textContent=u.activa?'Archivar':'Reactivar';
+      bAr.onclick=function(){
+        if(u.activa && !confirm('¿Archivar "'+u.nombre+'"? Dejará de aparecer en el calendario, '+
+                                'pero se conservan sus reservas anteriores.')) return;
+        srv('archivarUnidad')(u.id, !u.activa).then(function(){
+          toast(u.activa?'Archivada':'Reactivada'); cargarInventario(); cargarCal();
+        }).catch(fallo);
+      };
+      acc.appendChild(bAr);
+
+      c.appendChild(d);
+    });
+  }).catch(fallo);
+}
+
+function abrirUnidad(u){
+  UNI=u;
+  $('uniTit').textContent = u ? 'Editar '+u.nombre : 'Nueva habitación o carpa';
+  $('uNom').value=u?u.nombre:'';
+  $('uGrupo').value=u?u.grupo:'Lodge';
+  $('uBano').value=u?u.bano:'privado';
+  $('uCap').value=u?u.capacidad:2;
+  $('uPorCama').checked=u?u.porCama:false;
+  $('uPb').value=u?u.precioBase:'';
+  $('uPa').value=u?u.precioAlta:'';
+  $('uPrecios').classList.toggle('hide', $('uPorCama').checked);
+  $('uErr').classList.add('hide');
+  abrir('mUni');
+}
+$('invNueva').onclick=function(){ abrirUnidad(null); };
+$('uPorCama').addEventListener('change', function(){
+  $('uPrecios').classList.toggle('hide', this.checked);
+});
+
+$('uGuardar').onclick=function(){
+  $('uErr').classList.add('hide');
+  srv('guardarUnidad')({
+    id: UNI?UNI.id:'', nombre:$('uNom').value.trim(), grupo:$('uGrupo').value,
+    bano:$('uBano').value, capacidad:+$('uCap').value||1, porCama:$('uPorCama').checked,
+    precioBase:+$('uPb').value||0, precioAlta:+$('uPa').value||0
+  }).then(function(){
+    cerrar('mUni'); toast('Guardado'); cargarInventario(); cargarCal();
+  }).catch(function(e){ $('uErr').textContent=e.message||String(e); $('uErr').classList.remove('hide'); });
+};
+
+function abrirCama(u, cm){
+  UNI=u; CAMA=cm;
+  $('camaTit').textContent = cm ? 'Editar cama · '+u.nombre : 'Nueva cama en '+u.nombre;
+  $('cNom').value=cm?cm.nombre:'';
+  $('cPb').value=cm?cm.precioBase:'';
+  $('cPa').value=cm?cm.precioAlta:'';
+  $('cErr').classList.add('hide');
+  abrir('mCama');
+}
+$('cGuardar').onclick=function(){
+  $('cErr').classList.add('hide');
+  srv('guardarCama')({
+    id: CAMA?CAMA.id:'', idUnidad: UNI.id, nombre:$('cNom').value.trim(),
+    precioBase:+$('cPb').value||0, precioAlta:+$('cPa').value||0
+  }).then(function(){
+    cerrar('mCama'); toast('Guardado'); cargarInventario(); cargarCal();
+  }).catch(function(e){ $('cErr').textContent=e.message||String(e); $('cErr').classList.remove('hide'); });
+};
 
 /* ==================================================================
    Ficha de registro + firma

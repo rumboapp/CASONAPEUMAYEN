@@ -10,12 +10,13 @@ sin que se pisen las reservas.
 
 ## Los archivos
 
-Son **solo tres**, y se copian tal cual:
+Son **cuatro**, y se copian tal cual:
 
 | Archivo | Qué es | Cómo se crea en Apps Script |
 |---|---|---|
 | `Code.gs` | Todo el servidor: datos, reservas, aseo, fichas, usuarios | Archivo → Script |
-| `Index.html` | Toda la interfaz (diseño y comportamiento incluidos) | Archivo → HTML |
+| `Index.html` | La aplicación interna del equipo | Archivo → HTML |
+| `Ficha.html` | La página que ve el huésped para firmar desde su teléfono | Archivo → HTML |
 | `appsscript.json` | Configuración del proyecto | Ya existe; se activa en ⚙️ Configuración → "Mostrar appsscript.json" |
 
 ## Instalación
@@ -23,7 +24,8 @@ Son **solo tres**, y se copian tal cual:
 1. Entra a [script.google.com](https://script.google.com) con la cuenta del
    negocio → **Nuevo proyecto** → ponle "Casona Peumayén".
 2. Borra el contenido del `Code.gs` de ejemplo y pega el de este repositorio.
-3. **Archivo → HTML**, llámalo `Index` (sin `.html`) y pega `Index.html`.
+3. **Archivo → HTML**, llámalo `Index` (sin escribir `.html`) y pega
+   `Index.html`. Repite con otro llamado `Ficha` y pega `Ficha.html`.
 4. ⚙️ **Configuración del proyecto** → marca *Mostrar el archivo de manifiesto
    appsscript.json*. Vuelve al editor, abre `appsscript.json` en la lista de
    archivos de la izquierda y reemplaza su contenido.
@@ -42,6 +44,16 @@ pestaña *Equipo* (escribe `admin` con el PIN nuevo y guarda).
 > La planilla de datos debe quedar **privada**. La app funciona igual porque
 > se ejecuta con tu cuenta, y ahí se guardan documentos y firmas de huéspedes.
 
+### Si cambias el código después
+
+Editar los archivos **no** actualiza la app publicada: la implementación sigue
+sirviendo la versión anterior. Cada vez que cambies algo:
+**Implementar → Administrar implementaciones → ✏️ Editar → Versión: *Nueva* →
+Implementar**. La URL no cambia.
+
+Si no puedes entrar, la pantalla de acceso tiene un enlace
+*"¿No puedes entrar? Revisar la instalación"* que dice exactamente qué falta.
+
 ## Cómo se usa el calendario
 
 - **Crear**: haz clic en un día libre, o mantén apretado y arrastra sobre
@@ -53,6 +65,39 @@ pestaña *Equipo* (escribe `admin` con el PIN nuevo y guarda).
 - **Cambiar fechas desde el formulario**: clic en la fila de fechas; se abre
   un calendario donde eliges entrada y última noche en la misma pantalla.
 - El precio se calcula solo según temporada, y siempre se puede editar a mano.
+
+## Ficha de registro y firma
+
+Hay dos formas de tomar la ficha, y ambas guardan la firma como imagen en una
+carpeta de Drive llamada *Casona Peumayén — Fichas*:
+
+- **En recepción**: abre la reserva → *Firmar aquí*. El huésped firma con el
+  dedo en el teléfono o tablet del mostrador.
+- **A distancia, antes de llegar**: abre la reserva → *Enviar ficha al huésped*.
+  Se genera un enlace propio de esa reserva que puedes copiar, mandar por
+  WhatsApp (usa el teléfono cargado en la reserva) o por correo. El huésped lo
+  abre sin clave, ve su reserva, lee las normas de convivencia, las acepta y
+  firma desde su teléfono.
+
+La página del huésped está **en español e inglés**: detecta el idioma del
+teléfono y además tiene un botón ES/EN. El enlace solo da acceso a esa reserva
+y a nada más, y una vez firmada muestra la confirmación en lugar del formulario.
+
+Firmar antes de llegar no adelanta el estado de la reserva: solo pasa a
+*en casa* cuando el registro se hace el día de la llegada o después.
+
+## Agregar habitaciones y carpas
+
+En la pestaña **Alojamiento** (solo administración) se agregan unidades nuevas
+cuando habiliten el ala que falta, sin tocar el código. Aparecen de inmediato
+como filas nuevas del calendario.
+
+- Una unidad que se vende completa lleva su precio de temporada baja y alta.
+- Una unidad tipo hostal se marca como *se vende por camas separadas* y después
+  se le agregan las camas, cada una con su precio; cada cama pasa a ser una
+  fila propia del calendario.
+- Las unidades no se borran, se **archivan**: dejan de aparecer en el
+  calendario pero se conserva su historial de reservas.
 
 ## Reglas del modelo
 
@@ -72,7 +117,7 @@ pestaña *Equipo* (escribe `admin` con el PIN nuevo y guarda).
 
 | Rol | Ve |
 |---|---|
-| `admin` | Todo, incluida la pestaña Equipo |
+| `admin` | Todo, incluidas Alojamiento y Equipo |
 | `recepcion` | Calendario, Hoy y Aseo |
 | `aseo` | Solo la pestaña Aseo |
 
@@ -83,5 +128,8 @@ editor la función `crearUsuario("nombre", "pin", "admin")`.
 
 - No genera boletas ni facturas.
 - No importa reservas automáticamente desde Booking o Airbnb.
+- No envía el enlace de la ficha solo: abre WhatsApp o el correo con el
+  mensaje escrito, pero el envío lo haces tú.
+- La app interna está solo en español; la página del huésped sí es bilingüe.
 - No hay reportes de ocupación e ingresos dentro de la app; por ahora se
   pueden sacar desde la planilla con una tabla dinámica.
