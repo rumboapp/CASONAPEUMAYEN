@@ -1,199 +1,1033 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <base target="_top">
-  <?!= include('CSS'); ?>
+<meta charset="utf-8">
+<base target="_top">
+<style>
+  :root{
+    --bg:#f5f6f8; --surface:#ffffff; --line:#e4e6ea; --line2:#eef0f3;
+    --tx:#16191d; --tx2:#6b7280; --tx3:#9aa1ab;
+    --ac:#1f6feb; --ac-soft:#e8f0fe;
+    --ok:#0e8a5f; --warn:#c77700; --dan:#c1362f; --stay:#5b57c9;
+    --r:8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--tx);-webkit-font-smoothing:antialiased;
+  }
+  button{font:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input,select,textarea{font:inherit;color:inherit;width:100%;padding:8px 10px;
+    border:1px solid var(--line);border-radius:6px;background:var(--surface);outline:none}
+  input:focus,select:focus,textarea:focus{border-color:var(--ac);box-shadow:0 0 0 3px var(--ac-soft)}
+  .hide{display:none !important}
+
+  .btn{padding:8px 14px;border-radius:6px;background:var(--ac);color:#fff;font-weight:500}
+  .btn:hover{filter:brightness(1.07)}
+  .btn.gh{background:var(--surface);color:var(--tx);border:1px solid var(--line)}
+  .btn.gh:hover{background:var(--line2);filter:none}
+  .btn.dan{background:var(--dan)}
+  .btn.sm{padding:5px 10px;font-size:13px}
+
+  /* ---------- Login ---------- */
+  #login{min-height:100vh;display:grid;place-items:center;padding:20px}
+  #login form{background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:32px;width:100%;max-width:340px}
+  #login h1{font-size:19px;font-weight:600;margin-bottom:4px}
+  #login p.s{color:var(--tx2);font-size:13px;margin-bottom:22px}
+  .fld{margin-bottom:14px}
+  .fld label{display:block;font-size:12px;color:var(--tx2);margin-bottom:5px;font-weight:500}
+  .err{color:var(--dan);font-size:13px;margin-top:10px}
+
+  /* ---------- Shell ---------- */
+  #app{display:flex;flex-direction:column;height:100vh}
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:0 16px;height:52px;background:var(--surface);border-bottom:1px solid var(--line);flex:none}
+  header .brand{font-weight:600;font-size:15px}
+  header .who{font-size:13px;color:var(--tx2)}
+  nav{display:flex;gap:2px;padding:0 12px;background:var(--surface);
+    border-bottom:1px solid var(--line);flex:none;overflow-x:auto}
+  nav button{padding:11px 14px;font-size:13.5px;color:var(--tx2);border-bottom:2px solid transparent;white-space:nowrap}
+  nav button.on{color:var(--ac);border-bottom-color:var(--ac);font-weight:500}
+  main{flex:1;overflow:auto;padding:16px}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+  .card h2{font-size:14px;font-weight:600;margin-bottom:12px}
+  .muted{color:var(--tx2)}
+  .empty{color:var(--tx3);font-size:13px;padding:10px 0}
+
+  /* ---------- Barra del calendario ---------- */
+  .cbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .cbar .rng{font-weight:600;font-size:14px;min-width:190px}
+  .nav-ico{width:30px;height:30px;border:1px solid var(--line);border-radius:6px;
+    background:var(--surface);display:grid;place-items:center;color:var(--tx2)}
+  .nav-ico:hover{background:var(--line2)}
+  .hint{margin-left:auto;font-size:12.5px;color:var(--tx3)}
+
+  /* ---------- Calendario ---------- */
+  .calwrap{background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:auto;max-height:calc(100vh - 190px)}
+  .cal{display:grid;position:relative;width:100%}
+  /* Sin esto, el nombre de un huésped largo ensancha la columna de ese día. */
+  .cal > *{min-width:0}
+  .cal > *{min-height:34px}
+  .hd{position:sticky;top:0;z-index:6;background:var(--surface);
+    border-bottom:1px solid var(--line);font-size:11.5px;color:var(--tx2);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 2px}
+  .hd.corner{left:0;z-index:8;border-right:1px solid var(--line)}
+  .hd .dn{font-weight:600;color:var(--tx);font-size:13px}
+  .hd.wknd{background:#fafbfc}
+  .hd.today .dn{color:var(--ac)}
+
+  .rname{position:sticky;left:0;z-index:5;background:var(--surface);
+    border-right:1px solid var(--line);border-bottom:1px solid var(--line2);
+    padding:6px 10px;font-size:12.5px;display:flex;align-items:center;gap:6px;
+    white-space:nowrap;overflow:hidden}
+  .rname > span{overflow:hidden;text-overflow:ellipsis}
+  .rname .sub{color:var(--tx2);font-size:11.5px;flex:none}
+  .grp{position:sticky;left:0;z-index:7;background:#f0f2f5;border-bottom:1px solid var(--line);
+    padding:5px 10px;font-size:11px;font-weight:600;letter-spacing:.06em;
+    text-transform:uppercase;color:var(--tx2);min-height:26px !important;display:flex;align-items:center}
+
+  .cell{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);
+    background:var(--surface);cursor:pointer;position:relative}
+  .cell.wknd{background:#fafbfc}
+  .cell.past{background:#f7f8f9}
+  .cell:hover:not(.busy){box-shadow:inset 0 0 0 2px var(--ac);border-radius:4px}
+  .cell.busy{cursor:default}
+  .cell.sel{background:var(--ac-soft) !important;box-shadow:inset 0 0 0 1px var(--ac)}
+  .cell.drop{background:var(--ac-soft) !important}
+
+  .bar{z-index:3;min-height:0 !important;margin:3px 2px;border-radius:5px;padding:0 8px;color:#fff;
+    font-size:12px;display:flex;align-items:center;overflow:hidden;white-space:nowrap;
+    cursor:grab;text-overflow:ellipsis;box-shadow:0 1px 2px rgba(0,0,0,.16)}
+  .bar:active{cursor:grabbing}
+  .bar.confirmada{background:var(--ok)}
+  .bar.tentativa{background:var(--warn)}
+  .bar.en_casa{background:var(--stay)}
+  .bar.no_show{background:#8b929c}
+  .bar .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.85);margin-right:6px;flex:none}
+
+  .leg{display:flex;gap:14px;margin-top:10px;font-size:12px;color:var(--tx2);flex-wrap:wrap}
+  .leg span{display:flex;align-items:center;gap:5px}
+  .leg i{width:9px;height:9px;border-radius:2px;display:inline-block}
+
+  /* ---------- Modal ---------- */
+  .ov{position:fixed;inset:0;background:rgba(17,20,24,.45);display:grid;place-items:center;
+    z-index:100;padding:16px}
+  .mo{background:var(--surface);border-radius:12px;width:100%;max-width:520px;
+    max-height:90vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  .mo header{border-bottom:1px solid var(--line);padding:0 18px;height:50px}
+  .mo header h3{font-size:15px;font-weight:600}
+  .mo .body{padding:18px}
+  .mo footer{display:flex;gap:8px;justify-content:flex-end;padding:14px 18px;
+    border-top:1px solid var(--line);flex-wrap:wrap}
+  .mo footer .left{margin-right:auto;display:flex;gap:8px}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .x{width:30px;height:30px;border-radius:6px;color:var(--tx2);font-size:20px;line-height:1}
+  .x:hover{background:var(--line2)}
+
+  .daterow{border:1px solid var(--line);border-radius:6px;padding:10px 12px;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;background:var(--surface)}
+  .daterow:hover{border-color:var(--ac)}
+  .daterow .d1{font-weight:500}
+  .daterow .n{font-size:12px;color:var(--tx2)}
+
+  /* ---------- Selector de rango ---------- */
+  .dp{background:var(--surface);border-radius:12px;width:100%;max-width:330px;padding:16px;
+    box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  .dp .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+  .dp .mon{font-weight:600;font-size:14px;text-transform:capitalize}
+  .dp .wk,.dp .days{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+  .dp .wk div{text-align:center;font-size:11px;color:var(--tx3);padding:4px 0}
+  .dp .days button{height:36px;border-radius:6px;font-size:13px}
+  .dp .days button:hover:not(:disabled){background:var(--line2)}
+  .dp .days button:disabled{color:var(--tx3);cursor:default}
+  .dp .days button.in{background:var(--ac-soft);border-radius:0}
+  .dp .days button.e1{background:var(--ac);color:#fff;border-radius:6px 0 0 6px}
+  .dp .days button.e2{background:var(--ac);color:#fff;border-radius:0 6px 6px 0}
+  .dp .days button.only{background:var(--ac);color:#fff;border-radius:6px}
+  .dp .ft{display:flex;align-items:center;justify-content:space-between;margin-top:14px;
+    padding-top:12px;border-top:1px solid var(--line)}
+  .dp .ft .info{font-size:12.5px;color:var(--tx2)}
+
+  /* ---------- Listas ---------- */
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11.5px;color:var(--tx2);font-weight:500;
+    padding:0 10px 8px;border-bottom:1px solid var(--line)}
+  td{padding:10px;border-bottom:1px solid var(--line2);font-size:13px;vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+  .tag.confirmada{background:#e3f5ec;color:var(--ok)}
+  .tag.tentativa{background:#fdf1de;color:var(--warn)}
+  .tag.en_casa{background:#ecebfa;color:var(--stay)}
+  .tag.no_show{background:#eef0f3;color:var(--tx2)}
+
+  /* ---------- Aseo ---------- */
+  .hk{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+  .hkc{border:1px solid var(--line);border-radius:10px;padding:14px;background:var(--surface)}
+  .hkc .nm{font-weight:500;font-size:13px;margin-bottom:8px}
+  .hkc .flags{font-size:11.5px;color:var(--warn);margin-bottom:8px;min-height:16px}
+  .segs{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+  .segs button{flex:1;padding:7px 2px;font-size:11.5px;color:var(--tx2);border-right:1px solid var(--line)}
+  .segs button:last-child{border-right:none}
+  .segs button:hover{background:var(--line2)}
+  .segs button.on{color:#fff;font-weight:500}
+  .segs button.on[data-e="sucia"]{background:var(--dan)}
+  .segs button.on[data-e="limpia"]{background:var(--ok)}
+  .segs button.on[data-e="revisada"]{background:var(--ac)}
+  .segs button.on[data-e="bloqueada"]{background:#6b7280}
+  .hkc .up{font-size:11px;color:var(--tx3);margin-top:8px}
+
+  #firma{border:1px dashed var(--line);border-radius:6px;width:100%;height:130px;
+    touch-action:none;background:#fcfcfd;display:block}
+  .chk{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;color:var(--tx2)}
+  .chk input{width:auto;margin-top:2px}
+
+  .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:var(--tx);color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;
+    z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:90vw;text-align:center}
+  .toast.bad{background:var(--dan)}
+
+  @media(max-width:640px){
+    .g2{grid-template-columns:1fr}
+    main{padding:12px}
+    .hint{display:none}
+  }
+</style>
 </head>
 <body>
 
-  <!-- ===================== LOGIN ===================== -->
-  <div id="vista-login">
-    <form class="placa" id="form-login">
-      <h1>Casona Peumayén</h1>
-      <div class="sub">Sistema de reservas y operación</div>
-      <div class="campo">
-        <label>Nombre de usuario</label>
-        <input type="text" id="login-nombre" autocomplete="username" required>
+<!-- ==================== LOGIN ==================== -->
+<div id="login">
+  <form id="fLogin">
+    <h1>Casona Peumayén</h1>
+    <p class="s">Gestión de alojamiento</p>
+    <div class="fld"><label>Usuario</label><input id="lu" autocomplete="username" required></div>
+    <div class="fld"><label>PIN</label><input id="lp" type="password" inputmode="numeric" autocomplete="current-password" required></div>
+    <button class="btn" style="width:100%">Entrar</button>
+    <div class="err hide" id="lerr"></div>
+  </form>
+</div>
+
+<!-- ==================== APP ==================== -->
+<div id="app" class="hide">
+  <header>
+    <div class="brand">Casona Peumayén</div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <span class="who" id="who"></span>
+      <button class="btn gh sm" id="bSalir">Salir</button>
+    </div>
+  </header>
+  <nav id="tabs"></nav>
+  <main>
+
+    <!-- ---------- Calendario ---------- -->
+    <section id="v-cal">
+      <div class="cbar">
+        <button class="nav-ico" id="cPrev">‹</button>
+        <button class="nav-ico" id="cNext">›</button>
+        <button class="btn gh sm" id="cHoy">Hoy</button>
+        <div class="rng" id="cRng"></div>
+        <select id="cDias" style="width:auto">
+          <option value="14">14 días</option>
+          <option value="7">7 días</option>
+          <option value="30">30 días</option>
+        </select>
+        <div class="hint">Haz clic y arrastra sobre los días libres para crear una reserva</div>
       </div>
-      <div class="campo">
-        <label>PIN</label>
-        <input type="password" inputmode="numeric" id="login-pin" autocomplete="current-password" required>
+      <div class="calwrap"><div class="cal" id="cal"></div></div>
+      <div class="leg">
+        <span><i style="background:var(--ok)"></i>Confirmada</span>
+        <span><i style="background:var(--warn)"></i>Tentativa</span>
+        <span><i style="background:var(--stay)"></i>En casa</span>
+        <span><i style="background:#8b929c"></i>No-show</span>
       </div>
-      <button class="btn" type="submit" style="width:100%">Ingresar</button>
-      <div class="error oculto" id="login-error"></div>
-    </form>
-  </div>
+    </section>
 
-  <!-- ===================== APP ===================== -->
-  <div id="vista-app" class="oculto">
-    <header class="encabezado">
-      <h1>Casona Peumayén — PMS</h1>
-      <div>
-        <span class="usuario" id="etiqueta-usuario"></span>
-        <button class="btn pequeno secundario" id="btn-logout" style="margin-left:10px;">Salir</button>
-      </div>
-    </header>
+    <!-- ---------- Hoy ---------- -->
+    <section id="v-hoy" class="hide">
+      <div class="card"><h2>Llegadas</h2><div id="tLleg"></div></div>
+      <div class="card"><h2>Salidas</h2><div id="tSal"></div></div>
+      <div class="card"><h2>En casa</h2><div id="tCasa"></div></div>
+      <div class="card"><h2>Programa tinaja + sushi</h2><div id="tAdd"></div></div>
+    </section>
 
-    <nav class="tabs" id="tabs"></nav>
+    <!-- ---------- Aseo ---------- -->
+    <section id="v-aseo" class="hide">
+      <div class="card"><h2>Estado de habitaciones y carpas</h2><div class="hk" id="hk"></div></div>
+    </section>
 
-    <main class="contenido">
-
-      <!-- --- Calendario --- -->
-      <section id="vista-calendario" class="vista">
-        <div class="calendario-barra">
-          <button class="btn pequeno" id="cal-prev">&laquo; Semana anterior</button>
-          <div class="rango" id="cal-rango"></div>
-          <button class="btn pequeno" id="cal-next">Semana siguiente &raquo;</button>
-          <button class="btn pequeno" id="cal-hoy">Hoy</button>
-        </div>
-        <div class="grid-calendario" id="grid-calendario"></div>
-      </section>
-
-      <!-- --- Check-in --- -->
-      <section id="vista-checkin" class="vista oculto">
-        <div class="tarjeta">
-          <h2>Llegadas de hoy</h2>
-          <table class="lista" id="tabla-llegadas-checkin"><thead><tr><th>Huésped</th><th>Unidades</th><th>Estado</th><th></th></tr></thead><tbody></tbody></table>
-        </div>
-      </section>
-
-      <!-- --- Housekeeping --- -->
-      <section id="vista-housekeeping" class="vista oculto">
-        <div class="tarjeta">
-          <h2>Estado de habitaciones y carpas</h2>
-          <div class="grid-hk" id="grid-hk"></div>
-        </div>
-      </section>
-
-      <!-- --- Llegadas / Salidas --- -->
-      <section id="vista-llegadas" class="vista oculto">
-        <div class="tarjeta">
-          <h2>Llegadas de hoy</h2>
-          <table class="lista" id="tabla-llegadas"><thead><tr><th>Huésped</th><th>Unidades</th><th>Canal</th><th>Notas</th></tr></thead><tbody></tbody></table>
-        </div>
-        <div class="tarjeta">
-          <h2>Salidas de hoy</h2>
-          <table class="lista" id="tabla-salidas"><thead><tr><th>Huésped</th><th>Unidades</th><th>Canal</th></tr></thead><tbody></tbody></table>
-        </div>
-      </section>
-
-      <!-- --- Addons Glamping --- -->
-      <section id="vista-addons" class="vista oculto">
-        <div class="tarjeta">
-          <h2>Programa Tinaja + Tabla de Sushi</h2>
-          <table class="lista" id="tabla-addons"><thead><tr><th>Huésped</th><th>Check-in</th><th>Fecha/hora addon</th><th>Estado</th><th></th></tr></thead><tbody></tbody></table>
-        </div>
-      </section>
-
-      <!-- --- Usuarios (solo admin) --- -->
-      <section id="vista-usuarios" class="vista oculto">
-        <div class="tarjeta" style="max-width:420px;">
-          <h2>Nuevo usuario / actualizar PIN</h2>
-          <form id="form-usuario">
-            <div class="campo"><label>Nombre</label><input type="text" id="us-nombre" required></div>
-            <div class="campo"><label>Rol</label>
-              <select id="us-rol">
-                <option value="admin">Administración</option>
-                <option value="recepcion">Recepción</option>
-                <option value="aseo">Aseo</option>
-              </select>
-            </div>
-            <div class="campo"><label>PIN (4 dígitos)</label><input type="password" inputmode="numeric" id="us-pin" required></div>
-            <button class="btn" type="submit">Guardar</button>
-          </form>
-        </div>
-        <div class="tarjeta">
-          <h2>Usuarios existentes</h2>
-          <table class="lista" id="tabla-usuarios"><thead><tr><th>Nombre</th><th>Rol</th></tr></thead><tbody></tbody></table>
-        </div>
-      </section>
-
-    </main>
-  </div>
-
-  <!-- ===================== MODAL RESERVA ===================== -->
-  <div class="fondo-modal oculto" id="modal-reserva">
-    <div class="modal">
-      <h2 id="modal-reserva-titulo">Nueva reserva</h2>
-      <form id="form-reserva">
-        <div class="fila2">
-          <div class="campo"><label>Nombre del huésped</label><input type="text" id="res-nombre" required></div>
-          <div class="campo"><label>Canal</label>
-            <select id="res-canal">
-              <option value="whatsapp">WhatsApp</option>
-              <option value="booking">Booking</option>
-              <option value="airbnb">Airbnb</option>
-              <option value="instagram">Instagram</option>
-              <option value="walk-in">Walk-in</option>
+    <!-- ---------- Equipo ---------- -->
+    <section id="v-eq" class="hide">
+      <div class="card" style="max-width:400px">
+        <h2>Agregar persona / cambiar PIN</h2>
+        <form id="fEq">
+          <div class="fld"><label>Nombre de usuario</label><input id="eqN" required></div>
+          <div class="fld"><label>Rol</label>
+            <select id="eqR">
+              <option value="admin">Administración</option>
+              <option value="recepcion">Recepción</option>
+              <option value="aseo">Aseo</option>
             </select>
           </div>
+          <div class="fld"><label>PIN</label><input id="eqP" type="password" inputmode="numeric" required></div>
+          <button class="btn">Guardar</button>
+        </form>
+      </div>
+      <div class="card"><h2>Equipo</h2><div id="tEq"></div></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ==================== MODAL RESERVA ==================== -->
+<div class="ov hide" id="mRes">
+  <div class="mo">
+    <header><h3 id="rTit">Nueva reserva</h3><button class="x" data-cerrar="mRes">×</button></header>
+    <div class="body">
+      <div class="fld">
+        <label>Fechas</label>
+        <div class="daterow" id="rFechas">
+          <span class="d1" id="rFtxt">—</span>
+          <span class="n" id="rFn"></span>
         </div>
-        <div class="fila2">
-          <div class="campo"><label>Check-in</label><input type="date" id="res-checkin" required></div>
-          <div class="campo"><label>Check-out</label><input type="date" id="res-checkout" required></div>
+      </div>
+      <div class="fld"><label>Habitación / cama</label><select id="rRec"></select></div>
+      <div class="g2">
+        <div class="fld"><label>Huésped</label><input id="rNom" required></div>
+        <div class="fld"><label>Teléfono</label><input id="rTel" inputmode="tel"></div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label>Canal</label>
+          <select id="rCan">
+            <option value="whatsapp">WhatsApp</option>
+            <option value="booking">Booking</option>
+            <option value="airbnb">Airbnb</option>
+            <option value="instagram">Instagram</option>
+            <option value="directo">Directo / walk-in</option>
+          </select>
         </div>
-        <div class="campo"><label>Unidad / cama</label><div id="res-unidad-fija" style="font-size:13px;color:var(--tinta-suave);"></div></div>
-        <div class="fila2">
-          <div class="campo"><label>Anticipo ($)</label><input type="number" id="res-anticipo" value="0" min="0"></div>
-          <div class="campo"><label>Precio sugerido ($/noche)</label><input type="number" id="res-precio" min="0"></div>
+        <div class="fld"><label>Estado</label>
+          <select id="rEst">
+            <option value="confirmada">Confirmada</option>
+            <option value="tentativa">Tentativa</option>
+            <option value="en_casa">En casa</option>
+            <option value="no_show">No-show</option>
+          </select>
         </div>
-        <div class="campo"><label>Notas (alergias, programa especial, etc.)</label><textarea id="res-notas" rows="2"></textarea></div>
-        <div class="campo oculto" id="res-addon-glamping">
-          <div class="lista-check">
-            <input type="checkbox" id="res-addon-check">
-            <label for="res-addon-check">Incluir programa tinaja + tabla de sushi (coordinar con restaurant)</label>
-          </div>
-          <input type="datetime-local" id="res-addon-fecha" style="margin-top:6px;">
-        </div>
-        <div class="error oculto" id="reserva-error"></div>
-        <div class="acciones-modal">
-          <button type="button" class="btn secundario" id="btn-cancelar-reserva">Cerrar</button>
-          <button type="button" class="btn peligro oculto" id="btn-cancelar-existente">Cancelar reserva</button>
-          <button type="submit" class="btn">Guardar</button>
-        </div>
-      </form>
+      </div>
+      <div class="g2">
+        <div class="fld"><label>Total ($)</label><input id="rTot" type="number" min="0" step="1000"></div>
+        <div class="fld"><label>Abonado ($)</label><input id="rAnt" type="number" min="0" step="1000" value="0"></div>
+      </div>
+      <div class="fld hide" id="rAddonBox">
+        <label class="chk"><input type="checkbox" id="rAddon"> Programa tinaja + tabla de sushi</label>
+        <input type="datetime-local" id="rAddonF" class="hide" style="margin-top:8px">
+      </div>
+      <div class="fld"><label>Notas</label><textarea id="rNot" rows="2" placeholder="Alergias, hora estimada de llegada, pedidos especiales…"></textarea></div>
+      <div class="err hide" id="rErr"></div>
+    </div>
+    <footer>
+      <div class="left">
+        <button class="btn gh sm hide" id="rFicha">Ficha de registro</button>
+        <button class="btn gh sm hide" id="rCancelar">Cancelar reserva</button>
+      </div>
+      <button class="btn gh" data-cerrar="mRes">Cerrar</button>
+      <button class="btn" id="rGuardar">Guardar</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ==================== SELECTOR DE RANGO ==================== -->
+<div class="ov hide" id="mDp">
+  <div class="dp">
+    <div class="top">
+      <button class="nav-ico" id="dPrev">‹</button>
+      <div class="mon" id="dMon"></div>
+      <button class="nav-ico" id="dNext">›</button>
+    </div>
+    <div class="wk"><div>L</div><div>M</div><div>M</div><div>J</div><div>V</div><div>S</div><div>D</div></div>
+    <div class="days" id="dDays"></div>
+    <div class="ft">
+      <div class="info" id="dInfo">Elige la fecha de entrada</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn gh sm" data-cerrar="mDp">Cancelar</button>
+        <button class="btn sm" id="dOk">Aplicar</button>
+      </div>
     </div>
   </div>
+</div>
 
-  <!-- ===================== MODAL CHECK-IN ===================== -->
-  <div class="fondo-modal oculto" id="modal-checkin">
-    <div class="modal">
-      <h2>Ficha de registro</h2>
-      <form id="form-checkin">
-        <div class="fila2">
-          <div class="campo"><label>Nombre completo</label><input type="text" id="ck-nombre" required></div>
-          <div class="campo"><label>Documento / Pasaporte</label><input type="text" id="ck-documento" required></div>
-        </div>
-        <div class="fila2">
-          <div class="campo"><label>Nacionalidad</label><input type="text" id="ck-nacionalidad"></div>
-          <div class="campo"><label>Fecha de nacimiento</label><input type="date" id="ck-nacimiento"></div>
-        </div>
-        <div class="fila2">
-          <div class="campo"><label>Procedencia</label><input type="text" id="ck-procedencia"></div>
-          <div class="campo"><label>Destino tras la salida</label><input type="text" id="ck-destino"></div>
-        </div>
-        <div class="fila2">
-          <div class="campo"><label>Motivo de viaje</label><input type="text" id="ck-motivo"></div>
-          <div class="campo"><label>Contacto de emergencia</label><input type="text" id="ck-emergencia"></div>
-        </div>
-        <div class="lista-check">
-          <input type="checkbox" id="ck-reglamento" required>
-          <label for="ck-reglamento">El huésped acepta el reglamento de convivencia (horario de silencio 22:00-09:00, sin mascotas, cuidado del mobiliario).</label>
-        </div>
-        <div class="campo" style="margin-top:10px;">
-          <label>Firma</label>
-          <canvas id="lienzo-firma"></canvas>
-          <button type="button" class="btn pequeno secundario" id="btn-limpiar-firma" style="margin-top:6px;">Limpiar firma</button>
-        </div>
-        <div class="error oculto" id="checkin-error"></div>
-        <div class="acciones-modal">
-          <button type="button" class="btn secundario" id="btn-cancelar-checkin">Cerrar</button>
-          <button type="submit" class="btn">Registrar check-in</button>
-        </div>
-      </form>
+<!-- ==================== MODAL FICHA ==================== -->
+<div class="ov hide" id="mFicha">
+  <div class="mo">
+    <header><h3>Ficha de registro</h3><button class="x" data-cerrar="mFicha">×</button></header>
+    <div class="body">
+      <div class="g2">
+        <div class="fld"><label>Nombre completo</label><input id="fNom" required></div>
+        <div class="fld"><label>RUT o pasaporte</label><input id="fDoc" required></div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label>Nacionalidad</label><input id="fNac"></div>
+        <div class="fld"><label>Fecha de nacimiento</label><input id="fNacim" type="date"></div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label>Procedencia</label><input id="fPro"></div>
+        <div class="fld"><label>Destino al salir</label><input id="fDes"></div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label>Motivo del viaje</label><input id="fMot"></div>
+        <div class="fld"><label>Contacto de emergencia</label><input id="fEme"></div>
+      </div>
+      <div class="fld">
+        <label class="chk"><input type="checkbox" id="fAcc">
+          Acepto el reglamento de convivencia: silencio de 22:00 a 09:00, no se admiten
+          mascotas, y soy responsable de los daños al mobiliario o equipamiento.</label>
+      </div>
+      <div class="fld">
+        <label>Firma del huésped</label>
+        <canvas id="firma"></canvas>
+        <button class="btn gh sm" id="fLimpiar" style="margin-top:6px">Borrar firma</button>
+      </div>
+      <div class="err hide" id="fErr"></div>
     </div>
+    <footer>
+      <button class="btn gh" data-cerrar="mFicha">Cerrar</button>
+      <button class="btn" id="fGuardar">Registrar check-in</button>
+    </footer>
   </div>
+</div>
 
-  <?!= include('JS'); ?>
+<script>
+/* ==================================================================
+   Estado
+   ================================================================== */
+var S = { token:null, user:null, rol:null };
+var CAL = { inicio:null, dias:14, recursos:[], reservas:[], hoy:null, cfg:{} };
+var RES = null;               // reserva abierta en el modal
+var SEL = null;               // selección en curso sobre el calendario
+var RANGO = { in:null, out:null };
+var DRAG = null;
+
+var $ = function(id){ return document.getElementById(id); };
+var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+var DIAS = ['dom','lun','mar','mié','jue','vie','sáb'];
+
+/* ---------- Fechas: siempre texto "YYYY-MM-DD", nunca objetos Date ---------- */
+function ymd(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function aDate(s){ var p=s.split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
+function mas(s,n){ var d=aDate(s); d.setDate(d.getDate()+n); return ymd(d); }
+function noches(a,b){ return Math.round((aDate(b)-aDate(a))/86400000); }
+function corto(s){ var d=aDate(s); return d.getDate()+' '+MESES[d.getMonth()].slice(0,3); }
+function largo(s){ var d=aDate(s); return DIAS[d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()].slice(0,3); }
+function plata(n){ return '$'+(Number(n)||0).toLocaleString('es-CL'); }
+function finde(s){ var g=aDate(s).getDay(); return g===0||g===6; }
+
+function esAlta(f){
+  var m=f.slice(5,10), i=CAL.cfg.altaIni||'12-15', x=CAL.cfg.altaFin||'03-15';
+  return i<=x ? (m>=i&&m<=x) : (m>=i||m<=x);
+}
+
+/* ---------- Utilidades de UI ---------- */
+function toast(msg, malo){
+  var t=document.createElement('div');
+  t.className='toast'+(malo?' bad':''); t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(function(){ t.remove(); }, malo?4200:2200);
+}
+function abrir(id){ $(id).classList.remove('hide'); }
+function cerrar(id){ $(id).classList.add('hide'); }
+document.addEventListener('click', function(e){
+  var c=e.target.getAttribute && e.target.getAttribute('data-cerrar');
+  if(c) cerrar(c);
+});
+function srv(fn){
+  return function(){
+    var args=[].slice.call(arguments);
+    return new Promise(function(res,rej){
+      google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn].apply(null,[S.token].concat(args));
+    });
+  };
+}
+function fallo(e){ toast(e && e.message ? e.message : String(e), true); }
+
+/* ==================================================================
+   Login
+   ================================================================== */
+$('fLogin').addEventListener('submit', function(e){
+  e.preventDefault();
+  $('lerr').classList.add('hide');
+  google.script.run
+    .withSuccessHandler(function(r){
+      S.token=r.token; S.user=r.nombre; S.rol=r.rol;
+      try{ localStorage.setItem('cp', JSON.stringify(r)); }catch(_){}
+      iniciar();
+    })
+    .withFailureHandler(function(e2){
+      $('lerr').textContent = e2.message||String(e2); $('lerr').classList.remove('hide');
+    })
+    .entrar($('lu').value, $('lp').value);
+});
+
+$('bSalir').addEventListener('click', function(){
+  google.script.run.salir(S.token);
+  try{ localStorage.removeItem('cp'); }catch(_){}
+  location.reload();
+});
+
+window.addEventListener('load', function(){
+  prepararFirma();
+  try{
+    var g=JSON.parse(localStorage.getItem('cp')||'null');
+    if(g && g.token){ S.token=g.token; S.user=g.nombre; S.rol=g.rol; iniciar(); }
+  }catch(_){}
+});
+
+var TABS=[
+  {id:'cal',  t:'Calendario', roles:['admin','recepcion']},
+  {id:'hoy',  t:'Hoy',        roles:['admin','recepcion']},
+  {id:'aseo', t:'Aseo',       roles:['admin','recepcion','aseo']},
+  {id:'eq',   t:'Equipo',     roles:['admin']}
+];
+
+function iniciar(){
+  cerrar('login'); abrir('app');
+  $('who').textContent = S.user+' · '+({admin:'Administración',recepcion:'Recepción',aseo:'Aseo'}[S.rol]||S.rol);
+  var nav=$('tabs'); nav.innerHTML='';
+  var mias=TABS.filter(function(t){ return t.roles.indexOf(S.rol)>-1; });
+  mias.forEach(function(t){
+    var b=document.createElement('button');
+    b.textContent=t.t; b.dataset.v=t.id;
+    b.onclick=function(){ ver(t.id); };
+    nav.appendChild(b);
+  });
+  CAL.inicio = ymd(new Date());
+  ver(mias[0].id);
+}
+
+function ver(id){
+  TABS.forEach(function(t){ $('v-'+t.id).classList.add('hide'); });
+  $('v-'+id).classList.remove('hide');
+  [].forEach.call($('tabs').children, function(b){ b.classList.toggle('on', b.dataset.v===id); });
+  if(id==='cal')  cargarCal();
+  if(id==='hoy')  cargarHoy();
+  if(id==='aseo') cargarAseo();
+  if(id==='eq')   cargarEquipo();
+}
+
+/* ==================================================================
+   Calendario
+   ================================================================== */
+$('cPrev').onclick=function(){ CAL.inicio=mas(CAL.inicio,-7); cargarCal(); };
+$('cNext').onclick=function(){ CAL.inicio=mas(CAL.inicio, 7); cargarCal(); };
+$('cHoy').onclick =function(){ CAL.inicio=ymd(new Date()); cargarCal(); };
+$('cDias').onchange=function(){ CAL.dias=+this.value; cargarCal(); };
+
+function cargarCal(){
+  var fin = mas(CAL.inicio, CAL.dias);
+  srv('cargarTablero')(CAL.inicio, fin).then(function(d){
+    CAL.recursos=d.recursos; CAL.reservas=d.reservas; CAL.hoy=d.hoy; CAL.cfg=d.cfg||{};
+    pintarCal();
+  }).catch(fallo);
+}
+
+/* Mapa "recurso|fecha" -> reserva, para saber al instante si un día está ocupado. */
+function ocupacion(){
+  var m={};
+  CAL.reservas.forEach(function(r){
+    for(var f=r.checkIn; f<r.checkOut; f=mas(f,1)) m[r.recurso+'|'+f]=r;
+  });
+  return m;
+}
+function libre(mapa, recurso, desde, hasta, ignorar){
+  for(var f=desde; f<hasta; f=mas(f,1)){
+    var r=mapa[recurso+'|'+f];
+    if(r && r.id!==ignorar) return false;
+  }
+  return true;
+}
+
+function pintarCal(){
+  var cal=$('cal'), N=CAL.dias;
+  cal.innerHTML='';
+  var dias=[]; for(var i=0;i<N;i++) dias.push(mas(CAL.inicio,i));
+  $('cRng').textContent = corto(dias[0])+' – '+corto(dias[N-1]);
+
+  var anchoDia = N>20 ? 46 : (N>10 ? 62 : 96);
+  cal.style.gridTemplateColumns = '210px repeat('+N+', minmax('+anchoDia+'px, 1fr))';
+
+  // Encabezado
+  var esq=document.createElement('div');
+  esq.className='hd corner'; esq.style.gridArea='1 / 1';
+  cal.appendChild(esq);
+  dias.forEach(function(f,i){
+    var h=document.createElement('div');
+    h.className='hd'+(finde(f)?' wknd':'')+(f===CAL.hoy?' today':'');
+    h.style.gridArea='1 / '+(i+2);
+    h.innerHTML='<span>'+DIAS[aDate(f).getDay()]+'</span><span class="dn">'+aDate(f).getDate()+'</span>';
+    cal.appendChild(h);
+  });
+
+  // Filas: encabezados de grupo + un recurso por fila
+  var filas=[], grupoPrev=null;
+  CAL.recursos.forEach(function(r){
+    if(r.grupo!==grupoPrev){ filas.push({tipo:'grupo', nombre:r.grupo}); grupoPrev=r.grupo; }
+    filas.push({tipo:'rec', r:r});
+  });
+
+  var mapa=ocupacion();
+  var filaDe={};
+
+  filas.forEach(function(f, idx){
+    var fila=idx+2;
+    if(f.tipo==='grupo'){
+      var g=document.createElement('div');
+      g.className='grp'; g.textContent=f.nombre;
+      g.style.gridArea=fila+' / 1 / '+(fila+1)+' / '+(N+2);
+      cal.appendChild(g);
+      return;
+    }
+    filaDe[f.r.id]=fila;
+
+    var nm=document.createElement('div');
+    nm.className='rname'; nm.style.gridArea=fila+' / 1';
+    // En las filas de cama basta el número de habitación; el detalle va en la cama.
+    var etiq = f.r.nombre
+      ? f.r.unidad.replace(/^Habitación\s+(\S+).*/, 'Hab. $1')
+      : f.r.unidad.replace(/^Habitación /, 'Hab. ');
+    nm.innerHTML='<span>'+etiq+'</span>'+
+                 (f.r.nombre?'<span class="sub">· '+f.r.nombre+'</span>':'');
+    cal.appendChild(nm);
+
+    dias.forEach(function(fecha, i){
+      var c=document.createElement('div');
+      var ocupado=!!mapa[f.r.id+'|'+fecha];
+      c.className='cell'+(finde(fecha)?' wknd':'')+(fecha<CAL.hoy?' past':'')+(ocupado?' busy':'');
+      c.style.gridArea=fila+' / '+(i+2);
+      c.dataset.rec=f.r.id; c.dataset.f=fecha;
+      cal.appendChild(c);
+    });
+  });
+
+  // Barras de reserva
+  var finVentana = mas(CAL.inicio, N);
+  CAL.reservas.forEach(function(r){
+    var fila=filaDe[r.recurso];
+    if(!fila) return;
+    var ini = r.checkIn < CAL.inicio ? CAL.inicio : r.checkIn;
+    var fin = r.checkOut > finVentana ? finVentana : r.checkOut;
+    if(fin<=ini) return;
+    var col = noches(CAL.inicio, ini)+2, span = noches(ini, fin);
+    var b=document.createElement('div');
+    b.className='bar '+r.estado;
+    b.style.gridArea = fila+' / '+col+' / '+(fila+1)+' / '+(col+span);
+    b.title = r.huesped+'  ·  '+largo(r.checkIn)+' → '+largo(r.checkOut)+'  ·  '+plata(r.total);
+    b.innerHTML='<span class="dot"></span>'+r.huesped+(r.addon?' 🛁':'');
+    b.draggable=true;
+    b.dataset.id=r.id;
+    b.addEventListener('click', function(ev){ ev.stopPropagation(); abrirReserva(r); });
+    b.addEventListener('dragstart', function(ev){
+      DRAG={ id:r.id, len:noches(r.checkIn, r.checkOut) };
+      ev.dataTransfer.effectAllowed='move';
+      try{ ev.dataTransfer.setData('text/plain', r.id); }catch(_){}
+    });
+    b.addEventListener('dragend', function(){ DRAG=null; limpiarSel(); });
+    cal.appendChild(b);
+  });
+}
+
+/* ---------- Selección arrastrando sobre días libres ---------- */
+function celdaDe(e){
+  var el=document.elementFromPoint(e.clientX, e.clientY);
+  return el && el.classList.contains('cell') ? el : null;
+}
+function limpiarSel(){
+  [].forEach.call(document.querySelectorAll('.cell.sel,.cell.drop'), function(c){
+    c.classList.remove('sel','drop');
+  });
+}
+/* Frena la selección justo antes del primer día ocupado, para que no se
+   pueda pintar un rango que pise otra reserva. */
+function topeLibre(rec, a, b){
+  var m=ocupacion(), paso = b>=a ? 1 : -1, f=a, ultimo=a;
+  while(true){
+    if(m[rec+'|'+f]) break;
+    ultimo=f;
+    if(f===b) break;
+    f=mas(f,paso);
+  }
+  return ultimo;
+}
+function pintarSel(rec, a, b){
+  limpiarSel();
+  var d1=a<b?a:b, d2=a<b?b:a;
+  [].forEach.call(document.querySelectorAll('.cell'), function(c){
+    if(c.dataset.rec===rec && c.dataset.f>=d1 && c.dataset.f<=d2) c.classList.add('sel');
+  });
+}
+
+$('cal').addEventListener('pointerdown', function(e){
+  var c=e.target.classList.contains('cell')?e.target:null;
+  if(!c || c.classList.contains('busy')) return;
+  e.preventDefault();
+  SEL={ rec:c.dataset.rec, a:c.dataset.f, b:c.dataset.f };
+  pintarSel(SEL.rec, SEL.a, SEL.b);
+});
+
+$('cal').addEventListener('pointermove', function(e){
+  if(!SEL) return;
+  var c=celdaDe(e);
+  if(!c || c.dataset.rec!==SEL.rec) return;
+  SEL.b=topeLibre(SEL.rec, SEL.a, c.dataset.f);
+  pintarSel(SEL.rec, SEL.a, SEL.b);
+});
+
+window.addEventListener('pointerup', function(){
+  if(!SEL) return;
+  var s=SEL; SEL=null; limpiarSel();
+  var d1=s.a<s.b?s.a:s.b, d2=s.a<s.b?s.b:s.a;
+  var entrada=d1, salida=mas(d2,1);      // el último día elegido es una noche más
+  if(!libre(ocupacion(), s.rec, entrada, salida)){
+    toast('Esas fechas ya están ocupadas en esa habitación.', true);
+    return;
+  }
+  nuevaReserva(s.rec, entrada, salida);
+});
+
+/* ---------- Mover reservas arrastrando ---------- */
+$('cal').addEventListener('dragover', function(e){
+  if(!DRAG) return;
+  var c=e.target.classList.contains('cell')?e.target:null;
+  if(!c) return;
+  e.preventDefault();
+  var ini=c.dataset.f, fin=mas(ini, DRAG.len);
+  limpiarSel();
+  [].forEach.call(document.querySelectorAll('.cell'), function(cc){
+    if(cc.dataset.rec===c.dataset.rec && cc.dataset.f>=ini && cc.dataset.f<fin) cc.classList.add('drop');
+  });
+});
+
+$('cal').addEventListener('drop', function(e){
+  if(!DRAG) return;
+  e.preventDefault();
+  var c=e.target.classList.contains('cell')?e.target:null;
+  var d=DRAG; DRAG=null; limpiarSel();
+  if(!c) return;
+  var r=CAL.reservas.filter(function(x){ return x.id===d.id; })[0];
+  if(!r) return;
+  var ini=c.dataset.f, fin=mas(ini, d.len);
+  if(ini===r.checkIn && c.dataset.rec===r.recurso) return;
+  if(!libre(ocupacion(), c.dataset.rec, ini, fin, r.id)){
+    toast('No se puede mover ahí: esas fechas ya están ocupadas.', true);
+    return;
+  }
+  srv('moverReserva')(r.id, c.dataset.rec, ini, fin)
+    .then(function(){ toast('Reserva movida'); cargarCal(); })
+    .catch(function(err){ fallo(err); cargarCal(); });
+});
+
+/* ==================================================================
+   Modal de reserva
+   ================================================================== */
+function opcionesRecurso(sel){
+  var s=$('rRec'); s.innerHTML='';
+  var grupo=null, og=null;
+  CAL.recursos.forEach(function(r){
+    if(r.grupo!==grupo){ grupo=r.grupo; og=document.createElement('optgroup'); og.label=grupo; s.appendChild(og); }
+    var o=document.createElement('option');
+    o.value=r.id;
+    o.textContent=r.unidad+(r.nombre?' — '+r.nombre:'');
+    if(r.id===sel) o.selected=true;
+    og.appendChild(o);
+  });
+}
+
+function pintarFechas(){
+  $('rFtxt').textContent = RANGO.in ? largo(RANGO.in)+'  →  '+largo(RANGO.out) : 'Elegir fechas';
+  var n = RANGO.in ? noches(RANGO.in, RANGO.out) : 0;
+  $('rFn').textContent = n ? (n===1?'1 noche':n+' noches') : '';
+}
+
+function recalcularTotal(){
+  if(!RANGO.in) return;
+  var r=CAL.recursos.filter(function(x){ return x.id===$('rRec').value; })[0];
+  if(!r) return;
+  var t=0;
+  for(var f=RANGO.in; f<RANGO.out; f=mas(f,1)) t += esAlta(f)? r.precioAlta : r.precioBase;
+  $('rTot').value=t;
+  var esGlamping = r.grupo==='Glamping';
+  $('rAddonBox').classList.toggle('hide', !esGlamping);
+  if(!esGlamping){ $('rAddon').checked=false; $('rAddonF').classList.add('hide'); }
+}
+$('rRec').addEventListener('change', recalcularTotal);
+$('rAddon').addEventListener('change', function(){ $('rAddonF').classList.toggle('hide', !this.checked); });
+
+function nuevaReserva(rec, entrada, salida){
+  RES=null;
+  RANGO={ in:entrada, out:salida };
+  $('rTit').textContent='Nueva reserva';
+  opcionesRecurso(rec);
+  $('rNom').value=''; $('rTel').value=''; $('rCan').value='whatsapp';
+  $('rEst').value='confirmada'; $('rAnt').value=0; $('rNot').value='';
+  $('rAddon').checked=false; $('rAddonF').value=''; $('rAddonF').classList.add('hide');
+  $('rErr').classList.add('hide');
+  $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
+  pintarFechas(); recalcularTotal();
+  abrir('mRes');
+  setTimeout(function(){ $('rNom').focus(); }, 60);
+}
+
+function abrirReserva(r){
+  RES=r;
+  RANGO={ in:r.checkIn, out:r.checkOut };
+  $('rTit').textContent='Reserva de '+r.huesped;
+  opcionesRecurso(r.recurso);
+  $('rNom').value=r.huesped; $('rTel').value=r.telefono||''; $('rCan').value=r.canal||'whatsapp';
+  $('rEst').value=r.estado; $('rTot').value=r.total; $('rAnt').value=r.anticipo;
+  $('rNot').value=r.notas||'';
+  $('rAddon').checked=!!r.addon;
+  $('rAddonF').value=r.addonFecha||'';
+  $('rAddonF').classList.toggle('hide', !r.addon);
+  var rec=CAL.recursos.filter(function(x){ return x.id===r.recurso; })[0];
+  $('rAddonBox').classList.toggle('hide', !(rec && rec.grupo==='Glamping'));
+  $('rErr').classList.add('hide');
+  $('rFicha').classList.remove('hide'); $('rCancelar').classList.remove('hide');
+  pintarFechas();
+  abrir('mRes');
+}
+
+$('rGuardar').onclick=function(){
+  $('rErr').classList.add('hide');
+  if(!$('rNom').value.trim()){ $('rErr').textContent='Falta el nombre del huésped.'; $('rErr').classList.remove('hide'); return; }
+  var datos={
+    id: RES?RES.id:'', recurso:$('rRec').value,
+    checkIn:RANGO.in, checkOut:RANGO.out,
+    huesped:$('rNom').value.trim(), telefono:$('rTel').value, canal:$('rCan').value,
+    estado:$('rEst').value, total:+$('rTot').value||0, anticipo:+$('rAnt').value||0,
+    addon:$('rAddon').checked, addonFecha:$('rAddonF').value, notas:$('rNot').value
+  };
+  srv('guardarReserva')(datos).then(function(){
+    cerrar('mRes'); toast(RES?'Reserva actualizada':'Reserva creada'); cargarCal();
+  }).catch(function(e){
+    $('rErr').textContent=e.message||String(e); $('rErr').classList.remove('hide');
+  });
+};
+
+$('rCancelar').onclick=function(){
+  if(!RES || !confirm('¿Cancelar la reserva de '+RES.huesped+'?')) return;
+  srv('cambiarEstado')(RES.id,'cancelada').then(function(){
+    cerrar('mRes'); toast('Reserva cancelada'); cargarCal();
+  }).catch(fallo);
+};
+
+$('rFicha').onclick=function(){ if(RES) abrirFicha(RES); };
+
+/* ==================================================================
+   Selector de rango (un solo calendario emergente)
+   ================================================================== */
+var DP={ mes:null, in:null, out:null };
+
+$('rFechas').onclick=function(){
+  DP.in=RANGO.in; DP.out=RANGO.out;
+  DP.mes=aDate(RANGO.in||ymd(new Date()));
+  DP.mes.setDate(1);
+  pintarDp();
+  abrir('mDp');
+};
+$('dPrev').onclick=function(){ DP.mes.setMonth(DP.mes.getMonth()-1); pintarDp(); };
+$('dNext').onclick=function(){ DP.mes.setMonth(DP.mes.getMonth()+1); pintarDp(); };
+
+function pintarDp(){
+  $('dMon').textContent = MESES[DP.mes.getMonth()]+' '+DP.mes.getFullYear();
+  var cont=$('dDays'); cont.innerHTML='';
+  var primero=new Date(DP.mes.getFullYear(), DP.mes.getMonth(), 1);
+  var offset=(primero.getDay()+6)%7;                       // la semana parte el lunes
+  var total=new Date(DP.mes.getFullYear(), DP.mes.getMonth()+1, 0).getDate();
+  for(var i=0;i<offset;i++) cont.appendChild(document.createElement('div'));
+  for(var d=1; d<=total; d++){
+    (function(d){
+      var f=ymd(new Date(DP.mes.getFullYear(), DP.mes.getMonth(), d));
+      var b=document.createElement('button');
+      b.textContent=d;
+      if(DP.in && DP.out){
+        if(f===DP.in && noches(DP.in,DP.out)===1) b.className='only';
+        else if(f===DP.in) b.className='e1';
+        else if(f===mas(DP.out,-1)) b.className='e2';
+        else if(f>DP.in && f<DP.out) b.className='in';
+      } else if(f===DP.in) b.className='only';
+      b.onclick=function(){
+        if(!DP.in || DP.out || f<=DP.in){ DP.in=f; DP.out=null; }
+        else { DP.out=mas(f,1); }
+        pintarDp();
+      };
+      cont.appendChild(b);
+    })(d);
+  }
+  $('dInfo').textContent = !DP.in ? 'Elige la fecha de entrada'
+    : (!DP.out ? 'Ahora elige la última noche' : noches(DP.in,DP.out)+(noches(DP.in,DP.out)===1?' noche':' noches'));
+}
+
+$('dOk').onclick=function(){
+  if(!DP.in){ toast('Elige al menos una fecha.', true); return; }
+  RANGO.in=DP.in; RANGO.out=DP.out||mas(DP.in,1);
+  cerrar('mDp'); pintarFechas(); recalcularTotal();
+};
+
+/* ==================================================================
+   Hoy
+   ================================================================== */
+function tabla(cont, filas, cols, vacio){
+  var el=$(cont);
+  if(!filas.length){ el.innerHTML='<div class="empty">'+vacio+'</div>'; return; }
+  var h='<table><thead><tr>'+cols.map(function(c){return '<th>'+c[0]+'</th>';}).join('')+'</tr></thead><tbody>';
+  filas.forEach(function(f){
+    h+='<tr>'+cols.map(function(c){ return '<td>'+(c[1](f)||'') +'</td>'; }).join('')+'</tr>';
+  });
+  el.innerHTML=h+'</tbody></table>';
+}
+
+function cargarHoy(){
+  srv('panelHoy')('').then(function(d){
+    var comunes=[
+      ['Huésped', function(r){ return '<b>'+r.huesped+'</b>'+(r.telefono?'<br><span class="muted">'+r.telefono+'</span>':''); }],
+      ['Unidad',  function(r){ return r.recurso; }],
+      ['Estado',  function(r){ return '<span class="tag '+r.estado+'">'+etq(r.estado)+'</span>'; }]
+    ];
+    tabla('tLleg', d.llegadas, comunes.concat([
+      ['Saldo', function(r){ return r.saldo>0? '<b>'+plata(r.saldo)+'</b>' : '<span class="muted">pagado</span>'; }],
+      ['Notas', function(r){ return '<span class="muted">'+(r.notas||'')+'</span>'; }]
+    ]), 'Sin llegadas hoy.');
+    tabla('tSal', d.salidas, comunes.concat([
+      ['Saldo', function(r){ return r.saldo>0? '<b>'+plata(r.saldo)+'</b>' : '<span class="muted">pagado</span>'; }]
+    ]), 'Sin salidas hoy.');
+    tabla('tCasa', d.enCasa, comunes.concat([
+      ['Sale', function(r){ return largo(r.checkOut); }]
+    ]), 'No hay huéspedes alojados.');
+    tabla('tAdd', d.addons, [
+      ['Huésped', function(r){ return r.huesped; }],
+      ['Unidad',  function(r){ return r.recurso; }],
+      ['Llegada', function(r){ return largo(r.checkIn); }],
+      ['Agendado',function(r){ return r.addonFecha? r.addonFecha.replace('T',' ') : '<span class="muted">por coordinar</span>'; }]
+    ], 'Sin programas de tinaja + sushi pendientes.');
+  }).catch(fallo);
+}
+function etq(e){
+  return {confirmada:'Confirmada',tentativa:'Tentativa',en_casa:'En casa',no_show:'No-show'}[e]||e;
+}
+
+/* ==================================================================
+   Aseo
+   ================================================================== */
+function cargarAseo(){
+  srv('panelAseo')().then(function(lista){
+    var c=$('hk'); c.innerHTML='';
+    lista.forEach(function(u){
+      var d=document.createElement('div'); d.className='hkc';
+      var flags=[];
+      if(u.saleHoy) flags.push('Sale hoy');
+      if(u.llegaHoy) flags.push('Llega hoy');
+      d.innerHTML='<div class="nm">'+u.nombre+'</div>'+
+                  '<div class="flags">'+flags.join(' · ')+'</div>';
+      var segs=document.createElement('div'); segs.className='segs';
+      [['sucia','Sucia'],['limpia','Limpia'],['revisada','Revisada'],['bloqueada','Bloqueada']].forEach(function(e){
+        var b=document.createElement('button');
+        b.textContent=e[1]; b.dataset.e=e[0];
+        if(u.estado===e[0]) b.classList.add('on');
+        b.onclick=function(){
+          srv('marcarAseo')(u.id, e[0], '').then(cargarAseo).catch(fallo);
+        };
+        segs.appendChild(b);
+      });
+      d.appendChild(segs);
+      var up=document.createElement('div'); up.className='up';
+      up.textContent = u.actualizado ? (u.responsable+' · '+u.actualizado) : 'Sin registro';
+      d.appendChild(up);
+      c.appendChild(d);
+    });
+  }).catch(fallo);
+}
+
+/* ==================================================================
+   Equipo
+   ================================================================== */
+function cargarEquipo(){
+  srv('listarEquipo')().then(function(l){
+    tabla('tEq', l, [
+      ['Usuario', function(r){ return r.nombre; }],
+      ['Rol',     function(r){ return {admin:'Administración',recepcion:'Recepción',aseo:'Aseo'}[r.rol]||r.rol; }]
+    ], 'Sin usuarios.');
+  }).catch(fallo);
+}
+$('fEq').addEventListener('submit', function(e){
+  e.preventDefault();
+  srv('guardarMiembro')($('eqN').value.trim(), $('eqP').value, $('eqR').value)
+    .then(function(){ $('fEq').reset(); toast('Guardado'); cargarEquipo(); })
+    .catch(fallo);
+});
+
+/* ==================================================================
+   Ficha de registro + firma
+   ================================================================== */
+var CTX=null, pintando=false;
+function prepararFirma(){
+  var c=$('firma');
+  CTX=c.getContext('2d');
+  var ajustar=function(){
+    if(!c.clientWidth) return;
+    c.width=c.clientWidth; c.height=c.clientHeight;
+    CTX.lineWidth=2; CTX.lineCap='round'; CTX.lineJoin='round'; CTX.strokeStyle='#16191d';
+  };
+  ajustar(); window.addEventListener('resize', ajustar);
+  var pos=function(e){ var r=c.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; };
+  c.addEventListener('pointerdown', function(e){
+    if(!c.width) ajustar();
+    pintando=true; c.setPointerCapture(e.pointerId);
+    var p=pos(e); CTX.beginPath(); CTX.moveTo(p.x,p.y);
+  });
+  c.addEventListener('pointermove', function(e){
+    if(!pintando) return;
+    e.preventDefault();
+    var p=pos(e); CTX.lineTo(p.x,p.y); CTX.stroke();
+  });
+  c.addEventListener('pointerup', function(){ pintando=false; });
+}
+$('fLimpiar').onclick=function(){ var c=$('firma'); CTX.clearRect(0,0,c.width,c.height); };
+
+function abrirFicha(r){
+  cerrar('mRes');
+  $('fNom').value=r.huesped||''; $('fDoc').value=''; $('fNac').value='';
+  $('fNacim').value=''; $('fPro').value=''; $('fDes').value='';
+  $('fMot').value=''; $('fEme').value=''; $('fAcc').checked=false;
+  $('fErr').classList.add('hide');
+  abrir('mFicha');
+  setTimeout(function(){
+    var c=$('firma');
+    if(c.clientWidth && c.width!==c.clientWidth){
+      c.width=c.clientWidth; c.height=c.clientHeight;
+      CTX.lineWidth=2; CTX.lineCap='round'; CTX.lineJoin='round'; CTX.strokeStyle='#16191d';
+    }
+    CTX.clearRect(0,0,c.width,c.height);
+  }, 60);
+}
+
+$('fGuardar').onclick=function(){
+  $('fErr').classList.add('hide');
+  if(!$('fAcc').checked){ errFicha('El huésped debe aceptar el reglamento.'); return; }
+  var c=$('firma');
+  var vacio=!CTX.getImageData(0,0,c.width,c.height).data.some(function(v,i){ return i%4===3 && v>0; });
+  if(vacio){ errFicha('Falta la firma del huésped.'); return; }
+  srv('guardarFicha')(RES.id, {
+    nombre:$('fNom').value, documento:$('fDoc').value, nacionalidad:$('fNac').value,
+    nacimiento:$('fNacim').value, procedencia:$('fPro').value, destino:$('fDes').value,
+    motivo:$('fMot').value, emergencia:$('fEme').value, acepta:true,
+    firma:c.toDataURL('image/png')
+  }).then(function(){
+    cerrar('mFicha'); toast('Check-in registrado'); cargarCal();
+  }).catch(function(e){ errFicha(e.message||String(e)); });
+};
+function errFicha(m){ $('fErr').textContent=m; $('fErr').classList.remove('hide'); }
+</script>
 </body>
 </html>

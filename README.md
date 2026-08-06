@@ -1,80 +1,87 @@
-# Casona Peumayén — PMS interno
+# Casona Peumayén — PMS
 
-Sistema interno de gestión de reservas (calendario, camas/habitaciones,
-housekeeping, check-in con firma digital y coordinación del addon de
-glamping) hecho en Google Apps Script. No es un channel manager conectado a
-OTAs: sirve para que el equipo cargue manualmente lo que llega por WhatsApp,
-Booking, Airbnb, etc., y tener todo en un solo calendario visual.
+Sistema interno de reservas para el lodge y el glamping. Calendario visual,
+estado de aseo, ficha de check-in con firma y coordinación del programa de
+tinaja + sushi.
 
-## Estructura del proyecto
+No se conecta automáticamente con Booking ni Airbnb: sirve para que el equipo
+cargue a mano lo que llega por cualquier canal y lo vea todo en un solo lugar,
+sin que se pisen las reservas.
 
-| Archivo | Rol |
+## Los archivos
+
+Son **solo tres**, y se copian tal cual:
+
+| Archivo | Qué es | Cómo se crea en Apps Script |
+|---|---|---|
+| `Code.gs` | Todo el servidor: datos, reservas, aseo, fichas, usuarios | Archivo → Script |
+| `Index.html` | Toda la interfaz (diseño y comportamiento incluidos) | Archivo → HTML |
+| `appsscript.json` | Configuración del proyecto | Ya existe; se activa en ⚙️ Configuración → "Mostrar appsscript.json" |
+
+## Instalación
+
+1. Entra a [script.google.com](https://script.google.com) con la cuenta del
+   negocio → **Nuevo proyecto** → ponle "Casona Peumayén".
+2. Borra el contenido del `Code.gs` de ejemplo y pega el de este repositorio.
+3. **Archivo → HTML**, llámalo `Index` (sin `.html`) y pega `Index.html`.
+4. ⚙️ **Configuración del proyecto** → marca *Mostrar el archivo de manifiesto
+   appsscript.json*. Vuelve al editor, abre `appsscript.json` en la lista de
+   archivos de la izquierda y reemplaza su contenido.
+5. En el desplegable de funciones elige **setup** y presiona ▶️ **Ejecutar**.
+   La primera vez pedirá autorizar el acceso a Sheets y Drive: acéptalo.
+   Esto crea la planilla con el inventario ya cargado (8 habitaciones,
+   8 camas vendibles por separado y 3 carpas) y el usuario inicial.
+6. **Implementar → Nueva implementación → Aplicación web**:
+   - *Ejecutar como*: *Yo*
+   - *Quién tiene acceso*: *Cualquier usuario*
+   - Copia la URL que termina en `/exec`. Esa es la app.
+
+**Usuario inicial: `admin`, PIN `1234`.** Cámbialo apenas entres, desde la
+pestaña *Equipo* (escribe `admin` con el PIN nuevo y guarda).
+
+> La planilla de datos debe quedar **privada**. La app funciona igual porque
+> se ejecuta con tu cuenta, y ahí se guardan documentos y firmas de huéspedes.
+
+## Cómo se usa el calendario
+
+- **Crear**: haz clic en un día libre, o mantén apretado y arrastra sobre
+  varios días para elegir el rango de una vez. La selección se detiene sola
+  al topar con una reserva existente.
+- **Abrir o editar**: clic sobre la barra de color de una reserva.
+- **Mover**: arrastra la barra a otro día u otra habitación. El día donde la
+  sueltas pasa a ser el nuevo check-in y se mantiene la cantidad de noches.
+- **Cambiar fechas desde el formulario**: clic en la fila de fechas; se abre
+  un calendario donde eliges entrada y última noche en la misma pantalla.
+- El precio se calcula solo según temporada, y siempre se puede editar a mano.
+
+## Reglas del modelo
+
+- **Una reserva ocupa un recurso.** Las habitaciones 1 a 4 y las carpas se
+  reservan completas; las habitaciones 5 a 8 se reservan por cama, así que
+  cada cama es una fila propia en el calendario. Si un grupo toma dos
+  habitaciones, se cargan dos reservas.
+- **El día de check-out queda libre** para quien llega ese mismo día, como en
+  cualquier hotel.
+- **No se pueden pisar dos reservas.** Se valida en el navegador y otra vez en
+  el servidor, con un bloqueo que evita que dos personas guarden a la vez.
+- **Las fechas se guardan como texto** `AAAA-MM-DD` para que Sheets no las
+  convierta a fecha con hora y zona horaria (eso rompía la detección de choques
+  en la versión anterior).
+
+## Roles
+
+| Rol | Ve |
 |---|---|
-| `appsscript.json` | Manifiesto del proyecto (zona horaria, permisos del web app) |
-| `Modelo.gs` | Definición de las hojas de cálculo (columnas) y constantes |
-| `Utils.gs` | Helpers genéricos de lectura/escritura sobre Sheets |
-| `Setup.gs` | Inicializa la planilla, crea las hojas y precarga el inventario real |
-| `Auth.gs` | Login por nombre + PIN, sesiones, roles |
-| `Unidades.gs` | Inventario de habitaciones/camas/carpas y precios |
-| `Reservas.gs` | CRUD de reservas, detección de conflictos, mover (drag&drop) |
-| `Housekeeping.gs` | Estado de aseo por unidad |
-| `FichaRegistro.gs` | Ficha de check-in con firma digital (se guarda en Drive) |
-| `Addons.gs` | Programa de tinaja + tabla de sushi del glamping |
-| `Code.gs` | `doGet` y helper `include()` para armar el frontend |
-| `Index.html` / `CSS.html` / `JS.html` | Frontend (SPA de una sola página) |
+| `admin` | Todo, incluida la pestaña Equipo |
+| `recepcion` | Calendario, Hoy y Aseo |
+| `aseo` | Solo la pestaña Aseo |
 
-## Despliegue paso a paso
+Si te quedas fuera del sistema, puedes recuperar el acceso ejecutando desde el
+editor la función `crearUsuario("nombre", "pin", "admin")`.
 
-1. Ve a [script.google.com](https://script.google.com) con la cuenta de
-   Google que van a usar para el proyecto → **Nuevo proyecto**.
-2. Ponle nombre "Casona Peumayén - PMS".
-3. Borra el `Code.gs` de ejemplo y copia el contenido de cada archivo de
-   este repositorio en un archivo del mismo nombre dentro del editor
-   (para los `.gs` usa "Archivo > Script"; para `Index`, `CSS`, `JS` usa
-   "Archivo > HTML").
-4. Abre `appsscript.json` desde el editor (⚙️ Configuración del proyecto →
-   marca "Mostrar archivo de manifiesto appsscript.json") y reemplaza su
-   contenido por el de este repositorio.
-5. En el desplegable de funciones (arriba del editor) selecciona
-   **setupProyecto** y presiona ▶️ Ejecutar. La primera vez te va a pedir
-   autorizar permisos (Sheets, Drive) — acéptalos.
-6. Revisa el **Registro de ejecución** (Ver → Registros): ahí sale el link
-   a la planilla que se creó automáticamente con todo el inventario
-   cargado, y un aviso con el usuario administrador por defecto:
-   **usuario `Admin`, PIN `0000`** — cámbialo apenas entres, desde la
-   pestaña "Usuarios" dentro de la app (crea tu propio usuario admin y
-   deja de usar el default, o simplemente cambia su PIN volviendo a
-   ejecutar `guardarUsuario` con esos datos).
-7. **Implementar → Nueva implementación → Aplicación web**:
-   - Ejecutar como: **Yo (tu cuenta)**
-   - Quién tiene acceso: **Cualquier usuario** (así entra cualquiera del
-     equipo sin necesidad de compartir la planilla con su cuenta de Google)
-   - Implementar, y copiar la URL del web app.
-8. Comparte esa URL con el resto del equipo (recepción y aseo). Cada uno
-   entra con el nombre de usuario y PIN que le crees desde la pestaña
-   "Usuarios" (solo visible para el rol admin).
+## Lo que todavía no hace
 
-## Notas de seguridad
-
-El login es por nombre + PIN propio del sistema (no usa el inicio de
-sesión de Google), pensado para que cualquiera del equipo pueda entrar
-desde su teléfono sin tener una cuenta de Google Workspace. Es un nivel de
-seguridad razonable para una herramienta interna operada por personal de
-confianza, no para exposición pública amplia — no reutilicen PINs de otros
-sistemas.
-
-## Simplificaciones conscientes de esta primera versión
-
-- El precio de cada reserva se sugiere automáticamente según la
-  temporada, pero **siempre es editable** por el usuario al crear/editar
-  la reserva (por ejemplo, para el caso de la cama matrimonial compartida
-  ocupada por 2 personas).
-- Una reserva puede tener varias habitaciones/camas, pero todas comparten
-  las mismas fechas de check-in/check-out (si un mismo huésped necesita
-  fechas distintas por unidad, se crean reservas separadas).
-- Los reportes de ocupación/ingresos no están incluidos en esta primera
-  versión — se puede armar directamente desde la planilla de Google
-  Sheets con tablas dinámicas mientras se define qué reporte automatizar.
-- El reparto de ingresos del addon de tinaja + sushi entre el lodge y el
-  restaurant queda pendiente de definir; por ahora el sistema solo
-  coordina el horario, no cobra ni factura.
+- No genera boletas ni facturas.
+- No importa reservas automáticamente desde Booking o Airbnb.
+- No hay reportes de ocupación e ingresos dentro de la app; por ahora se
+  pueden sacar desde la planilla con una tabla dinámica.
