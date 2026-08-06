@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <?!= include('CSS'); ?>
+</head>
+<body>
+
+  <!-- ===================== LOGIN ===================== -->
+  <div id="vista-login">
+    <form class="placa" id="form-login">
+      <h1>Casona Peumayén</h1>
+      <div class="sub">Sistema de reservas y operación</div>
+      <div class="campo">
+        <label>Nombre de usuario</label>
+        <input type="text" id="login-nombre" autocomplete="username" required>
+      </div>
+      <div class="campo">
+        <label>PIN</label>
+        <input type="password" inputmode="numeric" id="login-pin" autocomplete="current-password" required>
+      </div>
+      <button class="btn" type="submit" style="width:100%">Ingresar</button>
+      <div class="error oculto" id="login-error"></div>
+    </form>
+  </div>
+
+  <!-- ===================== APP ===================== -->
+  <div id="vista-app" class="oculto">
+    <header class="encabezado">
+      <h1>Casona Peumayén — PMS</h1>
+      <div>
+        <span class="usuario" id="etiqueta-usuario"></span>
+        <button class="btn pequeno secundario" id="btn-logout" style="margin-left:10px;">Salir</button>
+      </div>
+    </header>
+
+    <nav class="tabs" id="tabs"></nav>
+
+    <main class="contenido">
+
+      <!-- --- Calendario --- -->
+      <section id="vista-calendario" class="vista">
+        <div class="calendario-barra">
+          <button class="btn pequeno" id="cal-prev">&laquo; Semana anterior</button>
+          <div class="rango" id="cal-rango"></div>
+          <button class="btn pequeno" id="cal-next">Semana siguiente &raquo;</button>
+          <button class="btn pequeno" id="cal-hoy">Hoy</button>
+        </div>
+        <div class="grid-calendario" id="grid-calendario"></div>
+      </section>
+
+      <!-- --- Check-in --- -->
+      <section id="vista-checkin" class="vista oculto">
+        <div class="tarjeta">
+          <h2>Llegadas de hoy</h2>
+          <table class="lista" id="tabla-llegadas-checkin"><thead><tr><th>Huésped</th><th>Unidades</th><th>Estado</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+      </section>
+
+      <!-- --- Housekeeping --- -->
+      <section id="vista-housekeeping" class="vista oculto">
+        <div class="tarjeta">
+          <h2>Estado de habitaciones y carpas</h2>
+          <div class="grid-hk" id="grid-hk"></div>
+        </div>
+      </section>
+
+      <!-- --- Llegadas / Salidas --- -->
+      <section id="vista-llegadas" class="vista oculto">
+        <div class="tarjeta">
+          <h2>Llegadas de hoy</h2>
+          <table class="lista" id="tabla-llegadas"><thead><tr><th>Huésped</th><th>Unidades</th><th>Canal</th><th>Notas</th></tr></thead><tbody></tbody></table>
+        </div>
+        <div class="tarjeta">
+          <h2>Salidas de hoy</h2>
+          <table class="lista" id="tabla-salidas"><thead><tr><th>Huésped</th><th>Unidades</th><th>Canal</th></tr></thead><tbody></tbody></table>
+        </div>
+      </section>
+
+      <!-- --- Addons Glamping --- -->
+      <section id="vista-addons" class="vista oculto">
+        <div class="tarjeta">
+          <h2>Programa Tinaja + Tabla de Sushi</h2>
+          <table class="lista" id="tabla-addons"><thead><tr><th>Huésped</th><th>Check-in</th><th>Fecha/hora addon</th><th>Estado</th><th></th></tr></thead><tbody></tbody></table>
+        </div>
+      </section>
+
+      <!-- --- Usuarios (solo admin) --- -->
+      <section id="vista-usuarios" class="vista oculto">
+        <div class="tarjeta" style="max-width:420px;">
+          <h2>Nuevo usuario / actualizar PIN</h2>
+          <form id="form-usuario">
+            <div class="campo"><label>Nombre</label><input type="text" id="us-nombre" required></div>
+            <div class="campo"><label>Rol</label>
+              <select id="us-rol">
+                <option value="admin">Administración</option>
+                <option value="recepcion">Recepción</option>
+                <option value="aseo">Aseo</option>
+              </select>
+            </div>
+            <div class="campo"><label>PIN (4 dígitos)</label><input type="password" inputmode="numeric" id="us-pin" required></div>
+            <button class="btn" type="submit">Guardar</button>
+          </form>
+        </div>
+        <div class="tarjeta">
+          <h2>Usuarios existentes</h2>
+          <table class="lista" id="tabla-usuarios"><thead><tr><th>Nombre</th><th>Rol</th></tr></thead><tbody></tbody></table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ===================== MODAL RESERVA ===================== -->
+  <div class="fondo-modal oculto" id="modal-reserva">
+    <div class="modal">
+      <h2 id="modal-reserva-titulo">Nueva reserva</h2>
+      <form id="form-reserva">
+        <div class="fila2">
+          <div class="campo"><label>Nombre del huésped</label><input type="text" id="res-nombre" required></div>
+          <div class="campo"><label>Canal</label>
+            <select id="res-canal">
+              <option value="whatsapp">WhatsApp</option>
+              <option value="booking">Booking</option>
+              <option value="airbnb">Airbnb</option>
+              <option value="instagram">Instagram</option>
+              <option value="walk-in">Walk-in</option>
+            </select>
+          </div>
+        </div>
+        <div class="fila2">
+          <div class="campo"><label>Check-in</label><input type="date" id="res-checkin" required></div>
+          <div class="campo"><label>Check-out</label><input type="date" id="res-checkout" required></div>
+        </div>
+        <div class="campo"><label>Unidad / cama</label><div id="res-unidad-fija" style="font-size:13px;color:var(--tinta-suave);"></div></div>
+        <div class="fila2">
+          <div class="campo"><label>Anticipo ($)</label><input type="number" id="res-anticipo" value="0" min="0"></div>
+          <div class="campo"><label>Precio sugerido ($/noche)</label><input type="number" id="res-precio" min="0"></div>
+        </div>
+        <div class="campo"><label>Notas (alergias, programa especial, etc.)</label><textarea id="res-notas" rows="2"></textarea></div>
+        <div class="campo oculto" id="res-addon-glamping">
+          <div class="lista-check">
+            <input type="checkbox" id="res-addon-check">
+            <label for="res-addon-check">Incluir programa tinaja + tabla de sushi (coordinar con restaurant)</label>
+          </div>
+          <input type="datetime-local" id="res-addon-fecha" style="margin-top:6px;">
+        </div>
+        <div class="error oculto" id="reserva-error"></div>
+        <div class="acciones-modal">
+          <button type="button" class="btn secundario" id="btn-cancelar-reserva">Cerrar</button>
+          <button type="button" class="btn peligro oculto" id="btn-cancelar-existente">Cancelar reserva</button>
+          <button type="submit" class="btn">Guardar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================== MODAL CHECK-IN ===================== -->
+  <div class="fondo-modal oculto" id="modal-checkin">
+    <div class="modal">
+      <h2>Ficha de registro</h2>
+      <form id="form-checkin">
+        <div class="fila2">
+          <div class="campo"><label>Nombre completo</label><input type="text" id="ck-nombre" required></div>
+          <div class="campo"><label>Documento / Pasaporte</label><input type="text" id="ck-documento" required></div>
+        </div>
+        <div class="fila2">
+          <div class="campo"><label>Nacionalidad</label><input type="text" id="ck-nacionalidad"></div>
+          <div class="campo"><label>Fecha de nacimiento</label><input type="date" id="ck-nacimiento"></div>
+        </div>
+        <div class="fila2">
+          <div class="campo"><label>Procedencia</label><input type="text" id="ck-procedencia"></div>
+          <div class="campo"><label>Destino tras la salida</label><input type="text" id="ck-destino"></div>
+        </div>
+        <div class="fila2">
+          <div class="campo"><label>Motivo de viaje</label><input type="text" id="ck-motivo"></div>
+          <div class="campo"><label>Contacto de emergencia</label><input type="text" id="ck-emergencia"></div>
+        </div>
+        <div class="lista-check">
+          <input type="checkbox" id="ck-reglamento" required>
+          <label for="ck-reglamento">El huésped acepta el reglamento de convivencia (horario de silencio 22:00-09:00, sin mascotas, cuidado del mobiliario).</label>
+        </div>
+        <div class="campo" style="margin-top:10px;">
+          <label>Firma</label>
+          <canvas id="lienzo-firma"></canvas>
+          <button type="button" class="btn pequeno secundario" id="btn-limpiar-firma" style="margin-top:6px;">Limpiar firma</button>
+        </div>
+        <div class="error oculto" id="checkin-error"></div>
+        <div class="acciones-modal">
+          <button type="button" class="btn secundario" id="btn-cancelar-checkin">Cerrar</button>
+          <button type="submit" class="btn">Registrar check-in</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <?!= include('JS'); ?>
+</body>
+</html>
