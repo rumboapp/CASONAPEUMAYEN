@@ -84,6 +84,13 @@
     padding:6px 12px;font-size:13.5px;display:flex;align-items:center;gap:6px;
     white-space:nowrap;overflow:hidden}
   .rname > span{overflow:hidden;text-overflow:ellipsis}
+  /* Punto de estado de aseo, para verlo sin salir del calendario. */
+  .pa{width:8px;height:8px;border-radius:50%;flex:none;box-shadow:0 0 0 2px rgba(0,0,0,.05)}
+  .pa.limpia{background:var(--ok)}
+  .pa.sucia{background:var(--dan)}
+  .pa.bloqueada{background:#6b7280}
+  .rname.aseo-sucia{background:#fdf6f5}
+  .rname.aseo-bloqueada{background:#f2f3f5;color:var(--tx2)}
   .rname .sub{color:var(--tx2);font-size:12.5px;flex:none}
   .grp{position:sticky;left:0;z-index:7;background:#f0f2f5;border-bottom:1px solid var(--line);
     padding:5px 10px;font-size:11px;font-weight:600;letter-spacing:.06em;
@@ -103,9 +110,9 @@
     cursor:grab;text-overflow:ellipsis;box-shadow:0 1px 2px rgba(0,0,0,.16)}
   .bar:active{cursor:grabbing}
   .bar.confirmada{background:linear-gradient(180deg,#e08a1e,#c26f0d)}
-  .bar.tentativa{background:linear-gradient(180deg,#9aa3b2,#7c8698)}
+  .bar.tentativa{background:linear-gradient(180deg,#8b5cd6,#6d3fb8)}
   .bar.en_casa{background:linear-gradient(180deg,#12a06e,#0b7a53)}
-  .bar.checkout{background:linear-gradient(180deg,#8d949e,#6f7681)}
+  .bar.checkout{background:linear-gradient(180deg,#3b86d8,#2668ad)}
   .bar.no_show{background:#b9bec6}
   .bar .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.85);margin-right:6px;flex:none}
 
@@ -160,9 +167,9 @@
   tr:last-child td{border-bottom:none}
   .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
   .tag.confirmada{background:#fdf1de;color:#a35f08}
-  .tag.tentativa{background:#eef0f3;color:#6b7280}
+  .tag.tentativa{background:#f0e9fb;color:#6d3fb8}
   .tag.en_casa{background:#e3f5ec;color:var(--ok)}
-  .tag.checkout{background:#eceef1;color:#5b626b}
+  .tag.checkout{background:#e6f0fb;color:#2668ad}
   .tag.no_show{background:#eef0f3;color:var(--tx2)}
 
   /* ---------- Aseo ---------- */
@@ -309,6 +316,7 @@
         <button class="nav-ico" id="cPrev">‹</button>
         <button class="nav-ico" id="cNext">›</button>
         <button class="btn gh sm" id="cHoy">Hoy</button>
+        <button class="btn sm" id="cGrupo">+ Reserva de grupo</button>
         <div class="rng" id="cRng"></div>
         <select id="cDias" style="width:auto">
           <option value="14">14 días</option>
@@ -325,11 +333,17 @@
         style="background:#fdf1de;border:1px solid #e8cfa2;color:#7a5312;border-radius:8px;
                padding:11px 13px;margin-bottom:12px;font-size:13px"></div>
       <div class="calwrap"><div class="cal" id="cal"></div></div>
+      <div class="leg" style="margin-top:8px">
+        <span style="font-weight:500;color:var(--tx2)">Aseo:</span>
+        <span><i style="background:var(--ok);border-radius:50%"></i>Limpia</span>
+        <span><i style="background:var(--dan);border-radius:50%"></i>Sucia</span>
+        <span><i style="background:#6b7280;border-radius:50%"></i>Fuera de servicio</span>
+      </div>
       <div class="leg">
-        <span><i style="background:#8e97a6"></i>Tentativa · sin confirmar</span>
+        <span><i style="background:#7d4fc9"></i>Tentativa · sin confirmar</span>
         <span><i style="background:#d4830f"></i>Confirmada · por llegar</span>
         <span><i style="background:#0f9366"></i>Check-in hecho · alojado</span>
-        <span><i style="background:#7f8794"></i>Check-out hecho · se fue</span>
+        <span><i style="background:#3178c6"></i>Check-out hecho · se fue</span>
         <span><i style="background:#b9bec6"></i>No-show</span>
       </div>
     </section>
@@ -420,6 +434,12 @@
         <span style="margin-left:auto;display:flex;gap:7px">
           <button type="button" class="btn sm hide" id="rHacerIn">Hacer check-in</button>
           <button type="button" class="btn sm hide" id="rHacerOut">Hacer check-out</button>
+          <label class="hide" id="rGrupoTodo"
+            style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--tx2);
+                   cursor:pointer;white-space:nowrap">
+            <input type="checkbox" id="rGrupoChk" style="width:auto">
+            <span id="rGrupoTxt">Aplicar a todo el grupo</span>
+          </label>
         </span>
       </div>
       <div class="fld">
@@ -517,6 +537,58 @@
         <button class="btn sm" id="dOk">Aplicar</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ==================== MODAL RESERVA DE GRUPO ==================== -->
+<div class="ov hide" id="mGrupo">
+  <div class="mo" style="max-width:560px">
+    <header><h3>Reserva de grupo</h3><button class="x" data-cerrar="mGrupo">×</button></header>
+    <div class="body">
+      <p class="muted" style="font-size:13px;margin-bottom:14px">
+        Los datos se escriben una sola vez y se crea una reserva por cada
+        alojamiento elegido, todas unidas bajo el mismo grupo.
+      </p>
+      <div class="fld">
+        <label>Fechas</label>
+        <div class="daterow" id="gFechas">
+          <span class="d1" id="gFtxt">—</span>
+          <span class="n" id="gFn"></span>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label>Huésped a cargo</label><input id="gNom" required></div>
+        <div class="fld"><label>Teléfono</label><input id="gTel" inputmode="tel"></div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label>Correo</label><input id="gMail" type="email" placeholder="opcional"></div>
+        <div class="fld"><label>Canal</label>
+          <select id="gCan">
+            <option value="whatsapp">WhatsApp</option>
+            <option value="booking">Booking</option>
+            <option value="airbnb">Airbnb</option>
+            <option value="instagram">Instagram</option>
+            <option value="directo">Directo / walk-in</option>
+          </select>
+        </div>
+      </div>
+      <div class="fld">
+        <label>Alojamientos <span class="muted" id="gCuenta"></span></label>
+        <div id="gLista" style="border:1px solid var(--line);border-radius:8px;
+             max-height:250px;overflow-y:auto"></div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label>Total del grupo ($)</label><input id="gTot" type="number" min="0" step="1000"></div>
+        <div class="fld"><label>Abonado ($)</label><input id="gAnt" type="number" min="0" step="1000" value="0"></div>
+      </div>
+      <div class="fld"><label>Notas</label><textarea id="gNot" rows="2"
+        placeholder="Vienen juntos, alergias, hora estimada de llegada…"></textarea></div>
+      <div class="err hide" id="gErr"></div>
+    </div>
+    <footer>
+      <button class="btn gh" data-cerrar="mGrupo">Cerrar</button>
+      <button class="btn" id="gGuardar">Crear reservas</button>
+    </footer>
   </div>
 </div>
 
@@ -844,7 +916,7 @@ function cargarCal(intento){
       return;
     }
     CAL.recursos=d.recursos||[]; CAL.reservas=d.reservas||[];
-    CAL.hoy=d.hoy||fmtHoy(); CAL.cfg=d.cfg||{};
+    CAL.hoy=d.hoy||fmtHoy(); CAL.cfg=d.cfg||{}; CAL.aseo=d.aseo||{};
     var av=$('avisoIleg');
     if(d.ilegibles){
       av.textContent = d.ilegibles+' reserva(s) están guardadas en la planilla pero no se '+
@@ -952,8 +1024,14 @@ function pintarCal(){
     var etiq = f.r.nombre
       ? f.r.unidad.replace(/^Habitación\s+(\S+).*/, 'Hab. $1')
       : f.r.unidad.replace(/^Habitación /, 'Hab. ');
-    nm.innerHTML='<span>'+etiq+'</span>'+
+    // Un punto de color dice si está limpia, sucia o bloqueada: sirve para
+    // decidir al vuelo dónde meter a alguien que llega sin reserva.
+    var aseo = (CAL.aseo && CAL.aseo[f.r.id]) || 'limpia';
+    var rotulo = { limpia:'Limpia', sucia:'Sucia, por limpiar', bloqueada:'Fuera de servicio' };
+    nm.innerHTML='<i class="pa '+aseo+'" title="'+(rotulo[aseo]||aseo)+'"></i>'+
+                 '<span>'+etiq+'</span>'+
                  (f.r.nombre?'<span class="sub">· '+f.r.nombre+'</span>':'');
+    if(aseo!=='limpia') nm.classList.add('aseo-'+aseo);
     cal.appendChild(nm);
 
     dias.forEach(function(fecha, i){
@@ -1130,7 +1208,8 @@ function nuevaReserva(rec, entrada, salida){
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
   $('rEnviar').classList.add('hide'); $('rVerFicha').classList.add('hide');
-  $('rPaso').classList.add('hide');
+  $('rPaso').classList.add('hide'); $('rGrupoTodo').classList.add('hide');
+  $('rGrupoChk').checked=false;
   pintarFechas(); recalcularTotal();
   abrir('mRes');
   setTimeout(function(){ $('rNom').focus(); }, 60);
@@ -1171,9 +1250,20 @@ function pintarPaso(r){
   };
   $('rPasoTxt').textContent = textos[estado] || estado;
 
-  $('rPasoFicha').innerHTML = r.firmada
-    ? '<span class="tag confirmada">Ficha firmada</span>'
-    : '<span class="tag tentativa">Ficha sin firmar</span>';
+  $('rPasoFicha').innerHTML = (r.firmada
+    ? '<span class="tag en_casa">Ficha firmada</span>'
+    : '<span class="tag tentativa">Ficha sin firmar</span>')
+    + (r.grupo ? ' <span class="tag checkout" id="rEsGrupo">Parte de un grupo</span>' : '');
+
+  // Si es parte de un grupo se ofrece aplicar el paso a todas de una vez.
+  $('rGrupoTodo').classList.toggle('hide', !r.grupo);
+  if(r.grupo){
+    srv('reservasDelGrupo')(r.grupo).then(function(l){
+      var n=(l||[]).length;
+      if(n>1) $('rGrupoTxt').textContent='Aplicar a las '+n+' del grupo';
+      else $('rGrupoTodo').classList.add('hide');
+    }).catch(function(){});
+  }
 
   // El siguiente paso depende de dónde está la reserva ahora.
   var puedeIn  = (estado==='confirmada' || estado==='tentativa');
@@ -1188,9 +1278,14 @@ function pintarPaso(r){
 
 function avanzarEstado(nuevo, aviso){
   if(!RES) return;
-  ocupado(nuevo==='en_casa'?'rHacerIn':'rHacerOut',
-          srv('cambiarEstado')(RES.id, nuevo)).then(function(){
-    cerrar('mRes'); toast(aviso); cargarCal();
+  var todoElGrupo = RES.grupo && $('rGrupoChk').checked;
+  var llamada = todoElGrupo
+    ? srv('cambiarEstadoGrupo')(RES.grupo, nuevo)
+    : srv('cambiarEstado')(RES.id, nuevo);
+  ocupado(nuevo==='en_casa'?'rHacerIn':'rHacerOut', llamada).then(function(n){
+    cerrar('mRes');
+    toast(todoElGrupo ? aviso+' · '+n+' reservas del grupo' : aviso);
+    cargarCal();
   }).catch(fallo);
 }
 $('rHacerIn').onclick=function(){ avanzarEstado('en_casa','Check-in registrado'); };
@@ -1248,11 +1343,134 @@ $('rCancelar').onclick=function(){
 $('rFicha').onclick=function(){ if(RES) abrirFicha(RES); };
 
 /* ==================================================================
+   Reserva de grupo: una familia en varios alojamientos, datos una sola vez
+   ================================================================== */
+var GRUPO = { in:null, out:null, elegidos:{} };
+
+$('cGrupo').onclick=function(){
+  var hoy=fmtHoy();
+  GRUPO={ in:hoy, out:mas(hoy,1), elegidos:{} };
+  $('gNom').value=''; $('gTel').value=''; $('gMail').value='';
+  $('gCan').value='whatsapp'; $('gAnt').value=0; $('gNot').value='';
+  $('gErr').classList.add('hide');
+  pintarFechasGrupo();
+  cargarDisponibles();
+  abrir('mGrupo');
+};
+
+function pintarFechasGrupo(){
+  $('gFtxt').textContent = largo(GRUPO.in)+'  →  '+largo(GRUPO.out);
+  var n = noches(GRUPO.in, GRUPO.out);
+  $('gFn').textContent = n===1?'1 noche':n+' noches';
+}
+
+/* El selector de fechas es el mismo de siempre; solo cambia a quién le
+   entrega el resultado. */
+var destinoFechas='reserva';
+$('gFechas').onclick=function(){
+  destinoFechas='grupo';
+  DP.in=GRUPO.in; DP.out=GRUPO.out;
+  DP.mes=aDate(GRUPO.in); DP.mes.setDate(1);
+  pintarDp(); abrir('mDp');
+};
+
+function cargarDisponibles(){
+  var cont=$('gLista');
+  cont.innerHTML='<div style="padding:14px"><div class="esqueleto"></div>'+
+                 '<div class="esqueleto"></div><div class="esqueleto"></div></div>';
+  srv('disponibles')(GRUPO.in, GRUPO.out).then(function(lista){
+    lista=lista||[];
+    cont.innerHTML='';
+    var grupoActual=null;
+    lista.forEach(function(r){
+      if(r.grupo!==grupoActual){
+        grupoActual=r.grupo;
+        var h=document.createElement('div');
+        h.textContent=grupoActual;
+        h.style.cssText='padding:7px 12px;background:var(--bg);font-size:11px;font-weight:600;'+
+          'text-transform:uppercase;letter-spacing:.06em;color:var(--tx2);'+
+          'position:sticky;top:0';
+        cont.appendChild(h);
+      }
+      var fila=document.createElement('label');
+      fila.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 12px;'+
+        'border-bottom:1px solid var(--line2);font-size:13px;cursor:pointer'+
+        (r.libre?'':';opacity:.5;cursor:not-allowed');
+
+      var cb=document.createElement('input');
+      cb.type='checkbox'; cb.style.width='auto'; cb.disabled=!r.libre;
+      cb.checked=!!GRUPO.elegidos[r.id];
+      cb.onchange=function(){
+        if(cb.checked) GRUPO.elegidos[r.id]={ recurso:r.id, precio:r.precio };
+        else delete GRUPO.elegidos[r.id];
+        recalcularGrupo();
+      };
+      fila.appendChild(cb);
+
+      var txt=document.createElement('span');
+      txt.style.flex='1';
+      txt.innerHTML='<b>'+r.unidad+'</b>'+(r.cama?' <span class="muted">· '+r.cama+'</span>':'')+
+        (r.libre?'':' <span class="muted">— ocupado por '+r.ocupadaPor+'</span>');
+      fila.appendChild(txt);
+
+      if(r.libre){
+        var pr=document.createElement('span');
+        pr.className='muted'; pr.style.whiteSpace='nowrap';
+        pr.textContent=plata(r.precio);
+        fila.appendChild(pr);
+      }
+      cont.appendChild(fila);
+    });
+    recalcularGrupo();
+  }).catch(function(e){
+    cont.innerHTML='<div class="empty" style="padding:12px">No se pudo cargar la disponibilidad.</div>';
+    fallo(e);
+  });
+}
+
+function recalcularGrupo(){
+  var ids=Object.keys(GRUPO.elegidos);
+  var total=ids.reduce(function(a,k){ return a + (Number(GRUPO.elegidos[k].precio)||0); }, 0);
+  $('gTot').value=total;
+  $('gCuenta').textContent = ids.length
+    ? '· '+ids.length+' elegido'+(ids.length>1?'s':'')
+    : '· elige uno o más';
+}
+
+$('gGuardar').onclick=function(){
+  $('gErr').classList.add('hide');
+  var muestra=function(m){ $('gErr').textContent=m; $('gErr').classList.remove('hide'); };
+  var ids=Object.keys(GRUPO.elegidos);
+  if(!$('gNom').value.trim()) return muestra('Falta el nombre del huésped a cargo.');
+  if(!ids.length) return muestra('Elige al menos un alojamiento.');
+
+  // El total editado a mano se reparte entre los alojamientos elegidos.
+  var totalEditado=Number($('gTot').value)||0;
+  var suma=ids.reduce(function(a,k){ return a+(Number(GRUPO.elegidos[k].precio)||0); },0);
+  var recursos=ids.map(function(k){
+    var it=GRUPO.elegidos[k];
+    var precio = suma>0 ? Math.round(totalEditado*(it.precio/suma)) : Math.round(totalEditado/ids.length);
+    return { recurso:it.recurso, precio:precio };
+  });
+
+  ocupado('gGuardar', srv('guardarReservaGrupo')({
+    huesped:$('gNom').value.trim(), telefono:$('gTel').value, email:$('gMail').value,
+    canal:$('gCan').value, checkIn:GRUPO.in, checkOut:GRUPO.out,
+    anticipo:+$('gAnt').value||0, notas:$('gNot').value, recursos:recursos
+  })).then(function(res){
+    cerrar('mGrupo');
+    toast('Grupo creado: '+res.ids.length+' reservas');
+    cargarCal();
+  }).catch(function(e){ muestra(e.message||String(e)); });
+};
+
+/* ==================================================================
    Selector de rango (un solo calendario emergente)
    ================================================================== */
 var DP={ mes:null, in:null, out:null };
 
 $('rFechas').onclick=function(){
+  destinoFechas='reserva';
   DP.in=RANGO.in; DP.out=RANGO.out;
   DP.mes=aDate(RANGO.in||ymd(new Date()));
   DP.mes.setDate(1);
@@ -1294,6 +1512,11 @@ function pintarDp(){
 
 $('dOk').onclick=function(){
   if(!DP.in){ toast('Elige al menos una fecha.', true); return; }
+  if(destinoFechas==='grupo'){
+    GRUPO.in=DP.in; GRUPO.out=DP.out||mas(DP.in,1);
+    cerrar('mDp'); pintarFechasGrupo(); cargarDisponibles();
+    return;
+  }
   RANGO.in=DP.in; RANGO.out=DP.out||mas(DP.in,1);
   cerrar('mDp'); pintarFechas(); recalcularTotal();
 };

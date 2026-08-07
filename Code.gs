@@ -16,7 +16,7 @@ var HOJAS = {
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
   // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
   // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal'],
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo'],
   Aseo: ['idUnidad', 'estado', 'responsable', 'notas', 'actualizado'],
   Fichas: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'procedencia', 'destino', 'motivo', 'emergencia', 'firmaUrl', 'fecha'],
   Usuarios: ['nombre', 'rol', 'pinHash', 'activo'],
@@ -374,12 +374,17 @@ function cargarTablero(token, desde, hasta) {
         checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
         estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
         addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
-        notas: r.notas || ''
+        notas: r.notas || '', grupo: String(r.grupo || '')
       };
     });
   var todas = leer_('Reservas').filter(function (r) { return r.estado !== 'cancelada'; });
+  // Estado de aseo de cada recurso, para verlo desde el mismo calendario
+  // cuando llega alguien sin reserva y hay que saber qué está listo.
+  var aseo = {};
+  leer_('Aseo').forEach(function (a) { aseo[a.idUnidad] = a.estado; });
+
   return {
-    recursos: recursos_(), reservas: reservas, hoy: hoy_(),
+    recursos: recursos_(), reservas: reservas, hoy: hoy_(), aseo: aseo,
     // Reservas que existen en la planilla pero no se pueden ubicar en el
     // calendario porque su fecha quedó ilegible: se avisa en pantalla.
     ilegibles: todas.filter(function (r) { return !ymd_(r.checkIn) || !ymd_(r.checkOut); }).length,
@@ -450,6 +455,7 @@ function guardarReserva(token, datos) {
       total: Number(datos.total) || 0, anticipo: Number(datos.anticipo) || 0,
       addon: !!datos.addon, addonFecha: datos.addonFecha || '', notas: datos.notas || ''
     };
+    if (datos.grupo !== undefined) campos.grupo = datos.grupo || '';
 
     if (datos.id) {
       actualizar_('Reservas', 'id', datos.id, campos);
@@ -466,6 +472,112 @@ function guardarReserva(token, datos) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ===================== RESERVA DE GRUPO =====================
+   Una familia que toma dos habitaciones se carga una sola vez: se eligen
+   los alojamientos y se crea una reserva por cada uno, todas con los
+   mismos datos y unidas por un mismo número de grupo. */
+
+function disponibles(token, checkIn, checkOut, ignorarGrupo) {
+  sesion_(token);
+  var f = validarFechas_(checkIn, checkOut);
+  var ocupadas = leer_('Reservas').filter(function (r) {
+    return r.estado !== 'cancelada' && r.estado !== 'no_show' &&
+      String(r.grupo || '') !== String(ignorarGrupo || '\u0000') &&
+      chocan_(ymd_(r.checkIn), ymd_(r.checkOut), f.checkIn, f.checkOut);
+  });
+  var tomadas = {};
+  ocupadas.forEach(function (r) { tomadas[r.recurso] = r.huesped; });
+
+  var alta = esAlta_(f.checkIn);
+  var noches = Math.round((new Date(f.checkOut) - new Date(f.checkIn)) / 86400000);
+
+  return recursos_().map(function (rec) {
+    return {
+      id: rec.id, unidad: rec.unidad, cama: rec.nombre || '', grupo: rec.grupo,
+      capacidad: rec.capacidad,
+      libre: !tomadas[rec.id],
+      ocupadaPor: tomadas[rec.id] || '',
+      precio: (alta ? rec.precioAlta : rec.precioBase) * noches
+    };
+  });
+}
+
+function guardarReservaGrupo(token, datos) {
+  var u = sesion_(token);
+  var f = validarFechas_(datos.checkIn, datos.checkOut);
+  var lista = datos.recursos || [];
+  if (!lista.length) throw new Error('Elige al menos un alojamiento.');
+  if (!String(datos.huesped || '').trim()) throw new Error('Falta el nombre del huésped.');
+
+  var validos = {};
+  recursos_().forEach(function (x) { validos[x.id] = x; });
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    // Primero se comprueban TODOS: o entra el grupo completo, o no entra
+    // ninguno, para no dejar media familia cargada.
+    lista.forEach(function (item) {
+      var id = item.recurso || item;
+      if (!validos[id]) throw new Error('Alojamiento no disponible para reservar: ' + id);
+      verificarLibre_(id, f.checkIn, f.checkOut, null);
+    });
+
+    var grupo = uid_('G');
+    var ids = lista.map(function (item) {
+      var id = item.recurso || item;
+      var rec = validos[id];
+      var idR = uid_('R');
+      insertar_('Reservas', {
+        id: idR, recurso: id, idUnidad: rec.idUnidad,
+        huesped: datos.huesped, telefono: datos.telefono || '', email: datos.email || '',
+        canal: datos.canal || 'whatsapp',
+        checkIn: f.checkIn, checkOut: f.checkOut, estado: datos.estado || 'confirmada',
+        total: Number(item.precio) || 0, anticipo: 0,
+        addon: !!datos.addon, addonFecha: datos.addonFecha || '',
+        notas: datos.notas || '', grupo: grupo,
+        creado: ahora_(), creadoPor: u.nombre
+      });
+      return idR;
+    });
+
+    // El abono se anota una sola vez, en la primera del grupo.
+    if (Number(datos.anticipo)) {
+      actualizar_('Reservas', 'id', ids[0], { anticipo: Number(datos.anticipo) });
+    }
+    logCambio_(u.nombre, 'grupo_creado', grupo + ' · ' + ids.length + ' alojamientos · ' + datos.huesped);
+    return { grupo: grupo, ids: ids };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function reservasDelGrupo(token, grupo) {
+  sesion_(token);
+  if (!grupo) return [];
+  var recs = recursos_();
+  var nombre = function (id) {
+    var r = recs.filter(function (x) { return x.id === id; })[0];
+    return r ? (r.unidad + (r.nombre ? ' — ' + r.nombre : '')) : id;
+  };
+  return leer_('Reservas').filter(function (r) { return String(r.grupo) === String(grupo); })
+    .map(function (r) {
+      return {
+        id: r.id, recurso: nombre(r.recurso), estado: r.estado,
+        total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0
+      };
+    });
+}
+
+/* Aplica un estado a todas las reservas del grupo de una sola vez. */
+function cambiarEstadoGrupo(token, grupo, estado) {
+  sesion_(token);
+  var ids = leer_('Reservas').filter(function (r) { return String(r.grupo) === String(grupo); })
+    .map(function (r) { return r.id; });
+  ids.forEach(function (id) { cambiarEstado(token, id, estado); });
+  return ids.length;
 }
 
 /* Mover o extender arrastrando en el calendario. */
@@ -546,12 +658,15 @@ function panelHoy(token, fecha) {
   };
   return {
     fecha: dia,
-    llegadas: todas.filter(function (r) { return ymd_(r.checkIn) === dia; }).map(mapear),
-    salidas: todas.filter(function (r) { return ymd_(r.checkOut) === dia; }).map(mapear),
-    porLlegar: todas.filter(function (r) {
+    // Llegadas = los que TODAVÍA no han hecho el check-in. En cuanto se
+    // registran pasan a "en casa", que es donde recepción los busca después.
+    llegadas: todas.filter(function (r) {
       return ymd_(r.checkIn) === dia && r.estado !== 'en_casa' && r.estado !== 'checkout';
-    }).length,
+    }).map(mapear),
+    salidas: todas.filter(function (r) { return ymd_(r.checkOut) === dia; }).map(mapear),
     enCasa: todas.filter(function (r) {
+      if (r.estado === 'checkout') return false;
+      if (r.estado === 'en_casa') return true;
       return ymd_(r.checkIn) < dia && ymd_(r.checkOut) > dia;
     }).map(mapear),
     addons: todas.filter(function (r) {

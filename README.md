@@ -86,6 +86,29 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
 - **Cambiar fechas desde el formulario**: clic en la fila de fechas; se abre
   un calendario donde eliges entrada y última noche en la misma pantalla.
 - El precio se calcula solo según temporada, y siempre se puede editar a mano.
+- **El estado de aseo se ve en el propio calendario**: cada fila lleva un
+  punto verde (limpia), rojo (sucia) o gris (fuera de servicio), y las sucias
+  quedan con un tinte distinto. Sirve para decidir al vuelo dónde meter a
+  alguien que llega sin reserva.
+
+## Reserva de grupo
+
+Cuando una familia toma dos habitaciones no hay que escribir los datos dos
+veces. El botón **+ Reserva de grupo** de la barra del calendario abre un
+formulario con las fechas, los datos del huésped a cargo y la lista de
+alojamientos con su disponibilidad para esas fechas: se marcan los que se
+quieren y se crea una reserva por cada uno, todas con los mismos datos y
+unidas por un mismo grupo.
+
+- Los ocupados aparecen bloqueados, con el nombre de quien los tiene.
+- El total se calcula solo y se reparte entre los alojamientos elegidos; si
+  lo editas a mano, el reparto se ajusta en la misma proporción.
+- El abono se anota una sola vez, no una por habitación.
+- **O entra el grupo completo o no entra ninguno**: si al guardar uno de los
+  alojamientos acaba de ocuparse, se rechaza todo y no queda media familia
+  cargada.
+- Al abrir cualquiera de esas reservas aparece la marca *Parte de un grupo* y
+  la opción de aplicar el check-in o el check-out a todas de una vez.
 
 ## Ficha de registro y firma
 
@@ -123,10 +146,10 @@ reserva, sin tener que buscar el campo:
 
 | Estado | Color | Qué significa |
 |---|---|---|
-| Tentativa | gris | Anotada pero sin confirmar |
+| Tentativa | morado | Anotada pero sin confirmar |
 | Confirmada | naranjo | Confirmada, el huésped todavía no llega |
 | Check-in | verde | El huésped llegó y está alojado |
-| Check-out | gris azulado | El huésped ya se fue |
+| Check-out | azul | El huésped ya se fue |
 | No-show | gris claro | Nunca llegó |
 
 Al abrir una reserva, arriba aparece en qué punto va y el botón del paso
