@@ -21,6 +21,7 @@
   .hide{display:none !important}
 
   header{margin-bottom:14px}
+  header .marca{height:34px;width:auto;border-radius:5px;display:block;margin-bottom:9px}
   header h1{font-size:18px;font-weight:600}
   header .f{color:var(--tx2);font-size:13px;margin-top:2px}
 
@@ -98,7 +99,8 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Aseo · Casona Peumayén</h1>
+    <img class="marca" src="<?= logo ?>" alt="Casona Peumayén">
+    <h1>Aseo</h1>
     <div class="f" id="fecha"></div>
   </header>
 
@@ -162,6 +164,12 @@ function etiquetaVisual(u){
 
 /* Lo que hay que saber de cada alojamiento, con el huésped que corresponda
    según lo que esté pasando ahora mismo. */
+function dia(ymd){
+  if(!ymd) return '';
+  var f=new Date(ymd+'T12:00:00');
+  return f.toLocaleDateString('es-CL',{ day:'numeric', month:'short' });
+}
+
 function detalleDe(u, d){
   if (u.situacion === 'salio' || u.situacion === 'salio_y_llega'){
     var t = 'Ya se fue' + (u.huespedSale ? ' ('+u.huespedSale+')' : '');
@@ -173,9 +181,12 @@ function detalleDe(u, d){
     if (u.huespedLlega) t2 += ' · después llega <b>'+u.huespedLlega+'</b>';
     return t2;
   }
-  if (u.situacion === 'llego') return 'Ya llegó <b>'+(u.huespedLlega||'')+'</b> · está adentro';
+  if (u.situacion === 'llego')
+    return 'Ya llegó <b>'+(u.huespedLlega||'')+'</b> · está adentro';
   if (u.situacion === 'llega') return 'Llega <b>'+(u.huespedLlega||'')+'</b> a las '+d.horaEntrada;
-  if (u.situacion === 'ocupada') return 'Alojado <b>'+(u.huespedDentro||'')+'</b>';
+  if (u.situacion === 'ocupada')
+    return 'Alojado <b>'+(u.huespedDentro||'')+'</b>'+
+           (u.salePronto ? ' · se va el '+dia(u.salePronto) : '');
   return u.detalle;
 }
 

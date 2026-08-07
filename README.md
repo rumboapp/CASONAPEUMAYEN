@@ -43,6 +43,9 @@ Son **cinco**, y se copian tal cual:
 **Usuario inicial: `admin`, PIN `1234`.** Cámbialo apenas entres, desde la
 pestaña *Equipo* (escribe `admin` con el PIN nuevo y guarda).
 
+El logo va incrustado dentro de `Code.gs`, así que las tres pantallas lo
+muestran sin depender de ningún archivo externo ni de permisos de Drive.
+
 > La planilla de datos debe quedar **privada**. La app funciona igual porque
 > se ejecuta con tu cuenta, y ahí se guardan documentos y firmas de huéspedes.
 
@@ -84,7 +87,15 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
 - **Mover**: arrastra la barra a otro día u otra habitación. El día donde la
   sueltas pasa a ser el nuevo check-in y se mantiene la cantidad de noches.
 - **Cambiar fechas desde el formulario**: clic en la fila de fechas; se abre
-  un calendario donde eliges entrada y última noche en la misma pantalla.
+  un calendario donde el primer clic es la **entrada** y el segundo la
+  **salida**, igual que en Booking. Del 7 al 9 son 2 noches.
+- **Alargar o acortar**: pasa el cursor sobre una reserva y arrastra el
+  tirador de cualquiera de sus dos extremos. El izquierdo cambia la llegada
+  y el derecho la salida; si el nuevo rango choca con otra reserva, no se
+  aplica.
+- **Fichas sin firmar**: las reservas cuya ficha ya está firmada llevan un
+  ✓ y las que no, un rayado diagonal. Así se ve quién falta sin abrirlas una
+  por una.
 - El precio se calcula solo según temporada, y siempre se puede editar a mano.
 - **El estado de aseo se ve en el propio calendario**: cada fila lleva un
   punto verde (limpia), rojo (sucia) o gris (fuera de servicio), y las sucias
@@ -223,6 +234,14 @@ como filas nuevas del calendario.
   fila propia del calendario.
 - Las unidades no se borran, se **archivan**: dejan de aparecer en el
   calendario pero se conserva su historial de reservas.
+
+## Cómo se cuentan las noches
+
+En el **selector de fechas** eliges entrada y salida: del 7 al 9 son 2 noches.
+
+En la **grilla del calendario** cada celda es una noche, así que marcar el 7
+y el 8 también son 2 noches — entra el 7 y sale el 9, que es justo lo que
+muestra después el formulario. Un clic simple sobre un día vale por 1 noche.
 
 ## Reglas del modelo
 

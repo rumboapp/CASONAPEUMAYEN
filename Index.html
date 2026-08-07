@@ -34,7 +34,8 @@
   #login{min-height:100vh;display:grid;place-items:center;padding:20px}
   #login form{background:var(--surface);border:1px solid var(--line);border-radius:12px;
     padding:32px;width:100%;max-width:340px}
-  #login h1{font-size:19px;font-weight:600;margin-bottom:4px}
+  #login .logo{display:block;width:100%;max-width:230px;margin:0 auto 14px;
+    border-radius:8px}
   #login p.s{color:var(--tx2);font-size:13px;margin-bottom:22px}
   .fld{margin-bottom:14px}
   .fld label{display:block;font-size:12px;color:var(--tx2);margin-bottom:5px;font-weight:500}
@@ -44,7 +45,7 @@
   #app{display:flex;flex-direction:column;height:100vh}
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;
     padding:0 16px;height:52px;background:var(--surface);border-bottom:1px solid var(--line);flex:none}
-  header .brand{font-weight:600;font-size:15px}
+  header .marca{height:30px;width:auto;border-radius:4px;display:block}
   header .who{font-size:13px;color:var(--tx2)}
   nav{display:flex;gap:2px;padding:0 12px;background:var(--surface);
     border-bottom:1px solid var(--line);flex:none;overflow-x:auto}
@@ -109,12 +110,30 @@
     font-size:13px;font-weight:500;display:flex;align-items:center;overflow:hidden;white-space:nowrap;
     cursor:grab;text-overflow:ellipsis;box-shadow:0 1px 2px rgba(0,0,0,.16)}
   .bar:active{cursor:grabbing}
+  .bar{position:relative}
+  .tirador{position:absolute;top:0;bottom:0;width:11px;cursor:col-resize;z-index:2;
+    display:flex;align-items:center;justify-content:center;opacity:0;
+    transition:opacity .12s ease}
+  .tirador::before{content:'';width:3px;height:52%;border-radius:2px;
+    background:rgba(255,255,255,.92);box-shadow:0 0 2px rgba(0,0,0,.35)}
+  .tirador.izq{left:0} .tirador.der{right:0}
+  .bar:hover .tirador{opacity:1}
+  @media (hover:none){ .tirador{opacity:.75} }
   .bar.confirmada{background:linear-gradient(180deg,#e08a1e,#c26f0d)}
   .bar.tentativa{background:linear-gradient(180deg,#8b5cd6,#6d3fb8)}
   .bar.en_casa{background:linear-gradient(180deg,#12a06e,#0b7a53)}
   .bar.checkout{background:linear-gradient(180deg,#3b86d8,#2668ad)}
   .bar.no_show{background:#b9bec6}
-  .bar .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.85);margin-right:6px;flex:none}
+  .bar .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.45);
+    margin-right:6px;flex:none;box-shadow:0 0 0 1.5px rgba(255,255,255,.55)}
+  .bar .ok{margin-right:5px;flex:none;font-weight:700;font-size:12px;line-height:1;
+    background:rgba(255,255,255,.9);color:rgba(0,0,0,.62);border-radius:50%;
+    width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center}
+  /* Rayado suave en las que aún no firman: va como capa encima para no
+     borrar el color del estado, que se define con un degradado. */
+  .bar.sinfirma::after{content:'';position:absolute;inset:0;border-radius:inherit;
+    pointer-events:none;background:repeating-linear-gradient(135deg,
+      rgba(255,255,255,.16) 0 5px, rgba(255,255,255,0) 5px 11px)}
 
   .leg{display:flex;gap:14px;margin-top:10px;font-size:12px;color:var(--tx2);flex-wrap:wrap}
   .leg span{display:flex;align-items:center;gap:5px}
@@ -280,8 +299,8 @@
 <!-- ==================== LOGIN ==================== -->
 <div id="login">
   <form id="fLogin">
-    <h1>Casona Peumayén</h1>
-    <p class="s">Gestión de alojamiento</p>
+    <img class="logo" src="<?= logo ?>" alt="Casona Peumayén">
+    <p class="s" style="text-align:center">Gestión de alojamiento</p>
     <div class="fld"><label>Usuario</label><input id="lu" autocomplete="username" required></div>
     <div class="fld"><label>PIN</label><input id="lp" type="password" inputmode="numeric" autocomplete="current-password" required></div>
     <button class="btn" style="width:100%" id="lbtn">Entrar</button>
@@ -301,7 +320,7 @@
 <!-- ==================== APP ==================== -->
 <div id="app" class="hide">
   <header>
-    <div class="brand">Casona Peumayén</div>
+    <img class="marca" src="<?= logo ?>" alt="Casona Peumayén">
     <div style="display:flex;align-items:center;gap:12px">
       <span class="who" id="who"></span>
       <button class="btn gh sm" id="bSalir">Salir</button>
@@ -334,6 +353,11 @@
                padding:11px 13px;margin-bottom:12px;font-size:13px"></div>
       <div class="calwrap"><div class="cal" id="cal"></div></div>
       <div class="leg" style="margin-top:8px">
+        <span style="font-weight:500;color:var(--tx2)">Ficha:</span>
+        <span><i style="background:#6b7280;border-radius:50%;position:relative"></i>✓ firmada</span>
+        <span><i style="background:repeating-linear-gradient(135deg,#9aa1ab 0 3px,#cfd4da 3px 6px)"></i>rayada = sin firmar</span>
+      </div>
+      <div class="leg" style="margin-top:6px">
         <span style="font-weight:500;color:var(--tx2)">Aseo:</span>
         <span><i style="background:var(--ok);border-radius:50%"></i>Limpia</span>
         <span><i style="background:var(--dan);border-radius:50%"></i>Sucia</span>
@@ -1057,9 +1081,29 @@ function pintarCal(){
     b.className='bar '+r.estado;
     b.style.gridArea = fila+' / '+col+' / '+(fila+1)+' / '+(col+span);
     b.title = r.huesped+'  ·  '+largo(r.checkIn)+' → '+largo(r.checkOut)+'  ·  '+plata(r.total);
-    b.innerHTML='<span class="dot"></span>'+r.huesped+(r.addon?' 🛁':'');
+    // Un tilde blanco cuando la ficha está firmada, para no tener que abrir
+    // una por una y ver quién falta por registrar.
+    b.innerHTML = (r.firmada ? '<span class="ok" title="Ficha firmada">✓</span>'
+                             : '<span class="dot" title="Ficha sin firmar"></span>')
+                  + r.huesped + (r.addon ? ' 🛁' : '');
+    if(!r.firmada) b.classList.add('sinfirma');
     b.draggable=true;
     b.dataset.id=r.id;
+
+    // Tiradores en los extremos: arrastrarlos alarga o acorta la estadía.
+    // Solo aparecen si ese extremo cae dentro de la ventana visible.
+    if(r.checkIn >= CAL.inicio){
+      var ti=document.createElement('span');
+      ti.className='tirador izq'; ti.title='Arrastra para cambiar la llegada';
+      ti.addEventListener('pointerdown', function(ev){ iniciarEstirar(ev, r, 'inicio'); });
+      b.appendChild(ti);
+    }
+    if(r.checkOut <= finVentana){
+      var tf=document.createElement('span');
+      tf.className='tirador der'; tf.title='Arrastra para cambiar la salida';
+      tf.addEventListener('pointerdown', function(ev){ iniciarEstirar(ev, r, 'fin'); });
+      b.appendChild(tf);
+    }
     b.addEventListener('click', function(ev){ ev.stopPropagation(); abrirReserva(r); });
     b.addEventListener('dragstart', function(ev){
       DRAG={ id:r.id, len:noches(r.checkIn, r.checkOut) };
@@ -1102,6 +1146,7 @@ function pintarSel(rec, a, b){
 }
 
 $('cal').addEventListener('pointerdown', function(e){
+  if(ESTIRA) return;
   var c=e.target.classList.contains('cell')?e.target:null;
   if(!c || c.classList.contains('busy')) return;
   e.preventDefault();
@@ -1121,12 +1166,59 @@ window.addEventListener('pointerup', function(){
   if(!SEL) return;
   var s=SEL; SEL=null; limpiarSel();
   var d1=s.a<s.b?s.a:s.b, d2=s.a<s.b?s.b:s.a;
-  var entrada=d1, salida=mas(d2,1);      // el último día elegido es una noche más
+  // En la grilla cada celda es una NOCHE, así que la salida es el día
+  // siguiente a la última celda marcada. Marcar el 7 y el 8 son 2 noches:
+  // entra el 7 y sale el 9, que es justo lo que muestra el formulario.
+  var entrada=d1, salida=mas(d2,1);
   if(!libre(ocupacion(), s.rec, entrada, salida)){
     toast('Esas fechas ya están ocupadas en ese alojamiento.', true);
     return;
   }
   nuevaReserva(s.rec, entrada, salida);
+});
+
+/* ---------- Estirar una reserva desde sus extremos ---------- */
+var ESTIRA = null;
+
+function iniciarEstirar(ev, r, extremo){
+  ev.stopPropagation();
+  ev.preventDefault();
+  ESTIRA = { r:r, extremo:extremo, checkIn:r.checkIn, checkOut:r.checkOut };
+  document.body.style.cursor='col-resize';
+}
+
+$('cal').addEventListener('pointermove', function(e){
+  if(!ESTIRA) return;
+  var c=celdaDe(e);
+  if(!c || c.dataset.rec!==ESTIRA.r.recurso) return;
+  var f=c.dataset.f;
+  if(ESTIRA.extremo==='inicio'){
+    if(f >= ESTIRA.r.checkOut) return;   // la llegada no puede pasar la salida
+    ESTIRA.checkIn=f;
+  } else {
+    var nueva=mas(f,1);                  // la celda es una noche: sale al día siguiente
+    if(nueva <= ESTIRA.r.checkIn) return;
+    ESTIRA.checkOut=nueva;
+  }
+  pintarSel(ESTIRA.r.recurso, ESTIRA.checkIn, mas(ESTIRA.checkOut,-1));
+});
+
+window.addEventListener('pointerup', function(){
+  if(!ESTIRA) return;
+  var e=ESTIRA; ESTIRA=null;
+  document.body.style.cursor='';
+  limpiarSel();
+  if(e.checkIn===e.r.checkIn && e.checkOut===e.r.checkOut) return;
+  if(!libre(ocupacion(), e.r.recurso, e.checkIn, e.checkOut, e.r.id)){
+    toast('No se puede: esas fechas chocan con otra reserva.', true);
+    return;
+  }
+  srv('moverReserva')(e.r.id, e.r.recurso, e.checkIn, e.checkOut)
+    .then(function(){
+      toast('Estadía actualizada: '+noches(e.checkIn,e.checkOut)+' noches');
+      cargarCal();
+    })
+    .catch(function(err){ fallo(err); cargarCal(); });
 });
 
 /* ---------- Mover reservas arrastrando ---------- */
@@ -1493,21 +1585,23 @@ function pintarDp(){
       var b=document.createElement('button');
       b.textContent=d;
       if(DP.in && DP.out){
-        if(f===DP.in && noches(DP.in,DP.out)===1) b.className='only';
-        else if(f===DP.in) b.className='e1';
-        else if(f===mas(DP.out,-1)) b.className='e2';
+        if(f===DP.in) b.className='e1';
+        else if(f===DP.out) b.className='e2';
         else if(f>DP.in && f<DP.out) b.className='in';
       } else if(f===DP.in) b.className='only';
       b.onclick=function(){
+        // Primer clic = entrada, segundo = SALIDA. Del 7 al 9 son 2 noches,
+        // igual que en cualquier motor de reservas.
         if(!DP.in || DP.out || f<=DP.in){ DP.in=f; DP.out=null; }
-        else { DP.out=mas(f,1); }
+        else { DP.out=f; }
         pintarDp();
       };
       cont.appendChild(b);
     })(d);
   }
   $('dInfo').textContent = !DP.in ? 'Elige la fecha de entrada'
-    : (!DP.out ? 'Ahora elige la última noche' : noches(DP.in,DP.out)+(noches(DP.in,DP.out)===1?' noche':' noches'));
+    : (!DP.out ? 'Ahora elige la fecha de salida'
+              : noches(DP.in,DP.out)+(noches(DP.in,DP.out)===1?' noche':' noches'));
 }
 
 $('dOk').onclick=function(){
@@ -1585,10 +1679,12 @@ function cargarAseo(){
 
       var linea;
       if(u.yaSalio) linea = 'Ya se fue'+(u.huespedSale?' ('+u.huespedSale+')':'');
-      else if(u.saleHoy) linea = 'Sale '+(u.huespedSale||'');
+      else if(u.saleHoy) linea = 'Sale hoy '+(u.huespedSale||'');
       else if(u.yaLlego) linea = 'Ya llegó '+(u.huespedLlega||'');
       else if(u.llegaHoy) linea = 'Llega '+(u.huespedLlega||'');
-      else if(u.situacion==='ocupada') linea = 'Alojado '+(u.huespedDentro||'');
+      else if(u.situacion==='ocupada')
+        linea = 'Alojado '+(u.huespedDentro||'')+
+                (u.salePronto?' · se va el '+corto(u.salePronto):'');
       else linea = u.detalle;
       if(u.huespedLlega && (u.yaSalio || (u.saleHoy && !u.yaLlego)))
         linea += ' · llega '+u.huespedLlega;
