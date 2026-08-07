@@ -94,11 +94,10 @@ carpeta de Drive llamada *Casona Peumayén — Fichas*:
 
 - **En recepción**: abre la reserva → *Firmar aquí*. El huésped firma con el
   dedo en el teléfono o tablet del mostrador.
-- **A distancia, antes de llegar**: abre la reserva → *Enviar ficha al huésped*.
-  Se genera un enlace propio de esa reserva que puedes copiar, mandar por
-  WhatsApp (usa el teléfono cargado en la reserva) o por correo. El huésped lo
-  abre sin clave, ve su reserva, lee las normas de convivencia, las acepta y
-  firma desde su teléfono.
+- **A distancia, antes de llegar**: abre la reserva → *Copiar enlace de la
+  ficha*. El enlace queda copiado al instante para pegarlo por WhatsApp,
+  correo o donde prefieras. El huésped lo abre sin clave, ve su reserva, lee
+  las normas de convivencia, las acepta y firma desde su teléfono.
 
 Las normas que se muestran en los dos casos son **exactamente las mismas**:
 salen de la función `reglamento()` en `Code.gs`, que es el único lugar donde
@@ -108,21 +107,27 @@ La página del huésped está **en español e inglés**: detecta el idioma del
 teléfono y además tiene un botón ES/EN. El enlace solo da acceso a esa reserva
 y a nada más, y una vez firmada muestra la confirmación en lugar del formulario.
 
-Firmar antes de llegar no adelanta el estado de la reserva: solo pasa a
-*en casa* cuando el registro se hace el día de la llegada o después.
+**Firmar la ficha nunca cambia el estado de la reserva.** El check-in lo hace
+siempre recepción a mano, así que una ficha firmada desde el teléfono del
+huésped solo queda registrada; la reserva sigue igual hasta que alguien
+aprieta *Hacer check-in*.
+
+El botón **Copiar enlace de la ficha** lo genera y lo deja copiado de una
+sola vez, listo para pegar donde sea. Si ya está firmada, ese botón
+desaparece y en su lugar aparece *Ver ficha firmada*.
 
 ## Estados de una reserva
 
 Se ven en el calendario por color y se cambian con un toque desde la propia
 reserva, sin tener que buscar el campo:
 
-| Estado | Qué significa |
-|---|---|
-| Tentativa | Anotada pero sin confirmar |
-| Confirmada | Confirmada, el huésped todavía no llega |
-| Check-in | El huésped llegó y está alojado |
-| Check-out | El huésped ya se fue |
-| No-show | Nunca llegó |
+| Estado | Color | Qué significa |
+|---|---|---|
+| Tentativa | gris | Anotada pero sin confirmar |
+| Confirmada | naranjo | Confirmada, el huésped todavía no llega |
+| Check-in | verde | El huésped llegó y está alojado |
+| Check-out | gris azulado | El huésped ya se fue |
+| No-show | gris claro | Nunca llegó |
 
 Al abrir una reserva, arriba aparece en qué punto va y el botón del paso
 siguiente: *Hacer check-in* o *Hacer check-out*. Ese botón guarda además la
@@ -137,6 +142,10 @@ avisarle.
 Solo tres estados, que es lo que se usa a diario: **sucia**, **limpia** y
 **fuera de servicio**.
 
+El estado se lleva **por cama, no por habitación**, en las piezas que se
+venden por camas: muchas veces se ensucia una sola cama y no la pieza
+entera, así que cada cama tiene su propio estado y su propia tarjeta.
+
 En la pestaña *Aseo* hay un botón **Enlace para el equipo de aseo**: genera
 una dirección que se le manda a la persona que limpia. La abre desde su
 teléfono, sin clave, y ve los alojamientos ordenados por lo que hay que
@@ -145,11 +154,23 @@ hacer:
 1. **Limpiar ahora** — los que ya hicieron check-out.
 2. **Cuando se vayan** — los que salen hoy pero el huésped sigue adentro.
 3. **Listas para recibir** — las que esperan a alguien hoy.
-4. **Sin movimiento hoy** — plegado, para no estorbar.
+4. **Con huésped adentro** — incluye a los que ya hicieron el check-in, que
+   se muestran como "ya llegó" y no como "llega a las 15:00".
+5. **Sin movimiento hoy** — plegado, para no estorbar.
 
 Escribe su nombre una vez y queda registrado quién limpió cada cosa.
-Recepción ve el cambio al instante, y la pantalla se refresca sola cada dos
-minutos.
+Recepción ve el cambio al instante, y la pantalla se refresca sola cada
+minuto y al volver a ella.
+
+## Cuando algo no carga
+
+La aplicación se refresca sola cada 45 segundos y cada vez que vuelves a la
+pestaña, así que una ficha que el huésped firma desde su teléfono, o un
+cambio hecho por la otra persona del equipo, aparece sin recargar.
+
+Si el calendario no carga —Apps Script a veces falla al despertar— se
+reintenta solo hasta tres veces y, si aun así falla, aparece un botón
+*Reintentar* en lugar de dejarte la pantalla en blanco.
 
 ## Informes
 

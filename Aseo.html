@@ -45,6 +45,8 @@
   .u:active{transform:scale(.99)}
   .u .txt{flex:1;min-width:0}
   .u .nom{font-weight:600;font-size:15px}
+  .u .cama{font-weight:500;font-size:13px;color:var(--tx2);
+    background:var(--blo-soft);padding:2px 7px;border-radius:20px;margin-left:4px}
   .u .det{font-size:12.5px;color:var(--tx2);margin-top:3px}
   .u .det b{color:var(--tx);font-weight:500}
 
@@ -116,7 +118,7 @@
     </div>
 
     <div id="lista"></div>
-    <div class="pie">Se actualiza solo cada 2 minutos. Recepción ve al instante lo que marcas.</div>
+    <div class="pie">Se actualiza solo cada minuto. Recepción ve al instante lo que marcas.</div>
   </div>
 </div>
 
@@ -158,6 +160,25 @@ function etiquetaVisual(u){
   return ETIQ[u.estado] || u.estado;
 }
 
+/* Lo que hay que saber de cada alojamiento, con el huésped que corresponda
+   según lo que esté pasando ahora mismo. */
+function detalleDe(u, d){
+  if (u.situacion === 'salio' || u.situacion === 'salio_y_llega'){
+    var t = 'Ya se fue' + (u.huespedSale ? ' ('+u.huespedSale+')' : '');
+    if (u.huespedLlega) t += ' · llega <b>'+u.huespedLlega+'</b> a las '+d.horaEntrada;
+    return t;
+  }
+  if (u.situacion === 'sale' || u.situacion === 'sale_y_llega'){
+    var t2 = 'Sale <b>'+(u.huespedSale||'')+'</b> a las '+d.horaSalida;
+    if (u.huespedLlega) t2 += ' · después llega <b>'+u.huespedLlega+'</b>';
+    return t2;
+  }
+  if (u.situacion === 'llego') return 'Ya llegó <b>'+(u.huespedLlega||'')+'</b> · está adentro';
+  if (u.situacion === 'llega') return 'Llega <b>'+(u.huespedLlega||'')+'</b> a las '+d.horaEntrada;
+  if (u.situacion === 'ocupada') return 'Alojado <b>'+(u.huespedDentro||'')+'</b>';
+  return u.detalle;
+}
+
 function pintar(){
   var d = DATOS;
   var f = new Date(d.fecha + 'T12:00:00');
@@ -177,6 +198,7 @@ function pintar(){
         (u.situacion==='sale' || u.situacion==='sale_y_llega'); } },
     { t:'Listas para recibir', f:function(u){ return u.estado==='limpia' &&
         (u.situacion==='llega' || u.situacion==='salio_y_llega'); } },
+    { t:'Con huésped adentro', f:function(u){ return u.situacion==='llego' || u.situacion==='ocupada'; } },
     { t:'Sin movimiento hoy', plegable:true, f:function(u){ return true; } }
   ];
 
@@ -212,15 +234,10 @@ function pintar(){
       var div=document.createElement('div');
       div.className='u '+cl;
 
-      var detalle = u.detalle;
-      if (u.huespedSale && (u.situacion==='sale'||u.situacion==='sale_y_llega'))
-        detalle += ' · sale <b>'+u.huespedSale+'</b> a las '+d.horaSalida;
-      if (u.huespedLlega)
-        detalle += ' · llega <b>'+u.huespedLlega+'</b> a las '+d.horaEntrada;
-
       div.innerHTML =
-        '<div class="txt"><div class="nom">'+u.nombre+'</div>'+
-        '<div class="det">'+detalle+'</div></div>'+
+        '<div class="txt"><div class="nom">'+u.unidad+
+        (u.cama ? ' <span class="cama">'+u.cama+'</span>' : '')+'</div>'+
+        '<div class="det">'+detalleDe(u, d)+'</div></div>'+
         '<span class="pill '+cl+'">'+etiquetaVisual(u)+'</span>';
 
       var acc=document.createElement('div');
@@ -284,7 +301,8 @@ $('quien').addEventListener('change', function(){
 });
 
 cargar();
-setInterval(function(){ cargar(true); }, 120000);
+setInterval(function(){ if(!document.hidden) cargar(true); }, 60000);
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) cargar(true); });
 </script>
 </body>
 </html>

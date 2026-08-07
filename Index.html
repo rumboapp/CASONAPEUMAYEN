@@ -102,9 +102,9 @@
     font-size:13px;font-weight:500;display:flex;align-items:center;overflow:hidden;white-space:nowrap;
     cursor:grab;text-overflow:ellipsis;box-shadow:0 1px 2px rgba(0,0,0,.16)}
   .bar:active{cursor:grabbing}
-  .bar.confirmada{background:var(--ok)}
-  .bar.tentativa{background:var(--warn)}
-  .bar.en_casa{background:var(--stay)}
+  .bar.confirmada{background:linear-gradient(180deg,#e08a1e,#c26f0d)}
+  .bar.tentativa{background:linear-gradient(180deg,#9aa3b2,#7c8698)}
+  .bar.en_casa{background:linear-gradient(180deg,#12a06e,#0b7a53)}
   .bar.checkout{background:linear-gradient(180deg,#8d949e,#6f7681)}
   .bar.no_show{background:#b9bec6}
   .bar .dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.85);margin-right:6px;flex:none}
@@ -159,9 +159,9 @@
   td{padding:10px;border-bottom:1px solid var(--line2);font-size:13px;vertical-align:top}
   tr:last-child td{border-bottom:none}
   .tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
-  .tag.confirmada{background:#e3f5ec;color:var(--ok)}
-  .tag.tentativa{background:#fdf1de;color:var(--warn)}
-  .tag.en_casa{background:#ecebfa;color:var(--stay)}
+  .tag.confirmada{background:#fdf1de;color:#a35f08}
+  .tag.tentativa{background:#eef0f3;color:#6b7280}
+  .tag.en_casa{background:#e3f5ec;color:var(--ok)}
   .tag.checkout{background:#eceef1;color:#5b626b}
   .tag.no_show{background:#eef0f3;color:var(--tx2)}
 
@@ -178,6 +178,7 @@
   .hkc .sit.salio,.hkc .sit.salio_y_llega{color:var(--dan);font-weight:500}
   .hkc .sit.sale,.hkc .sit.sale_y_llega{color:var(--warn);font-weight:500}
   .hkc .sit.llega{color:var(--ac);font-weight:500}
+  .hkc .sit.llego,.hkc .sit.ocupada{color:var(--ok);font-weight:500}
   .segs{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
   .segs button{flex:1;padding:7px 2px;font-size:11.5px;color:var(--tx2);border-right:1px solid var(--line)}
   .segs button:last-child{border-right:none}
@@ -316,14 +317,18 @@
         </select>
         <div class="hint">Haz clic y arrastra sobre los días libres para crear una reserva</div>
       </div>
+      <div id="avisoCarga" class="hide"
+        style="background:#fdeceb;border:1px solid #f0c4c1;color:#8f2b25;border-radius:8px;
+               padding:11px 13px;margin-bottom:12px;font-size:13px;display:flex;
+               align-items:center;gap:10px;flex-wrap:wrap"></div>
       <div id="avisoIleg" class="hide"
         style="background:#fdf1de;border:1px solid #e8cfa2;color:#7a5312;border-radius:8px;
                padding:11px 13px;margin-bottom:12px;font-size:13px"></div>
       <div class="calwrap"><div class="cal" id="cal"></div></div>
       <div class="leg">
-        <span><i style="background:var(--warn)"></i>Tentativa</span>
-        <span><i style="background:var(--ok)"></i>Confirmada · aún no llega</span>
-        <span><i style="background:var(--stay)"></i>Check-in hecho · alojado</span>
+        <span><i style="background:#8e97a6"></i>Tentativa · sin confirmar</span>
+        <span><i style="background:#d4830f"></i>Confirmada · por llegar</span>
+        <span><i style="background:#0f9366"></i>Check-in hecho · alojado</span>
         <span><i style="background:#7f8794"></i>Check-out hecho · se fue</span>
         <span><i style="background:#b9bec6"></i>No-show</span>
       </div>
@@ -464,7 +469,7 @@
     <footer>
       <div class="left">
         <button class="btn gh sm hide" id="rVerFicha">Ver ficha firmada</button>
-        <button class="btn gh sm hide" id="rEnviar">Enviar ficha al huésped</button>
+        <button class="btn gh sm hide" id="rEnviar">Copiar enlace de la ficha</button>
         <button class="btn gh sm hide" id="rFicha">Firmar aquí</button>
         <button class="btn gh sm hide" id="rCancelar">Cancelar reserva</button>
       </div>
@@ -800,6 +805,7 @@ function iniciar(){
   });
   CAL.inicio = ymd(new Date());
   ver(mias[0].id);
+  autoRefresco();
 }
 
 function ver(id){
@@ -822,12 +828,17 @@ $('cNext').onclick=function(){ CAL.inicio=mas(CAL.inicio, 7); cargarCal(); };
 $('cHoy').onclick =function(){ CAL.inicio=ymd(new Date()); cargarCal(); };
 $('cDias').onchange=function(){ CAL.dias=+this.value; cargarCal(); };
 
-function cargarCal(){
+/* Apps Script falla de vez en cuando al despertar. En vez de dejar el
+   calendario en blanco, se reintenta solo y, si igual falla, se ofrece
+   volver a intentar sin tener que recargar la página entera. */
+function cargarCal(intento){
+  intento = intento || 1;
   var fin = mas(CAL.inicio, CAL.dias);
   $('cal').classList.add('recargando');
   var quitar=function(){ $('cal').classList.remove('recargando'); };
   srv('cargarTablero')(CAL.inicio, fin).then(function(d){
     quitar();
+    $('avisoCarga').classList.add('hide');
     if(!d || !d.recursos){
       toast('El servidor no devolvió datos. Revisa la instalación desde la pantalla de acceso.', true);
       return;
@@ -842,8 +853,40 @@ function cargarCal(){
       av.classList.remove('hide');
     } else av.classList.add('hide');
     pintarCal();
-  }).catch(function(e){ quitar(); fallo(e); });
+  }).catch(function(e){
+    quitar();
+    if(intento < 3){
+      setTimeout(function(){ cargarCal(intento+1); }, intento*700);
+      return;
+    }
+    var av=$('avisoCarga');
+    av.classList.remove('hide');
+    av.innerHTML='No se pudo cargar el calendario. ';
+    var b=document.createElement('button');
+    b.className='btn sm'; b.textContent='Reintentar';
+    b.onclick=function(){ av.classList.add('hide'); cargarCal(); };
+    av.appendChild(b);
+    fallo(e);
+  });
 }
+
+/* Se refresca solo: así una ficha que el huésped firma desde su teléfono, o
+   un cambio hecho por la otra persona del equipo, aparece sin recargar. */
+var relojCal=null;
+function autoRefresco(){
+  clearInterval(relojCal);
+  relojCal=setInterval(function(){
+    if(document.hidden) return;
+    var visible=!$('v-cal').classList.contains('hide');
+    if(visible && !document.querySelector('.ov:not(.hide)')) cargarCal();
+  }, 45000);
+}
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden || !S.token) return;
+  if(!$('v-cal').classList.contains('hide')) cargarCal();
+  if(!$('v-hoy').classList.contains('hide')) cargarHoy();
+  if(!$('v-aseo').classList.contains('hide')) cargarAseo();
+});
 
 /* Mapa "recurso|fecha" -> reserva, para saber al instante si un día está ocupado. */
 function ocupacion(){
@@ -1317,15 +1360,20 @@ function cargarAseo(){
       var d=document.createElement('div');
       d.className='hkc '+u.estado;
 
-      var linea = u.detalle;
-      if(u.huespedSale && (u.situacion==='sale'||u.situacion==='sale_y_llega'))
-        linea = 'Sale '+u.huespedSale;
+      var linea;
       if(u.yaSalio) linea = 'Ya se fue'+(u.huespedSale?' ('+u.huespedSale+')':'');
-      if(u.huespedLlega) linea += (linea?' · ':'')+'llega '+u.huespedLlega;
+      else if(u.saleHoy) linea = 'Sale '+(u.huespedSale||'');
+      else if(u.yaLlego) linea = 'Ya llegó '+(u.huespedLlega||'');
+      else if(u.llegaHoy) linea = 'Llega '+(u.huespedLlega||'');
+      else if(u.situacion==='ocupada') linea = 'Alojado '+(u.huespedDentro||'');
+      else linea = u.detalle;
+      if(u.huespedLlega && (u.yaSalio || (u.saleHoy && !u.yaLlego)))
+        linea += ' · llega '+u.huespedLlega;
 
       d.innerHTML =
-        '<div class="nm">'+u.nombre+'</div>'+
-        '<div class="sit '+u.situacion+'">'+linea+'</div>';
+        '<div class="nm">'+u.unidad+
+        (u.cama?' <span style="font-weight:500;color:var(--tx2);font-size:12px">· '+u.cama+'</span>':'')+
+        '</div><div class="sit '+u.situacion+'">'+linea+'</div>';
 
       var segs=document.createElement('div'); segs.className='segs';
       [['sucia','Sucia'],['limpia','Limpia'],['bloqueada','Fuera de servicio']].forEach(function(e){
@@ -1485,34 +1533,33 @@ $('fEq').addEventListener('submit', function(e){
 /* ==================================================================
    Enviar la ficha al huésped para que firme desde su teléfono
    ================================================================== */
+/* Un solo paso: genera el enlace y lo deja copiado, listo para pegar donde
+   sea. Sin abrir ventanas intermedias. */
+function copiarTexto(txt){
+  var i=document.createElement('textarea');
+  i.value=txt;
+  i.style.cssText='position:fixed;top:-1000px;opacity:0';
+  document.body.appendChild(i);
+  i.select(); i.setSelectionRange(0, 99999);
+  var listo=false;
+  try{ listo=document.execCommand('copy'); }catch(_){}
+  i.remove();
+  if(!listo && navigator.clipboard){
+    try{ navigator.clipboard.writeText(txt); listo=true; }catch(_){}
+  }
+  return listo;
+}
+
 $('rEnviar').onclick=function(){
   if(!RES) return;
   ocupado('rEnviar', srv('linkFicha')(RES.id)).then(function(d){
-    $('lkUrl').value=d.url;
-    var msg='Hola '+RES.huesped+'! Antes de tu llegada a Casona Peumayén, '+
-            'completa tu registro y firma aquí: '+d.url;
-    // Sheets convierte a número un teléfono de puros dígitos, y un número
-    // no tiene .replace: por eso siempre se fuerza a texto antes de limpiarlo.
-    var tel=String(RES.telefono||'').replace(/[^0-9]/g,'');
-    var wa=$('lkWa');
-    wa.href='https://wa.me/'+tel+'?text='+encodeURIComponent(msg);
-    wa.textContent = tel ? 'Enviar por WhatsApp' : 'Abrir WhatsApp';
-    $('lkMail').href='mailto:'+(RES.email||'')+
-      '?subject='+encodeURIComponent('Tu registro en Casona Peumayén')+
-      '&body='+encodeURIComponent(msg);
-    $('lkEstado').innerHTML = RES.firmada
-      ? '<span class="tag confirmada">Ya firmada</span>'
-      : '<span class="muted">Todavía no la firma.</span>';
-    cerrar('mRes'); abrir('mLink');
+    if(copiarTexto(d.url)) toast('Enlace de la ficha copiado');
+    else { $('lkUrl').value=d.url; abrir('mLink'); }
   }).catch(fallo);
 };
 
 $('lkCopiar').onclick=function(){
-  var i=$('lkUrl'); i.select(); i.setSelectionRange(0,99999);
-  var listo=false;
-  try{ listo=document.execCommand('copy'); }catch(_){}
-  if(!listo && navigator.clipboard){ navigator.clipboard.writeText(i.value); listo=true; }
-  toast(listo?'Enlace copiado':'Copia el enlace a mano');
+  toast(copiarTexto($('lkUrl').value) ? 'Enlace copiado' : 'Copia el enlace a mano');
 };
 
 /* ==================================================================

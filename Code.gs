@@ -505,9 +505,9 @@ function cambiarEstado(token, id, estado) {
 
   // Al hacer el check-out la habitación queda sucia sola: así el equipo de
   // aseo la ve al tiro en su pantalla, sin que nadie tenga que avisarle.
-  if (estado === 'checkout' && r.idUnidad) {
-    guardarOCrear_('Aseo', 'idUnidad', r.idUnidad, {
-      idUnidad: r.idUnidad, estado: 'sucia', responsable: u.nombre,
+  if (estado === 'checkout' && r.recurso) {
+    guardarOCrear_('Aseo', 'idUnidad', r.recurso, {
+      idUnidad: r.recurso, estado: 'sucia', responsable: u.nombre,
       notas: 'Check-out de ' + r.huesped, actualizado: ahora_()
     });
   }
@@ -562,52 +562,55 @@ function panelHoy(token, fecha) {
 
 /* ===================== ASEO ===================== */
 
-/* Situación de cada alojamiento HOY, pensada para que el equipo de aseo
-   sepa de una mirada qué tiene que hacer y en qué orden. */
+/* Situación de HOY de cada recurso: una habitación entera, o cada cama por
+   separado en las compartidas, porque muchas veces se ensucia solo una cama
+   y no la pieza completa. */
 function situacionAseo_() {
   var dia = hoy_();
   var estados = leer_('Aseo');
   var reservas = leer_('Reservas').filter(function (r) { return r.estado !== 'cancelada'; });
-  var recs = recursos_();
 
-  return leer_('Unidades').filter(function (u) { return u.activa; })
-    .sort(function (a, b) { return Number(a.orden) - Number(b.orden); })
-    .map(function (u) {
-      var e = estados.filter(function (x) { return x.idUnidad === u.id; })[0];
-      var deUnidad = reservas.filter(function (r) { return r.idUnidad === u.id; });
+  return recursos_().map(function (rec) {
+    var e = estados.filter(function (x) { return x.idUnidad === rec.id; })[0];
+    var suyas = reservas.filter(function (r) { return r.recurso === rec.id; });
 
-      var sale = deUnidad.filter(function (r) { return ymd_(r.checkOut) === dia; })[0];
-      var llega = deUnidad.filter(function (r) { return ymd_(r.checkIn) === dia; })[0];
-      var dentro = deUnidad.filter(function (r) {
-        return ymd_(r.checkIn) < dia && ymd_(r.checkOut) > dia && r.estado !== 'checkout';
-      })[0];
+    var sale = suyas.filter(function (r) { return ymd_(r.checkOut) === dia; })[0];
+    var llega = suyas.filter(function (r) { return ymd_(r.checkIn) === dia; })[0];
+    var dentro = suyas.filter(function (r) {
+      return ymd_(r.checkIn) < dia && ymd_(r.checkOut) > dia && r.estado !== 'checkout';
+    })[0];
 
-      var yaSalio = sale && sale.estado === 'checkout';
-      var situacion, detalle, orden;
-      if (yaSalio && llega) { situacion = 'salio_y_llega'; detalle = 'Ya se fue · llega otro huésped hoy'; orden = 1; }
-      else if (yaSalio) { situacion = 'salio'; detalle = 'Ya se fue'; orden = 2; }
-      else if (sale && llega) { situacion = 'sale_y_llega'; detalle = 'Sale hoy · llega otro huésped hoy'; orden = 3; }
-      else if (sale) { situacion = 'sale'; detalle = 'Sale hoy'; orden = 4; }
-      else if (llega) { situacion = 'llega'; detalle = 'Llega hoy'; orden = 5; }
-      else if (dentro) { situacion = 'ocupada'; detalle = 'Huésped alojado'; orden = 6; }
-      else { situacion = 'libre'; detalle = 'Sin movimiento hoy'; orden = 7; }
+    var yaSalio = !!(sale && sale.estado === 'checkout');
+    var yaLlego = !!(llega && llega.estado === 'en_casa');
 
-      return {
-        id: u.id, nombre: u.nombre, grupo: u.grupo,
-        estado: e ? e.estado : 'limpia',
-        responsable: e ? e.responsable : '',
-        notas: e ? e.notas : '',
-        actualizado: e ? String(e.actualizado) : '',
-        situacion: situacion, detalle: detalle, orden: orden,
-        saleHoy: !!sale, llegaHoy: !!llega, yaSalio: !!yaSalio,
-        huespedSale: sale ? sale.huesped : '',
-        huespedLlega: llega ? llega.huesped : ''
-      };
-    })
-    .sort(function (a, b) {
-      if (a.orden !== b.orden) return a.orden - b.orden;
-      return String(a.nombre).localeCompare(String(b.nombre));
-    });
+    var situacion, detalle, orden;
+    if (yaSalio && llega && !yaLlego) { situacion = 'salio_y_llega'; detalle = 'Ya se fue · llega otro huésped hoy'; orden = 1; }
+    else if (yaSalio) { situacion = 'salio'; detalle = 'Ya se fue'; orden = 2; }
+    else if (sale && llega && !yaLlego) { situacion = 'sale_y_llega'; detalle = 'Sale hoy · llega otro huésped hoy'; orden = 3; }
+    else if (sale && !yaSalio) { situacion = 'sale'; detalle = 'Sale hoy, todavía no se va'; orden = 4; }
+    else if (yaLlego) { situacion = 'llego'; detalle = 'Ya hizo el check-in, está adentro'; orden = 6; }
+    else if (llega) { situacion = 'llega'; detalle = 'Llega hoy, todavía no llega'; orden = 5; }
+    else if (dentro) { situacion = 'ocupada'; detalle = 'Huésped alojado'; orden = 6; }
+    else { situacion = 'libre'; detalle = 'Sin movimiento hoy'; orden = 7; }
+
+    return {
+      id: rec.id, idUnidad: rec.idUnidad, unidad: rec.unidad, cama: rec.nombre || '',
+      nombre: rec.unidad + (rec.nombre ? ' — ' + rec.nombre : ''),
+      grupo: rec.grupo,
+      estado: e ? e.estado : 'limpia',
+      responsable: e ? e.responsable : '',
+      notas: e ? e.notas : '',
+      actualizado: e ? String(e.actualizado) : '',
+      situacion: situacion, detalle: detalle, orden: orden,
+      saleHoy: !!sale, llegaHoy: !!llega, yaSalio: yaSalio, yaLlego: yaLlego,
+      huespedSale: sale ? sale.huesped : '',
+      huespedLlega: llega ? llega.huesped : '',
+      huespedDentro: dentro ? dentro.huesped : (yaLlego ? llega.huesped : '')
+    };
+  }).sort(function (a, b) {
+    if (a.orden !== b.orden) return a.orden - b.orden;
+    return String(a.nombre).localeCompare(String(b.nombre));
+  });
 }
 
 function panelAseo(token) {
@@ -626,6 +629,9 @@ function marcarAseo(token, idUnidad, estado, notas) {
 
 function marcarAseo_(idUnidad, estado, quien, notas) {
   if (ESTADOS_ASEO.indexOf(estado) === -1) throw new Error('Estado de aseo no válido: ' + estado);
+  if (!recursos_().some(function (x) { return x.id === idUnidad; })) {
+    throw new Error('Ese alojamiento no existe.');
+  }
   guardarOCrear_('Aseo', 'idUnidad', idUnidad, {
     idUnidad: idUnidad, estado: estado, responsable: quien,
     notas: notas || '', actualizado: ahora_()
@@ -697,14 +703,8 @@ function guardarFicha_(idReserva, d) {
   });
   // Si firma antes de llegar, la reserva sigue "confirmada": solo pasa a
   // "en casa" cuando el registro se hace el día de la llegada o después.
-  // Pasa a "en casa" solo si corresponde: el día de la llegada o después, y
-  // únicamente desde un estado previo a la llegada. Firmar no puede devolver
-  // a la casa a alguien que ya hizo el check-out.
-  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
-  var previos = ['confirmada', 'tentativa'];
-  if (r && previos.indexOf(String(r.estado)) > -1 && ymd_(r.checkIn) <= hoy_()) {
-    actualizar_('Reservas', 'id', idReserva, { estado: 'en_casa' });
-  }
+  // El check-in lo hace siempre recepción a mano, así que firmar la ficha
+  // nunca cambia el estado de la reserva por su cuenta.
   return true;
 }
 
