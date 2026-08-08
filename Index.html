@@ -162,9 +162,44 @@
   .mo footer{display:flex;gap:8px;justify-content:flex-end;padding:14px 18px;
     border-top:1px solid var(--line);flex-wrap:wrap}
   .mo footer .left{margin-right:auto;display:flex;gap:8px}
+  .mo.ancho{max-width:660px}
   .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .x{width:30px;height:30px;border-radius:6px;color:var(--tx2);font-size:20px;line-height:1}
   .x:hover{background:var(--line2)}
+
+  /* ---------- Cuenta del huésped ---------- */
+  .ctaResumen{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:14px}
+  .ctaResumen div{background:var(--surface);padding:10px 12px}
+  .ctaResumen .k{font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.03em}
+  .ctaResumen .v{font-size:16px;font-weight:600;margin-top:2px}
+  .ctaResumen .v.debe{color:var(--dan)}
+  .ctaResumen .v.pagado{color:var(--ok)}
+  .ctaResumen .nota{font-size:11px;color:var(--tx3);margin-top:2px}
+
+  .ctaMov{width:100%;border-collapse:collapse;font-size:13px}
+  .ctaMov th{text-align:left;font-size:11px;color:var(--tx3);font-weight:500;
+    text-transform:uppercase;letter-spacing:.03em;padding:6px 8px;border-bottom:1px solid var(--line)}
+  .ctaMov td{padding:7px 8px;border-bottom:1px solid var(--line2)}
+  .ctaMov td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+  .ctaMov tr.pago td{color:var(--ok)}
+  .ctaMov .cen{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:20px;
+    background:var(--line2);color:var(--tx2);margin-left:6px}
+  .ctaMov .cen.restaurante{background:#fdeee0;color:#8a4b12}
+  .ctaMov .quitar{color:var(--tx3);font-size:15px;line-height:1;padding:2px 6px;border-radius:5px}
+  .ctaMov .quitar:hover{background:var(--line2);color:var(--dan)}
+
+  .ctaCaja{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:14px}
+  .ctaTit{font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:9px}
+  .ctaForm{display:flex;gap:7px;flex-wrap:wrap}
+  .ctaForm select,.ctaForm input{flex:1 1 120px;min-width:0}
+  .ctaForm #ctaCant{flex:0 0 62px}
+  .ctaForm button{flex:0 0 auto}
+  .ctaRapidos{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
+  .ctaRapidos button{font-size:12px;padding:4px 10px;border:1px solid var(--line);
+    border-radius:20px;color:var(--tx2);background:var(--surface)}
+  .ctaRapidos button:hover{border-color:var(--ac);color:var(--ac)}
+  @media(max-width:600px){ .ctaForm select,.ctaForm input{flex:1 1 100%} }
 
   .daterow{border:1px solid var(--line);border-radius:6px;padding:10px 12px;
     display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;background:var(--surface)}
@@ -431,6 +466,25 @@
       <div id="infCuerpo"></div>
     </section>
 
+    <!-- ---------- Cierre de día ---------- -->
+    <section id="v-cierre" class="hide">
+      <div class="card">
+        <h2>Cierre de día</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Cierra la noche: anota en la cuenta de cada huésped alojado el alojamiento
+          de esa noche y deja la lista de lo que quedó pendiente. Se puede ejecutar
+          más de una vez sin miedo, no cobra dos veces la misma noche.
+          El check-in y los no-show los sigue decidiendo recepción a mano.
+        </p>
+        <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+          <div class="fld" style="margin:0"><label>Noche</label><input type="date" id="cieF"></div>
+          <button class="btn gh sm" id="cieVer">Ver el día</button>
+          <button class="btn sm" id="cieCerrar">Cerrar el día</button>
+        </div>
+      </div>
+      <div id="cieCuerpo"></div>
+    </section>
+
     <!-- ---------- Alojamiento ---------- -->
     <section id="v-inv" class="hide">
       <div class="card">
@@ -441,6 +495,15 @@
         </p>
         <div id="invLista"></div>
         <button class="btn sm" id="invNueva" style="margin-top:14px">Agregar alojamiento</button>
+      </div>
+      <div class="card">
+        <h2>Cómo publicarlo en un canal</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          En Booking o Airbnb no se publica pieza por pieza sino por categoría, diciendo
+          cuántas unidades tiene cada una. Esto es lo que hoy corresponde publicar.
+          Adentro sigues asignando la habitación exacta, como siempre.
+        </p>
+        <div id="invCats"></div>
       </div>
     </section>
 
@@ -528,7 +591,13 @@
         </div>
         <div class="fld"><label>Total ($)</label><input id="rTot" type="number" min="0" step="1000"></div>
       </div>
-      <div class="fld"><label>Abonado ($)</label><input id="rAnt" type="number" min="0" step="1000" value="0"></div>
+      <div class="fld">
+        <label>Abonado ($)</label>
+        <input id="rAnt" type="number" min="0" step="1000" value="0">
+        <div class="muted hide" id="rAntNota" style="font-size:11.5px;margin-top:5px">
+          Los pagos se llevan en la <b>Cuenta</b> del huésped; acá solo se muestra el total pagado.
+        </div>
+      </div>
       <div class="fld hide" id="rAddonBox">
         <label class="chk"><input type="checkbox" id="rAddon"> Programa tinaja + tabla de sushi</label>
         <input type="datetime-local" id="rAddonF" class="hide" style="margin-top:8px">
@@ -538,6 +607,7 @@
     </div>
     <footer>
       <div class="left">
+        <button class="btn gh sm hide" id="rCuenta">Cuenta</button>
         <button class="btn gh sm hide" id="rVerFicha">Ver ficha firmada</button>
         <button class="btn gh sm hide" id="rEnviar">Copiar enlace de la ficha</button>
         <button class="btn gh sm hide" id="rFicha">Firmar aquí</button>
@@ -545,6 +615,66 @@
       </div>
       <button class="btn gh" data-cerrar="mRes">Cerrar</button>
       <button class="btn" id="rGuardar">Guardar</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ==================== CUENTA DEL HUÉSPED ==================== -->
+<div class="ov hide" id="mCta">
+  <div class="mo ancho">
+    <header><h3 id="ctaTit">Cuenta</h3><button class="x" data-cerrar="mCta">×</button></header>
+    <div class="body">
+      <div class="ctaResumen" id="ctaResumen"></div>
+
+      <label class="chk" style="margin:4px 0 6px">
+        <input type="checkbox" id="ctaExento">
+        Turista extranjero sin domicilio en Chile — exento de IVA
+      </label>
+      <div class="muted" style="font-size:11.5px;margin:0 0 12px 24px">
+        Se aplica a toda la cuenta, también a lo que ya estaba anotado.
+      </div>
+      <div class="fld hide" id="ctaDocBox">
+        <label>Tarjeta de turismo (PDI)</label>
+        <input id="ctaDoc" placeholder="Número de la tarjeta que entregan al entrar al país">
+      </div>
+
+      <div id="ctaMovs"></div>
+
+      <div class="ctaCaja">
+        <div class="ctaTit">Agregar un cargo</div>
+        <div class="ctaRapidos" id="ctaRapidos"></div>
+        <div class="ctaForm">
+          <select id="ctaTipo"></select>
+          <input id="ctaDesc" placeholder="Descripción">
+          <input id="ctaCant" type="number" min="1" value="1" title="Cantidad">
+          <input id="ctaMonto" type="number" min="0" step="500" placeholder="Monto c/u">
+          <button class="btn sm" id="ctaAgregar">Agregar</button>
+        </div>
+      </div>
+
+      <div class="ctaCaja">
+        <div class="ctaTit">Registrar un pago</div>
+        <div class="ctaForm">
+          <select id="ctaMedio">
+            <option value="efectivo">Efectivo</option>
+            <option value="transferencia">Transferencia</option>
+            <option value="tarjeta">Tarjeta</option>
+            <option value="booking">Lo cobra Booking</option>
+            <option value="otro">Otro</option>
+          </select>
+          <input id="ctaPagoDesc" placeholder="Detalle (opcional)">
+          <input id="ctaPago" type="number" min="0" step="1000" placeholder="Monto">
+          <button class="btn sm" id="ctaPagar">Registrar pago</button>
+        </div>
+      </div>
+      <div class="err hide" id="ctaErr"></div>
+    </div>
+    <footer>
+      <div class="left">
+        <button class="btn gh sm" id="ctaPostear">Postear el alojamiento</button>
+        <button class="btn gh sm" id="ctaPrograma">Cargar tinaja + sushi</button>
+      </div>
+      <button class="btn gh" data-cerrar="mCta">Cerrar</button>
     </footer>
   </div>
 </div>
@@ -666,6 +796,17 @@
         </div>
       </div>
       <div class="fld"><label>Capacidad (personas)</label><input id="uCap" type="number" min="1" value="2"></div>
+      <div class="fld">
+        <label>Categoría</label>
+        <input id="uCat" placeholder="Matrimonial con baño privado" list="listaCategorias">
+        <datalist id="listaCategorias"></datalist>
+        <div class="muted" style="font-size:11.5px;margin-top:5px">
+          No cambia cómo se reserva: cada reserva sigue tomando una pieza concreta.
+          Sirve para buscar "algo matrimonial con baño privado" y para saber cómo
+          agrupar la oferta al publicarla en Booking. Si lo dejas en blanco se
+          arma solo con la capacidad y el baño.
+        </div>
+      </div>
       <div class="fld">
         <label class="chk"><input type="checkbox" id="uPorCama"> Se vende por camas separadas (estilo hostal)</label>
       </div>
@@ -916,6 +1057,7 @@ var TABS=[
   {id:'cal',  t:'Calendario',  roles:['admin','recepcion']},
   {id:'hoy',  t:'Hoy',         roles:['admin','recepcion']},
   {id:'aseo', t:'Aseo',        roles:['admin','recepcion','aseo']},
+  {id:'cierre', t:'Cierre',    roles:['admin','recepcion']},
   {id:'inf',  t:'Informes',    roles:['admin']},
   {id:'inv',  t:'Alojamiento', roles:['admin']},
   {id:'eq',   t:'Equipo',      roles:['admin']}
@@ -944,6 +1086,7 @@ function ver(id){
   if(id==='cal')  cargarCal();
   if(id==='hoy')  cargarHoy();
   if(id==='aseo') cargarAseo();
+  if(id==='cierre') prepararCierre();
   if(id==='inf')  prepararInformes();
   if(id==='inv')  cargarInventario();
   if(id==='eq')   cargarEquipo();
@@ -1468,6 +1611,8 @@ function nuevaReserva(rec, entrada, salida){
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
   $('rEnviar').classList.add('hide'); $('rVerFicha').classList.add('hide');
+  $('rCuenta').classList.add('hide');
+  $('rAnt').readOnly=false; $('rAntNota').classList.add('hide');
   $('rPaso').classList.add('hide'); $('rGrupoTodo').classList.add('hide');
   $('rGrupoChk').checked=false;
   pintarFechas(); recalcularTotal();
@@ -1492,6 +1637,10 @@ function abrirReserva(r){
   $('rAddonBox').classList.toggle('hide', !(rec && rec.grupo==='Glamping'));
   $('rErr').classList.add('hide');
   $('rCancelar').classList.remove('hide');
+  // El abonado es el espejo de los pagos de la cuenta: se edita allá.
+  var conPagos = (Number(r.anticipo)||0) > 0;
+  $('rAnt').readOnly = conPagos;
+  $('rAntNota').classList.toggle('hide', !conPagos);
   pintarPaso(r);
   pintarFechas();
   abrir('mRes');
@@ -1535,7 +1684,179 @@ function pintarPaso(r){
   $('rVerFicha').classList.toggle('hide', !r.firmada);
   $('rFicha').classList.toggle('hide', !!r.firmada);
   $('rEnviar').classList.toggle('hide', !!r.firmada);
+  $('rCuenta').classList.remove('hide');
 }
+
+/* ==================================================================
+   Cuenta del huésped
+   Los cargos suman, los pagos restan y el saldo es la diferencia.
+   El alojamiento lo postea el cierre de día noche por noche, así que
+   mientras la estadía está en curso se muestra además lo que falta por
+   postear: si no, el saldo engañaría.
+   ================================================================== */
+var CTA = null;                  // última cuenta traída del servidor
+
+var TIPOS_CARGO = [
+  ['restaurante','Restaurante'], ['bar','Bar'], ['tinaja','Tinaja'], ['sushi','Sushi'],
+  ['lavanderia','Lavandería'], ['danos','Daños'], ['alojamiento','Alojamiento'], ['otro','Otro']
+];
+var RAPIDOS = [
+  { tipo:'restaurante', texto:'Cena', monto:0 },
+  { tipo:'bar', texto:'Bar', monto:0 },
+  { tipo:'lavanderia', texto:'Lavandería', monto:0 },
+  { tipo:'danos', texto:'Daños', monto:0 }
+];
+
+$('rCuenta').onclick=function(){ if(RES) abrirCuenta(RES.id, RES.huesped); };
+
+function abrirCuenta(id, huesped){
+  $('ctaTit').textContent = 'Cuenta de ' + (huesped||'');
+  $('ctaErr').classList.add('hide');
+  $('ctaMovs').innerHTML='<div class="esqueleto"></div>';
+  $('ctaResumen').innerHTML='';
+  abrir('mCta');
+  refrescarCuenta(id);
+}
+
+function refrescarCuenta(id){
+  return srv('cuentaDe')(id).then(function(c){
+    CTA=c; pintarCuenta();
+  }).catch(function(e){ fallo(e); });
+}
+
+function pintarCuenta(){
+  var c=CTA; if(!c) return;
+  var saldo = c.saldoProyectado;
+  $('ctaResumen').innerHTML =
+    caja('Cargos', plata(c.cargos)) +
+    caja('Pagado', plata(c.pagos), 'pagado') +
+    caja(saldo>0?'Por cobrar':(saldo<0?'A favor del huésped':'Saldo'),
+         plata(Math.abs(saldo)), saldo>0?'debe':(saldo<0?'pagado':''),
+         c.alojamientoPendiente>0
+           ? 'incluye '+plata(c.alojamientoPendiente)+' de alojamiento por postear' : '') +
+    caja(c.exentoIva?'Exento de IVA':('IVA '+c.ivaPct+'%'),
+         c.exentoIva ? plata(c.neto) : plata(c.iva),
+         '', c.exentoIva ? 'neto, sin impuesto' : 'neto '+plata(c.neto));
+
+  $('ctaExento').checked = !!c.exentoIva;
+  $('ctaDoc').value = c.docTurismo || '';
+  $('ctaDocBox').classList.toggle('hide', !c.exentoIva);
+
+  if(!c.movimientos.length){
+    $('ctaMovs').innerHTML='<div class="empty">Todavía no hay movimientos en esta cuenta.</div>';
+  } else {
+    var h='<table class="ctaMov"><thead><tr><th>Fecha</th><th>Detalle</th>'+
+          '<th class="n">Monto</th><th></th></tr></thead><tbody>';
+    c.movimientos.forEach(function(m){
+      var etiqueta = m.clase==='pago'
+        ? (m.descripcion||'Pago')+' <span class="cen">'+m.medio+'</span>'
+        : m.descripcion + (m.cantidad>1 ? ' <span class="muted">×'+m.cantidad+'</span>' : '') +
+          (m.centro ? '<span class="cen '+m.centro+'">'+m.centro+'</span>' : '') +
+          (m.exento ? '<span class="cen">exento</span>' : '');
+      h+='<tr class="'+m.clase+'"><td class="muted">'+corto(m.fecha)+'</td><td>'+etiqueta+'</td>'+
+         '<td class="n">'+(m.clase==='pago'?'− ':'')+plata(m.total)+'</td>'+
+         '<td class="n"><button class="quitar" data-mov="'+m.id+'" title="Anular">×</button></td></tr>';
+    });
+    $('ctaMovs').innerHTML=h+'</tbody></table>';
+    Array.prototype.forEach.call($('ctaMovs').querySelectorAll('[data-mov]'), function(b){
+      b.onclick=function(){
+        if(!confirm('¿Anular este movimiento? Queda en la planilla como rastro, pero deja de sumar.')) return;
+        srv('anularMovimiento')(b.dataset.mov, '')
+          .then(function(){ return refrescarCuenta(CTA.idReserva); })
+          .then(function(){ toast('Movimiento anulado'); recargarCal(); })
+          .catch(fallo);
+      };
+    });
+  }
+
+  // Los botones de arriba solo tienen sentido si queda algo que hacer.
+  $('ctaPostear').classList.toggle('hide', c.alojamientoPendiente<=0);
+  $('ctaPostear').textContent='Postear el alojamiento ('+plata(c.alojamientoPendiente)+')';
+}
+
+function caja(k, v, clase, nota){
+  return '<div><div class="k">'+k+'</div><div class="v '+(clase||'')+'">'+v+'</div>'+
+         (nota?'<div class="nota">'+nota+'</div>':'')+'</div>';
+}
+
+(function(){
+  var sel=$('ctaTipo');
+  TIPOS_CARGO.forEach(function(t){
+    var o=document.createElement('option'); o.value=t[0]; o.textContent=t[1]; sel.appendChild(o);
+  });
+  var cont=$('ctaRapidos');
+  RAPIDOS.forEach(function(r){
+    var b=document.createElement('button'); b.type='button'; b.textContent=r.texto;
+    b.onclick=function(){ $('ctaTipo').value=r.tipo; $('ctaDesc').value=r.texto; $('ctaMonto').focus(); };
+    cont.appendChild(b);
+  });
+})();
+
+$('ctaExento').onchange=function(){
+  if(!CTA) return;
+  var on=$('ctaExento').checked;
+  $('ctaDocBox').classList.toggle('hide', !on);
+  srv('marcarExentoIva')(CTA.idReserva, on, $('ctaDoc').value.trim())
+    .then(function(){ return refrescarCuenta(CTA.idReserva); })
+    .then(function(){ toast(on?'Marcado como turista exento de IVA':'Vuelve a pagar IVA'); })
+    .catch(fallo);
+};
+$('ctaDoc').onchange=function(){
+  if(!CTA) return;
+  srv('marcarExentoIva')(CTA.idReserva, $('ctaExento').checked, $('ctaDoc').value.trim())
+    .then(function(){ toast('Tarjeta de turismo guardada'); }).catch(fallo);
+};
+
+$('ctaAgregar').onclick=function(){
+  if(!CTA) return;
+  var monto=Number($('ctaMonto').value)||0;
+  if(monto<=0){ errCta('Escribe el monto del cargo.'); return; }
+  ocupado('ctaAgregar', srv('agregarCargo')(CTA.idReserva, {
+    tipo: $('ctaTipo').value,
+    descripcion: $('ctaDesc').value.trim(),
+    cantidad: Number($('ctaCant').value)||1,
+    unitario: monto
+  })).then(function(){
+    $('ctaDesc').value=''; $('ctaMonto').value=''; $('ctaCant').value=1;
+    return refrescarCuenta(CTA.idReserva);
+  }).then(function(){ toast('Cargo agregado'); }).catch(function(e){ errCta(e.message||String(e)); });
+};
+
+$('ctaPagar').onclick=function(){
+  if(!CTA) return;
+  var monto=Number($('ctaPago').value)||0;
+  if(monto<=0){ errCta('Escribe el monto del pago.'); return; }
+  ocupado('ctaPagar', srv('agregarPago')(CTA.idReserva, {
+    monto: monto, medio: $('ctaMedio').value,
+    descripcion: $('ctaPagoDesc').value.trim()
+  })).then(function(){
+    $('ctaPago').value=''; $('ctaPagoDesc').value='';
+    return refrescarCuenta(CTA.idReserva);
+  }).then(function(){ toast('Pago registrado'); recargarCal(); })
+    .catch(function(e){ errCta(e.message||String(e)); });
+};
+
+$('ctaPostear').onclick=function(){
+  if(!CTA) return;
+  ocupado('ctaPostear', srv('postearAlojamiento')(CTA.idReserva))
+    .then(function(d){
+      return refrescarCuenta(CTA.idReserva).then(function(){
+        toast(d.noches ? d.noches+' noche(s) posteada(s)' : 'No quedaban noches por postear');
+      });
+    }).catch(fallo);
+};
+
+$('ctaPrograma').onclick=function(){
+  if(!CTA) return;
+  ocupado('ctaPrograma', srv('cargarPrograma')(CTA.idReserva, 0))
+    .then(function(d){
+      return refrescarCuenta(CTA.idReserva).then(function(){
+        toast('Programa cargado: '+plata(d.tinaja)+' al lodge y '+plata(d.sushi)+' al restaurante');
+      });
+    }).catch(fallo);
+};
+
+function errCta(m){ var e=$('ctaErr'); e.textContent=m; e.classList.remove('hide'); }
 
 function avanzarEstado(nuevo, aviso){
   if(!RES) return;
@@ -1831,7 +2152,11 @@ function pintarHoy(d){
     ['Saldo', function(r){ return r.saldo>0? '<b>'+plata(r.saldo)+'</b>' : '<span class="muted">pagado</span>'; }]
   ]), 'Sin salidas hoy.');
   tabla('tCasa', d.enCasa, comunes.concat([
-    ['Sale', function(r){ return largo(r.checkOut); }]
+    ['Sale', function(r){ return largo(r.checkOut); }],
+    ['Cuenta', function(r){
+      return '<button class="btn gh sm" data-cta="'+r.id+'" data-nom="'+r.huesped+'">'+
+             (r.saldo>0 ? plata(r.saldo) : 'Ver')+'</button>';
+    }]
   ]), 'No hay huéspedes alojados.');
   tabla('tAdd', d.addons, [
     ['Huésped', function(r){ return r.huesped; }],
@@ -1840,6 +2165,12 @@ function pintarHoy(d){
     ['Llegada', function(r){ return largo(r.checkIn); }],
     ['Agendado',function(r){ return r.addonFecha? String(r.addonFecha).replace('T',' ') : '<span class="muted">por coordinar</span>'; }]
   ], 'Sin programas de tinaja + sushi pendientes.');
+
+  // Desde Hoy se llega a la cuenta de un tirón: es lo que se necesita cuando
+  // el huésped está parado en el mesón preguntando cuánto debe.
+  Array.prototype.forEach.call(document.querySelectorAll('#v-hoy [data-cta]'), function(b){
+    b.onclick=function(){ abrirCuenta(b.dataset.cta, b.dataset.nom); };
+  });
 }
 function etq(e){
   return {tentativa:'Tentativa',confirmada:'Confirmada',en_casa:'Check-in',
@@ -1941,6 +2272,85 @@ $('aseoLink').onclick=function(){
 };
 
 /* ==================================================================
+   Cierre de día
+   ================================================================== */
+function prepararCierre(){
+  if(!$('cieF').value){
+    // Por defecto la noche que acaba de terminar: es la que se cierra.
+    $('cieF').value = mas(fmtHoy(), -1);
+  }
+  verCierre();
+}
+
+function verCierre(){
+  esqueleto('cieCuerpo',3);
+  srv('panelCierre')($('cieF').value).then(pintarCierre).catch(fallo);
+}
+
+$('cieVer').onclick=verCierre;
+$('cieF').onchange=verCierre;
+$('cieCerrar').onclick=function(){
+  ocupado('cieCerrar', srv('cierreDia')($('cieF').value)).then(function(d){
+    pintarCierre(d);
+    toast(d.nochesPosteadas
+      ? 'Día cerrado · '+d.nochesPosteadas+' noche(s) anotada(s) en las cuentas'
+      : 'Día cerrado · no quedaban noches por anotar');
+    recargarCal();
+  }).catch(fallo);
+};
+
+function pintarCierre(d){
+  if(!d){ $('cieCuerpo').innerHTML=''; return; }
+  var rotulo={
+    sin_llegar:'No se registró la llegada',
+    sin_salir:'No se marcó el check-out',
+    sin_firma:'Ficha sin firmar',
+    saldo:'Se fue con saldo pendiente',
+    sucia:'Habitación sucia'
+  };
+  var h='<div class="card">'+
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+
+      '<h2 style="margin:0">Noche del '+largo(d.fecha)+'</h2>'+
+      (d.cerrado
+        ? '<span class="tag en_casa">Cerrado por '+(d.cerradoPor||'')+'</span>'
+        : '<span class="tag tentativa">Sin cerrar</span>')+
+    '</div>'+
+    '<div class="ctaResumen">'+
+      caja('Alojamiento', plata(d.alojamiento))+
+      caja('Consumos', plata(d.consumos))+
+      caja('Total del día', plata(d.total))+
+      caja('Cobrado', plata(d.pagos), 'pagado')+
+      caja('Neto / IVA', plata(d.neto), '', 'IVA '+plata(d.iva))+
+    '</div>'+
+    '<div class="ctaResumen" style="margin-top:12px">'+
+      caja('Lodge', plata((d.porCentro&&d.porCentro.lodge)||0))+
+      caja('Restaurante', plata((d.porCentro&&d.porCentro.restaurante)||0))+
+    '</div></div>';
+
+  h+='<div class="card"><h2>Antes de irse a dormir</h2>';
+  if(!d.avisos.length){
+    h+='<div class="empty">Todo en orden: nada pendiente de esta noche.</div>';
+  } else {
+    h+='<table><thead><tr><th>Qué revisar</th><th>Quién</th><th></th></tr></thead><tbody>';
+    d.avisos.forEach(function(a){
+      h+='<tr><td><b>'+(rotulo[a.tipo]||a.tipo)+'</b><br><span class="muted">'+a.texto+'</span></td>'+
+         '<td>'+(a.huesped||a.idUnidad||'')+(a.monto?' <b>'+plata(a.monto)+'</b>':'')+'</td>'+
+         '<td>'+(a.idReserva?'<button class="btn gh sm" data-ver="'+a.idReserva+'">Abrir</button>':'')+'</td></tr>';
+    });
+    h+='</tbody></table>';
+  }
+  h+='</div>';
+  $('cieCuerpo').innerHTML=h;
+
+  Array.prototype.forEach.call($('cieCuerpo').querySelectorAll('[data-ver]'), function(b){
+    b.onclick=function(){
+      var r=CAL.reservas.filter(function(x){ return x.id===b.dataset.ver; })[0];
+      if(r) abrirReserva(r); else abrirCuenta(b.dataset.ver, '');
+    };
+  });
+}
+
+/* ==================================================================
    Informes
    ================================================================== */
 function prepararInformes(){
@@ -1975,7 +2385,8 @@ function cargarInformes(){
   srv('informes')($('infD').value, $('infH').value).then(function(d){
     if(!d){ $('infCuerpo').innerHTML='<div class="card"><div class="empty">Sin datos.</div></div>'; return; }
     $('infCuerpo').innerHTML =
-      tarjetasInforme(d) + tablaInforme('Por canal de reserva', d.porCanal,
+      tarjetasInforme(d) + tarjetasCaja(d) +
+      tablaInforme('Por canal de reserva', d.porCanal,
         [['Canal','canal'],['Reservas','reservas'],['Noches','noches'],['Ingresos','ingresos']]) +
       tablaInforme('Por alojamiento', d.porUnidad,
         [['Alojamiento','unidad'],['Noches','noches'],['Ingresos','ingresos']]) +
@@ -2003,6 +2414,42 @@ function tarjetasInforme(d){
         '<b style="font-size:22px;display:block;margin:3px 0 2px">'+k[1]+'</b>'+
         '<div style="font-size:11.5px;color:var(--tx3)">'+k[2]+'</div></div>';
     }).join('')+'</div></div>';
+}
+
+/* Lo anterior responde "cuánto vendimos". Esto responde otra pregunta:
+   "cuánto pasó por la caja y de dónde salió", que es lo que se reparte con
+   la cocina y lo que se declara. Sale de las cuentas de los huéspedes. */
+function tarjetasCaja(d){
+  var c=d.caja||{}, cen=d.porCentro||{};
+  var rotulo={ alojamiento:'Alojamiento', tinaja:'Tinaja', sushi:'Sushi',
+    restaurante:'Restaurante', bar:'Bar', lavanderia:'Lavandería',
+    danos:'Daños', otro:'Otro' };
+  var lista=function(titulo, filas){
+    if(!filas || !filas.length) return '';
+    var max=Math.max.apply(null, filas.map(function(f){ return f.total; }))||1;
+    return '<div style="margin-top:14px"><div class="ctaTit">'+titulo+'</div><table><tbody>'+
+      filas.map(function(f){
+        return '<tr><td style="width:38%">'+(rotulo[f.nombre]||f.nombre)+'</td>'+
+          '<td><div style="background:var(--line2);border-radius:4px;height:8px">'+
+          '<div style="background:var(--ac);height:8px;border-radius:4px;width:'+
+          Math.round(f.total/max*100)+'%"></div></div></td>'+
+          '<td style="text-align:right;white-space:nowrap">'+plata(f.total)+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+  };
+  return '<div class="card"><h2>Caja del período</h2>'+
+    '<p class="muted" style="font-size:12.5px;margin-bottom:12px">'+
+      'Tomado de la cuenta de cada huésped: lo que se cargó y lo que se cobró.</p>'+
+    '<div class="ctaResumen">'+
+      caja('Cargado', plata(c.cargos||0))+
+      caja('Cobrado', plata(c.pagos||0), 'pagado')+
+      caja('Lodge', plata(cen.lodge||0))+
+      caja('Restaurante', plata(cen.restaurante||0))+
+      caja('Neto', plata(c.neto||0), '', 'IVA '+plata(c.iva||0))+
+      (c.exento ? caja('Exento de IVA', plata(c.exento), '', 'turistas extranjeros') : '')+
+    '</div>'+
+    lista('Por tipo de consumo', d.porTipo)+
+    lista('Por medio de pago', d.porMedio)+
+  '</div>';
 }
 
 function tablaInforme(titulo, filas, cols){
@@ -2085,6 +2532,7 @@ var UNI=null, CAMA=null;
 
 function cargarInventario(){
   esqueleto('invLista',4);
+  pintarCategorias();
   srv('inventarioAdmin')().then(function(lista){
     lista = lista || [];
     var c=$('invLista'); c.innerHTML='';
@@ -2153,11 +2601,47 @@ function abrirUnidad(u){
   $('uBano').value=u?u.bano:'privado';
   $('uCap').value=u?u.capacidad:2;
   $('uPorCama').checked=u?u.porCama:false;
+  $('uCat').value=u?(u.categoria||''):'';
   $('uPb').value=u?u.precioBase:'';
   $('uPa').value=u?u.precioAlta:'';
   $('uPrecios').classList.toggle('hide', $('uPorCama').checked);
+  // Sugerir las categorías que ya existen, para no inventar una nueva por descuido.
+  var dl=$('listaCategorias'); dl.innerHTML='';
+  categoriasDelInventario().forEach(function(c){
+    var o=document.createElement('option'); o.value=c.categoria; dl.appendChild(o);
+  });
   $('uErr').classList.add('hide');
   abrir('mUni');
+}
+
+function pintarCategorias(){
+  var cats=categoriasDelInventario();
+  if(!cats.length){ $('invCats').innerHTML='<div class="empty">Sin alojamientos.</div>'; return; }
+  var h='<table><thead><tr><th>Categoría</th><th>Unidades</th><th>Desde</th>'+
+        '<th>Cuáles</th></tr></thead><tbody>';
+  cats.forEach(function(c){
+    h+='<tr><td><b>'+c.categoria+'</b></td>'+
+       '<td>'+c.unidades+'</td>'+
+       '<td>'+(c.desde?plata(c.desde):'<span class="muted">—</span>')+'</td>'+
+       '<td class="muted" style="font-size:12px">'+c.nombres.join(' · ')+'</td></tr>';
+  });
+  $('invCats').innerHTML=h+'</tbody></table>';
+}
+
+/* Las categorías que hay hoy, con cuántas unidades tiene cada una: es
+   exactamente lo que se publica como "tipo de habitación" en un canal. */
+function categoriasDelInventario(){
+  var m={};
+  CAL.recursos.forEach(function(r){
+    var c=r.categoria || 'Sin categoría';
+    if(!m[c]) m[c]={ categoria:c, unidades:0, desde:0, nombres:[] };
+    m[c].unidades++;
+    m[c].nombres.push(r.unidad+(r.nombre?' — '+r.nombre:''));
+    var p=Number(r.precioBase)||0;
+    if(p>0 && (!m[c].desde || p<m[c].desde)) m[c].desde=p;
+  });
+  return Object.keys(m).map(function(k){ return m[k]; })
+    .sort(function(a,b){ return b.unidades-a.unidades || a.categoria.localeCompare(b.categoria); });
 }
 $('invNueva').onclick=function(){ abrirUnidad(null); };
 $('uPorCama').addEventListener('change', function(){
@@ -2169,6 +2653,7 @@ $('uGuardar').onclick=function(){
   ocupado('uGuardar', srv('guardarUnidad')({
     id: UNI?UNI.id:'', nombre:$('uNom').value.trim(), grupo:$('uGrupo').value,
     bano:$('uBano').value, capacidad:+$('uCap').value||1, porCama:$('uPorCama').checked,
+    categoria:$('uCat').value.trim(),
     precioBase:+$('uPb').value||0, precioAlta:+$('uPa').value||0
   })).then(function(){
     cerrar('mUni'); toast('Guardado'); cargarInventario(); recargarCal();

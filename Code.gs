@@ -12,11 +12,16 @@
 var TZ = 'America/Santiago';
 
 var HOJAS = {
-  Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa'],
+  Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa', 'categoria'],
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
   // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
   // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax'],
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo'],
+  // La cuenta del huésped: cargos y pagos en un solo libro, en orden.
+  // Un cargo suma y un pago resta; el saldo es la diferencia.
+  Cuenta: ['id', 'idReserva', 'fecha', 'clase', 'tipo', 'centro', 'descripcion', 'cantidad', 'unitario', 'total', 'exento', 'medio', 'anulado', 'creado', 'creadoPor'],
+  // Un renglón por día cerrado: deja constancia de qué se posteó y quién cerró.
+  Cierres: ['fecha', 'ejecutado', 'por', 'noches', 'alojamiento', 'consumos', 'pagos', 'avisos'],
   Aseo: ['idUnidad', 'estado', 'responsable', 'notas', 'actualizado'],
   Fichas: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'procedencia', 'destino', 'motivo', 'emergencia', 'firmaUrl', 'fecha'],
   Usuarios: ['nombre', 'rol', 'pinHash', 'activo'],
@@ -29,7 +34,9 @@ var HOJAS = {
    Esto era el origen del bug de reservas duplicadas: Sheets convertía
    "2026-08-07" en un objeto Date con hora local y las comparaciones fallaban. */
 var COLS_TEXTO = {
-  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal'],
+  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo'],
+  Cuenta: ['fecha', 'creado'],
+  Cierres: ['fecha', 'ejecutado'],
   Fichas: ['nacimiento', 'fecha'],
   Aseo: ['actualizado'],
   Sesiones: ['expira'],
@@ -403,28 +410,37 @@ function setup() {
     var cfg = {
       checkIn: '15:00', checkOut: '11:00',
       temporadaAltaInicio: '12-15', temporadaAltaFin: '03-15',
-      addonBase: 30000, addonAlta: 35000
+      addonBase: 30000, addonAlta: 35000,
+      // Porcentaje del programa tinaja + sushi que se anota al restaurante.
+      // Cámbialo acá cuando definan el reparto con la cocina.
+      addonParteRestaurante: 50,
+      iva: 19
     };
     Object.keys(cfg).forEach(function (k) { insertar_('Config', { clave: k, valor: cfg[k] }); });
   }
 
   if (!leer_('Unidades').length) {
+    // La categoría es solo una etiqueta: no cambia cómo se reserva (cada
+    // reserva sigue tomando una pieza concreta), pero permite preguntar
+    // "¿tengo algo matrimonial con baño privado?" y saber cómo agrupar la
+    // oferta al publicarla en un canal como Booking.
     [
-      ['U1', 'Habitación 1 · Matrimonial', 'Lodge', 2, 'privado', false, 55000, 70000],
-      ['U2', 'Habitación 2 · Matrimonial', 'Lodge', 2, 'privado', false, 55000, 70000],
-      ['U3', 'Habitación 3 · Twin', 'Lodge', 2, 'privado', false, 55000, 70000],
-      ['U4', 'Habitación 4 · Matrimonial + individual', 'Lodge', 3, 'privado', false, 70000, 90000],
-      ['U5', 'Habitación 5 · Matrimonial + litera', 'Lodge', 3, 'compartido', true, '', ''],
-      ['U6', 'Habitación 6 · Individual + litera', 'Lodge', 3, 'compartido', true, '', ''],
-      ['U7', 'Habitación 7 · Individual', 'Lodge', 1, 'compartido', true, '', ''],
-      ['U8', 'Habitación 8 · Individual', 'Lodge', 1, 'compartido', true, '', ''],
-      ['G1', 'Carpa A', 'Glamping', 2, 'compartido', false, 65000, 83000],
-      ['G2', 'Carpa B', 'Glamping', 2, 'compartido', false, 65000, 83000],
-      ['G3', 'Carpa C', 'Glamping', 2, 'compartido', false, 65000, 83000]
+      ['U1', 'Habitación 1 · Matrimonial', 'Lodge', 2, 'privado', false, 55000, 70000, 'Matrimonial con baño privado'],
+      ['U2', 'Habitación 2 · Matrimonial', 'Lodge', 2, 'privado', false, 55000, 70000, 'Matrimonial con baño privado'],
+      ['U3', 'Habitación 3 · Twin', 'Lodge', 2, 'privado', false, 55000, 70000, 'Twin con baño privado'],
+      ['U4', 'Habitación 4 · Matrimonial + individual', 'Lodge', 3, 'privado', false, 70000, 90000, 'Familiar con baño privado'],
+      ['U5', 'Habitación 5 · Matrimonial + litera', 'Lodge', 3, 'compartido', true, '', '', 'Compartida con baño compartido'],
+      ['U6', 'Habitación 6 · Individual + litera', 'Lodge', 3, 'compartido', true, '', '', 'Compartida con baño compartido'],
+      ['U7', 'Habitación 7 · Individual', 'Lodge', 1, 'compartido', true, '', '', 'Individual con baño compartido'],
+      ['U8', 'Habitación 8 · Individual', 'Lodge', 1, 'compartido', true, '', '', 'Individual con baño compartido'],
+      ['G1', 'Carpa A', 'Glamping', 2, 'compartido', false, 65000, 83000, 'Carpa glamping'],
+      ['G2', 'Carpa B', 'Glamping', 2, 'compartido', false, 65000, 83000, 'Carpa glamping'],
+      ['G3', 'Carpa C', 'Glamping', 2, 'compartido', false, 65000, 83000, 'Carpa glamping']
     ].forEach(function (u, i) {
       insertar_('Unidades', {
         id: u[0], nombre: u[1], grupo: u[2], capacidad: u[3], bano: u[4],
-        porCama: u[5], precioBase: u[6], precioAlta: u[7], orden: i + 1, activa: true
+        porCama: u[5], precioBase: u[6], precioAlta: u[7], orden: i + 1, activa: true,
+        categoria: u[8]
       });
     });
 
@@ -564,6 +580,16 @@ function recursos_() {
   return lista;
 }
 
+/* Si nadie escribió una categoría, se arma una razonable con lo que ya se
+   sabe de la unidad, para que la búsqueda nunca quede vacía. */
+function categoriaPorDefecto_(u) {
+  if (String(u.grupo) === 'Glamping') return 'Carpa glamping';
+  var bano = (u.bano || 'privado') === 'privado' ? 'con baño privado' : 'con baño compartido';
+  if (u.porCama) return 'Compartida ' + bano;
+  var cap = Number(u.capacidad) || 2;
+  return (cap >= 3 ? 'Familiar ' : cap === 1 ? 'Individual ' : 'Doble ') + bano;
+}
+
 /* Recursos = filas del calendario. Cada habitación entera, o cada cama en las compartidas. */
 function recursosDesdePlanilla_() {
   var unidades = leer_('Unidades').filter(function (u) { return u.activa; })
@@ -577,14 +603,16 @@ function recursosDesdePlanilla_() {
         out.push({
           id: c.id, idUnidad: u.id, grupo: u.grupo, unidad: u.nombre, nombre: c.nombre,
           precioBase: Number(c.precioBase) || 0, precioAlta: Number(c.precioAlta) || 0,
-          capacidad: 1, bano: u.bano || 'compartido'
+          capacidad: 1, bano: u.bano || 'compartido',
+          categoria: String(u.categoria || '') || categoriaPorDefecto_(u)
         });
       });
     } else {
       out.push({
         id: u.id, idUnidad: u.id, grupo: u.grupo, unidad: u.nombre, nombre: '',
         precioBase: Number(u.precioBase) || 0, precioAlta: Number(u.precioAlta) || 0,
-        capacidad: Number(u.capacidad) || 2, bano: u.bano || 'privado'
+        capacidad: Number(u.capacidad) || 2, bano: u.bano || 'privado',
+        categoria: String(u.categoria || '') || categoriaPorDefecto_(u)
       });
     }
   });
@@ -713,6 +741,10 @@ function guardarReserva(token, datos) {
     if (datos.grupo !== undefined) campos.grupo = datos.grupo || '';
 
     if (datos.id) {
+      // Si la cuenta ya tiene pagos anotados, ella manda: el abonado de la
+      // reserva es su espejo y no se puede pisar desde este formulario.
+      var pagados = movimientosDe_(datos.id).filter(function (m) { return m.clase === 'pago'; });
+      if (pagados.length) delete campos.anticipo;
       actualizar_('Reservas', 'id', datos.id, campos);
       return { id: datos.id };
     }
@@ -723,6 +755,15 @@ function guardarReserva(token, datos) {
     campos.creado = ahora_();
     campos.creadoPor = u.nombre;
     insertar_('Reservas', campos);
+    // El abono que se escribe al crear la reserva entra a la cuenta como un
+    // pago, para que exista un solo lugar donde vive la plata.
+    if (campos.anticipo > 0) {
+      anotar_(id, {
+        clase: 'pago', tipo: 'pago', descripcion: 'Abono inicial',
+        cantidad: 1, unitario: campos.anticipo, total: campos.anticipo,
+        medio: datos.medioAnticipo || 'otro', fecha: hoy_()
+      }, u.nombre);
+    }
     return { id: id };
   } finally {
     lock.releaseLock();
@@ -751,12 +792,36 @@ function disponibles(token, checkIn, checkOut, ignorarGrupo) {
   return recursos_().map(function (rec) {
     return {
       id: rec.id, unidad: rec.unidad, cama: rec.nombre || '', grupo: rec.grupo,
-      capacidad: rec.capacidad,
+      capacidad: rec.capacidad, categoria: rec.categoria || '', bano: rec.bano,
       libre: !tomadas[rec.id],
       ocupadaPor: tomadas[rec.id] || '',
       precio: (alta ? rec.precioAlta : rec.precioBase) * noches
     };
   });
+}
+
+/* La misma disponibilidad, pero agrupada por categoría. Es la respuesta a la
+   pregunta que llega por WhatsApp: "¿tienes algo matrimonial con baño
+   privado del 12 al 15?". Y de paso muestra con cuántas unidades se publica
+   cada categoría en un canal como Booking. */
+function disponiblesPorCategoria(token, checkIn, checkOut) {
+  var lista = disponibles(token, checkIn, checkOut);
+  var cats = {};
+  lista.forEach(function (r) {
+    var c = r.categoria || 'Sin categoría';
+    if (!cats[c]) cats[c] = { categoria: c, total: 0, libres: 0, desde: 0, unidades: [] };
+    cats[c].total++;
+    if (r.libre) {
+      cats[c].libres++;
+      if (!cats[c].desde || r.precio < cats[c].desde) cats[c].desde = r.precio;
+    }
+    cats[c].unidades.push({
+      id: r.id, nombre: r.unidad + (r.cama ? ' — ' + r.cama : ''),
+      libre: r.libre, ocupadaPor: r.ocupadaPor, precio: r.precio
+    });
+  });
+  return Object.keys(cats).map(function (k) { return cats[k]; })
+    .sort(function (a, b) { return b.libres - a.libres || a.categoria.localeCompare(b.categoria); });
 }
 
 function guardarReservaGrupo(token, datos) {
@@ -886,7 +951,451 @@ function eliminarReserva(token, id) {
   var u = sesion_(token);
   if (u.rol !== 'admin') throw new Error('Solo administración puede eliminar reservas.');
   borrar_('Reservas', 'id', id);
+  borrar_('Cuenta', 'idReserva', id);
   return true;
+}
+
+/* ===================== CUENTA DEL HUÉSPED =====================
+   Un solo libro por reserva: los cargos suman y los pagos restan. El saldo
+   es la diferencia. El alojamiento lo postea el cierre de día, noche por
+   noche; lo demás se agrega a mano cuando ocurre.
+
+   Cada cargo sabe a qué centro de ingreso pertenece (el lodge o el
+   restaurante), así el reparto con la cocina sale solo en los informes en
+   vez de discutirse a fin de mes. */
+
+var TIPOS_CARGO = {
+  alojamiento: { rotulo: 'Alojamiento', centro: 'lodge' },
+  tinaja:      { rotulo: 'Tinaja',      centro: 'lodge' },
+  sushi:       { rotulo: 'Sushi',       centro: 'restaurante' },
+  restaurante: { rotulo: 'Restaurante', centro: 'restaurante' },
+  bar:         { rotulo: 'Bar',         centro: 'restaurante' },
+  lavanderia:  { rotulo: 'Lavandería',  centro: 'lodge' },
+  danos:       { rotulo: 'Daños',       centro: 'lodge' },
+  otro:        { rotulo: 'Otro',        centro: 'lodge' }
+};
+
+var MEDIOS_PAGO = ['efectivo', 'transferencia', 'tarjeta', 'booking', 'otro'];
+
+function ivaPct_() { return Number(config_('iva', 19)) || 0; }
+
+/* En Chile los precios se muestran con IVA incluido, así que el neto se saca
+   del total. Los servicios a turistas extranjeros sin domicilio en Chile van
+   exentos, y en ese caso el total ES el neto. */
+function desglosarIva_(total, exento) {
+  var t = Math.round(Number(total) || 0);
+  if (exento) return { total: t, neto: t, iva: 0 };
+  var neto = Math.round(t / (1 + ivaPct_() / 100));
+  return { total: t, neto: neto, iva: t - neto };
+}
+
+function movimientosDe_(idReserva) {
+  return leer_('Cuenta').filter(function (m) {
+    return String(m.idReserva) === String(idReserva) && !m.anulado;
+  });
+}
+
+/* Cuánto del alojamiento acordado todavía no se ha posteado. Sirve para que
+   el saldo que ve recepción sea el de la estadía completa y no solo el de
+   las noches ya cerradas. */
+function alojamientoPendiente_(reserva, movs) {
+  var posteado = 0;
+  movs.forEach(function (m) {
+    if (m.clase === 'cargo' && m.tipo === 'alojamiento') posteado += Number(m.total) || 0;
+  });
+  var pend = (Number(reserva.total) || 0) - posteado;
+  return pend > 0 ? pend : 0;
+}
+
+function cuentaDe(token, idReserva) {
+  sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  var movs = movimientosDe_(idReserva);
+
+  var cargos = 0, pagos = 0, neto = 0, iva = 0, exentos = 0;
+  var porCentro = {};
+  var lista = movs.map(function (m) {
+    var total = Math.round(Number(m.total) || 0);
+    if (m.clase === 'pago') {
+      pagos += total;
+    } else {
+      cargos += total;
+      var d = desglosarIva_(total, m.exento);
+      neto += d.neto; iva += d.iva;
+      if (m.exento) exentos += total;
+      var c = m.centro || 'lodge';
+      porCentro[c] = (porCentro[c] || 0) + total;
+    }
+    return {
+      id: m.id, fecha: ymd_(m.fecha), clase: m.clase, tipo: m.tipo,
+      centro: m.centro || '', descripcion: m.descripcion || '',
+      cantidad: Number(m.cantidad) || 1, unitario: Math.round(Number(m.unitario) || 0),
+      total: total, exento: !!m.exento, medio: m.medio || '',
+      creado: String(m.creado || ''), creadoPor: m.creadoPor || ''
+    };
+  }).sort(function (a, b) {
+    if (a.fecha !== b.fecha) return a.fecha < b.fecha ? -1 : 1;
+    return String(a.creado).localeCompare(String(b.creado));
+  });
+
+  var pendiente = alojamientoPendiente_(r, movs);
+  return {
+    idReserva: idReserva, huesped: r.huesped,
+    noches: noches_(ymd_(r.checkIn), ymd_(r.checkOut)),
+    exentoIva: !!r.exentoIva, docTurismo: String(r.docTurismo || ''),
+    ivaPct: ivaPct_(),
+    movimientos: lista,
+    cargos: cargos, pagos: pagos, saldo: cargos - pagos,
+    neto: neto, iva: iva, exentos: exentos,
+    porCentro: porCentro,
+    alojamientoAcordado: Math.round(Number(r.total) || 0),
+    alojamientoPendiente: pendiente,
+    // Lo que quedaría por cobrar si la estadía se completa tal como está.
+    saldoProyectado: cargos - pagos + pendiente
+  };
+}
+
+function noches_(desde, hasta) {
+  if (!desde || !hasta) return 0;
+  var n = Math.round((new Date(hasta + 'T12:00') - new Date(desde + 'T12:00')) / 86400000);
+  return n > 0 ? n : 0;
+}
+
+/* Escribe un movimiento. Todo lo que entra a la cuenta pasa por acá. */
+function anotar_(idReserva, mov, quien) {
+  var fila = {
+    id: uid_('M'), idReserva: idReserva, fecha: mov.fecha || hoy_(),
+    clase: mov.clase, tipo: mov.tipo || '', centro: mov.centro || '',
+    descripcion: mov.descripcion || '', cantidad: Number(mov.cantidad) || 1,
+    unitario: Math.round(Number(mov.unitario) || 0),
+    total: Math.round(Number(mov.total) || 0),
+    exento: !!mov.exento, medio: mov.medio || '', anulado: false,
+    creado: ahora_(), creadoPor: quien || ''
+  };
+  insertar_('Cuenta', fila);
+  return fila.id;
+}
+
+function agregarCargo(token, idReserva, d) {
+  var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+
+  var tipo = TIPOS_CARGO[d.tipo] ? d.tipo : 'otro';
+  var cantidad = Math.max(Number(d.cantidad) || 1, 1);
+  var unitario = Math.round(Number(d.unitario) || 0);
+  if (unitario <= 0) throw new Error('El monto tiene que ser mayor que cero.');
+
+  var id = anotar_(idReserva, {
+    clase: 'cargo', tipo: tipo,
+    centro: d.centro || TIPOS_CARGO[tipo].centro,
+    descripcion: String(d.descripcion || TIPOS_CARGO[tipo].rotulo),
+    cantidad: cantidad, unitario: unitario, total: unitario * cantidad,
+    // Si el huésped está marcado como turista extranjero exento, sus cargos
+    // salen exentos salvo que se diga lo contrario.
+    exento: d.exento === undefined ? !!r.exentoIva : !!d.exento,
+    fecha: ymd_(d.fecha) || hoy_()
+  }, u.nombre);
+  logCambio_(u.nombre, 'cargo', idReserva + ' · ' + tipo + ' · ' + (unitario * cantidad));
+  return { id: id };
+}
+
+function agregarPago(token, idReserva, d) {
+  var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  var monto = Math.round(Number(d.monto) || 0);
+  if (monto <= 0) throw new Error('El monto del pago tiene que ser mayor que cero.');
+  var medio = MEDIOS_PAGO.indexOf(d.medio) > -1 ? d.medio : 'otro';
+
+  var id = anotar_(idReserva, {
+    clase: 'pago', tipo: 'pago', centro: '',
+    descripcion: String(d.descripcion || 'Pago'),
+    cantidad: 1, unitario: monto, total: monto, medio: medio,
+    fecha: ymd_(d.fecha) || hoy_()
+  }, u.nombre);
+  sincronizarAnticipo_(idReserva);
+  logCambio_(u.nombre, 'pago', idReserva + ' · ' + medio + ' · ' + monto);
+  return { id: id };
+}
+
+function anularMovimiento(token, id, motivo) {
+  var u = sesion_(token);
+  var m = leer_('Cuenta').filter(function (x) { return x.id === id; })[0];
+  if (!m) throw new Error('No se encontró el movimiento.');
+  actualizar_('Cuenta', 'id', id, {
+    anulado: true,
+    descripcion: String(m.descripcion || '') + ' · ANULADO' + (motivo ? ': ' + motivo : '')
+  });
+  if (m.clase === 'pago') sincronizarAnticipo_(m.idReserva);
+  logCambio_(u.nombre, 'movimiento_anulado', id + (motivo ? ' · ' + motivo : ''));
+  return true;
+}
+
+/* El "anticipo" de la reserva es el espejo de lo pagado en la cuenta: así la
+   pestaña Hoy y los informes siguen mostrando el saldo correcto sin tener
+   dos verdades distintas sobre lo mismo. */
+function sincronizarAnticipo_(idReserva) {
+  var pagado = 0;
+  movimientosDe_(idReserva).forEach(function (m) {
+    if (m.clase === 'pago') pagado += Number(m.total) || 0;
+  });
+  actualizar_('Reservas', 'id', idReserva, { anticipo: pagado });
+  return pagado;
+}
+
+/* Postea de una vez todas las noches que falten. Es lo que se usa al hacer
+   el check-in cuando se quiere dejar la cuenta lista de entrada. */
+function postearAlojamiento(token, idReserva) {
+  var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
+  var puestas = 0;
+  for (var f = ci; f < co; f = sumarDias_(f, 1)) {
+    if (postearNoche_(r, f, u.nombre)) puestas++;
+  }
+  return { noches: puestas };
+}
+
+function sumarDias_(ymd, n) {
+  var d = new Date(ymd + 'T12:00');
+  d.setDate(d.getDate() + n);
+  return Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
+}
+
+/* Postea UNA noche de alojamiento, si no estaba ya puesta.
+   El valor de cada noche sale de prorratear el total acordado; la última
+   noche absorbe el redondeo para que la suma dé exactamente el total. */
+function postearNoche_(reserva, fecha, quien) {
+  var ci = ymd_(reserva.checkIn), co = ymd_(reserva.checkOut);
+  if (!(fecha >= ci && fecha < co)) return false;
+
+  var movs = movimientosDe_(reserva.id);
+  var yaEsta = movs.some(function (m) {
+    return m.clase === 'cargo' && m.tipo === 'alojamiento' && ymd_(m.fecha) === fecha;
+  });
+  if (yaEsta) return false;
+
+  var total = Math.round(Number(reserva.total) || 0);
+  if (total <= 0) return false;
+  var n = noches_(ci, co) || 1;
+  var esUltima = sumarDias_(fecha, 1) === co;
+  var puesto = 0;
+  movs.forEach(function (m) {
+    if (m.clase === 'cargo' && m.tipo === 'alojamiento') puesto += Number(m.total) || 0;
+  });
+  var monto = esUltima ? (total - puesto) : Math.round(total / n);
+  if (monto <= 0) return false;
+
+  anotar_(reserva.id, {
+    clase: 'cargo', tipo: 'alojamiento', centro: 'lodge',
+    descripcion: 'Noche del ' + fecha,
+    cantidad: 1, unitario: monto, total: monto,
+    exento: !!reserva.exentoIva, fecha: fecha
+  }, quien || 'cierre de día');
+  return true;
+}
+
+/* La tinaja + sushi es un programa que reparte plata entre el lodge y la
+   cocina, así que se anota como dos líneas: cada una a su centro. El
+   porcentaje que va al restaurante se ajusta en la hoja Config. */
+function cargarPrograma(token, idReserva, monto) {
+  var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+
+  var t = Math.round(Number(monto) || 0);
+  if (t <= 0) t = Math.round(Number(esAlta_(ymd_(r.checkIn))
+    ? config_('addonAlta', 35000) : config_('addonBase', 30000)) || 0);
+
+  var pct = Math.min(Math.max(Number(config_('addonParteRestaurante', 50)) || 0, 0), 100);
+  var parteSushi = Math.round(t * pct / 100);
+  var parteTinaja = t - parteSushi;
+  var exento = !!r.exentoIva;
+  var fecha = ymd_(r.addonFecha) || hoy_();
+
+  if (parteTinaja > 0) {
+    anotar_(idReserva, { clase: 'cargo', tipo: 'tinaja', centro: 'lodge',
+      descripcion: 'Programa tinaja + sushi · parte tinaja', cantidad: 1,
+      unitario: parteTinaja, total: parteTinaja, exento: exento, fecha: fecha }, u.nombre);
+  }
+  if (parteSushi > 0) {
+    anotar_(idReserva, { clase: 'cargo', tipo: 'sushi', centro: 'restaurante',
+      descripcion: 'Programa tinaja + sushi · parte sushi', cantidad: 1,
+      unitario: parteSushi, total: parteSushi, exento: exento, fecha: fecha }, u.nombre);
+  }
+  logCambio_(u.nombre, 'programa_cargado', idReserva + ' · ' + t);
+  return { total: t, tinaja: parteTinaja, sushi: parteSushi };
+}
+
+/* Marca de turista extranjero exento de IVA. Se acredita con el pasaporte y
+   la tarjeta de turismo que entrega la PDI al entrar al país.
+
+   La exención es una condición de la PERSONA, no de cada línea: si se marca
+   a mitad de la estadía, los cargos que ya estaban anotados también quedan
+   exentos. Si no, la cuenta saldría mitad con IVA y mitad sin, que es
+   justamente lo que no se puede llevar a una boleta. */
+function marcarExentoIva(token, idReserva, exento, docTurismo) {
+  var u = sesion_(token);
+  actualizar_('Reservas', 'id', idReserva, {
+    exentoIva: !!exento, docTurismo: String(docTurismo || '')
+  });
+  movimientosDe_(idReserva).forEach(function (m) {
+    if (m.clase !== 'cargo') return;
+    if (!!m.exento === !!exento) return;
+    actualizar_('Cuenta', 'id', m.id, { exento: !!exento });
+  });
+  logCambio_(u.nombre, 'iva_exento', idReserva + ' · ' + (exento ? 'sí' : 'no'));
+  return true;
+}
+
+/* ===================== CIERRE DE DÍA =====================
+   Lo que en un hotel grande se llama night audit. Cada noche postea el
+   alojamiento de todos los que están adentro, deja constancia del día
+   cerrado y avisa de lo que quedó pendiente. Se puede volver a ejecutar sin
+   miedo: no postea dos veces la misma noche.
+
+   A propósito NO cambia el estado de nadie: el check-in y el no-show los
+   decide recepción a mano. El cierre solo avisa. */
+function cierreDia(token, fecha) {
+  var u = sesion_(token);
+  var dia = ymd_(fecha) || hoy_();
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var reservas = leer_('Reservas').filter(function (r) {
+      return r.estado !== 'cancelada' && r.estado !== 'no_show';
+    });
+
+    var puestas = 0, alojamiento = 0;
+    reservas.forEach(function (r) {
+      if (postearNoche_(r, dia, u.nombre)) {
+        puestas++;
+        var n = noches_(ymd_(r.checkIn), ymd_(r.checkOut)) || 1;
+        alojamiento += Math.round((Number(r.total) || 0) / n);
+      }
+    });
+
+    var resumen = resumenDia_(dia, reservas);
+    var cuando = ahora_();
+    guardarOCrear_('Cierres', 'fecha', dia, {
+      fecha: dia, ejecutado: cuando, por: u.nombre,
+      noches: puestas, alojamiento: resumen.alojamiento,
+      consumos: resumen.consumos, pagos: resumen.pagos,
+      avisos: resumen.avisos.length
+    });
+    logCambio_(u.nombre, 'cierre_dia', dia + ' · ' + puestas + ' noches');
+
+    resumen.fecha = dia;
+    resumen.nochesPosteadas = puestas;
+    resumen.cerrado = true;
+    resumen.cerradoEl = cuando;
+    resumen.cerradoPor = u.nombre;
+    return resumen;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* Lo que pasó ese día, mirado desde la cuenta: sirve para el cierre y para
+   revisar un día cualquiera sin cerrarlo. */
+function resumenDia_(dia, reservas) {
+  reservas = reservas || leer_('Reservas').filter(function (r) {
+    return r.estado !== 'cancelada' && r.estado !== 'no_show';
+  });
+  var porId = {};
+  reservas.forEach(function (r) { porId[r.id] = r; });
+
+  var alojamiento = 0, consumos = 0, pagos = 0;
+  var porCentro = { lodge: 0, restaurante: 0 };
+  var neto = 0, iva = 0;
+
+  leer_('Cuenta').forEach(function (m) {
+    if (m.anulado || ymd_(m.fecha) !== dia) return;
+    var total = Math.round(Number(m.total) || 0);
+    if (m.clase === 'pago') { pagos += total; return; }
+    if (m.tipo === 'alojamiento') alojamiento += total; else consumos += total;
+    var c = m.centro || 'lodge';
+    porCentro[c] = (porCentro[c] || 0) + total;
+    var d = desglosarIva_(total, m.exento);
+    neto += d.neto; iva += d.iva;
+  });
+
+  // Lo que conviene mirar antes de irse a dormir.
+  var avisos = [];
+  var firmadas = firmadas_();
+  var aseo = aseoMapa_();
+
+  reservas.forEach(function (r) {
+    var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
+    if (ci === dia && r.estado !== 'en_casa' && r.estado !== 'checkout') {
+      avisos.push({ tipo: 'sin_llegar', idReserva: r.id, huesped: r.huesped,
+        texto: 'Llegaba hoy y no se registró: revisar si es no-show.' });
+    }
+    if (co === dia && r.estado !== 'checkout') {
+      avisos.push({ tipo: 'sin_salir', idReserva: r.id, huesped: r.huesped,
+        texto: 'Salía hoy y no se marcó el check-out.' });
+    }
+    if (ci <= dia && co > dia && !firmadas[r.id]) {
+      avisos.push({ tipo: 'sin_firma', idReserva: r.id, huesped: r.huesped,
+        texto: 'Está alojado y no ha firmado la ficha de registro.' });
+    }
+    if (co === dia) {
+      var movs = movimientosDe_(r.id);
+      var c = 0, p = 0;
+      movs.forEach(function (m) {
+        if (m.clase === 'pago') p += Number(m.total) || 0; else c += Number(m.total) || 0;
+      });
+      var saldo = c - p + alojamientoPendiente_(r, movs);
+      if (saldo > 0) {
+        avisos.push({ tipo: 'saldo', idReserva: r.id, huesped: r.huesped, monto: saldo,
+          texto: 'Se fue hoy con saldo pendiente.' });
+      }
+    }
+  });
+  Object.keys(aseo).forEach(function (k) {
+    if (aseo[k] === 'sucia') {
+      avisos.push({ tipo: 'sucia', idUnidad: k, texto: 'Quedó marcada como sucia.' });
+    }
+  });
+
+  var cerrado = leer_('Cierres').filter(function (c) { return ymd_(c.fecha) === dia; })[0];
+  return {
+    fecha: dia,
+    alojamiento: alojamiento, consumos: consumos, pagos: pagos,
+    total: alojamiento + consumos,
+    porCentro: porCentro, neto: neto, iva: iva,
+    avisos: avisos,
+    cerrado: !!cerrado,
+    cerradoEl: cerrado ? String(cerrado.ejecutado) : '',
+    cerradoPor: cerrado ? String(cerrado.por) : ''
+  };
+}
+
+function panelCierre(token, fecha) {
+  sesion_(token);
+  return resumenDia_(ymd_(fecha) || hoy_());
+}
+
+/* Para dejarlo automático: en el editor, Activadores → nuevo activador →
+   cierreAutomatico, temporizador diario, entre 3 y 4 de la mañana. */
+function cierreAutomatico() {
+  var dia = sumarDias_(hoy_(), -1);          // la noche que acaba de terminar
+  var reservas = leer_('Reservas').filter(function (r) {
+    return r.estado !== 'cancelada' && r.estado !== 'no_show';
+  });
+  var puestas = 0;
+  reservas.forEach(function (r) { if (postearNoche_(r, dia, 'cierre automático')) puestas++; });
+  var resumen = resumenDia_(dia, reservas);
+  guardarOCrear_('Cierres', 'fecha', dia, {
+    fecha: dia, ejecutado: ahora_(), por: 'automático',
+    noches: puestas, alojamiento: resumen.alojamiento, consumos: resumen.consumos,
+    pagos: resumen.pagos, avisos: resumen.avisos.length
+  });
+  return puestas;
 }
 
 /* ===================== DÍA DE HOY ===================== */
@@ -1192,6 +1701,7 @@ function inventarioAdmin(token) {
       return {
         id: x.id, nombre: x.nombre, grupo: x.grupo, capacidad: Number(x.capacidad) || 0,
         bano: x.bano, porCama: !!x.porCama,
+        categoria: String(x.categoria || '') || categoriaPorDefecto_(x),
         precioBase: Number(x.precioBase) || 0, precioAlta: Number(x.precioAlta) || 0,
         orden: Number(x.orden) || 0, activa: !!x.activa,
         camas: camas.filter(function (c) { return c.idUnidad === x.id; })
@@ -1221,6 +1731,7 @@ function guardarUnidad(token, d) {
     precioBase: Number(d.precioBase) || 0, precioAlta: Number(d.precioAlta) || 0,
     activa: d.activa === false ? false : true
   };
+  campos.categoria = String(d.categoria || '').trim() || categoriaPorDefecto_(campos);
 
   if (d.id) {
     actualizar_('Unidades', 'id', d.id, campos);
@@ -1397,8 +1908,44 @@ function informes(token, desde, hasta) {
 
   var fichas = Object.keys(firmadas_()).length;
 
+  // Lo que de verdad pasó por la caja en el período, tomado de la cuenta de
+  // los huéspedes. Va aparte de la venta de alojamiento porque responde otra
+  // pregunta: no "cuánto vendimos" sino "cuánto entró y de dónde".
+  var caja = { cargos: 0, pagos: 0, neto: 0, iva: 0, exento: 0 };
+  var porCentro = { lodge: 0, restaurante: 0 };
+  var porTipo = {}, porMedio = {};
+  leer_('Cuenta').forEach(function (m) {
+    if (m.anulado) return;
+    var f = ymd_(m.fecha);
+    if (!(f >= d && f < h)) return;
+    var total = Math.round(Number(m.total) || 0);
+    if (m.clase === 'pago') {
+      caja.pagos += total;
+      var medio = String(m.medio || 'otro');
+      porMedio[medio] = (porMedio[medio] || 0) + total;
+      return;
+    }
+    caja.cargos += total;
+    var des = desglosarIva_(total, m.exento);
+    caja.neto += des.neto; caja.iva += des.iva;
+    if (m.exento) caja.exento += total;
+    var c = m.centro || 'lodge';
+    porCentro[c] = (porCentro[c] || 0) + total;
+    var t = String(m.tipo || 'otro');
+    porTipo[t] = (porTipo[t] || 0) + total;
+  });
+
+  var enLista = function (obj) {
+    return Object.keys(obj).map(function (k) { return { nombre: k, total: obj[k] }; })
+      .sort(function (a, b) { return b.total - a.total; });
+  };
+
   return {
     desde: d, hasta: h, dias: dias,
+    caja: caja,
+    porCentro: porCentro,
+    porTipo: enLista(porTipo),
+    porMedio: enLista(porMedio),
     unidadesActivas: recs.length,
     nochesDisponibles: nochesDisponibles,
     nochesVendidas: nochesVendidas,

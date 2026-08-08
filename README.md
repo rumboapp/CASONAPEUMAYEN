@@ -182,6 +182,74 @@ hora real, que después alimenta los informes.
 equipo de aseo lo ve al instante en su pantalla sin que nadie tenga que
 avisarle.
 
+## La cuenta del huésped
+
+Cada reserva tiene su propia cuenta: un libro donde **los cargos suman y los
+pagos restan**. Se abre con el botón *Cuenta* de la reserva, o directo desde
+la pestaña *Hoy*, donde el botón muestra lo que ese huésped debe.
+
+Arriba se ve de un vistazo lo cargado, lo pagado y lo que queda por cobrar.
+Ese número incluye **el alojamiento que todavía no se ha anotado**: si no,
+una estadía que recién empieza parecería no deber nada.
+
+- **El alojamiento lo anota el cierre de día**, noche por noche, prorrateando
+  el total acordado. La última noche absorbe el redondeo, así que las líneas
+  suman exactamente el total y nunca queda un peso de diferencia. Si prefieres
+  dejar la cuenta lista al hacer el check-in, el botón *Postear el alojamiento*
+  las anota todas de una vez.
+- **Lo demás se agrega cuando ocurre**: una cena, el bar, lavandería, un daño.
+  Hay botones rápidos para lo más común.
+- **Cada cargo sabe a qué centro de ingreso pertenece**, el lodge o el
+  restaurante. Eso es lo que hace que el reparto con la cocina salga solo en
+  los informes en vez de discutirse a fin de mes.
+- **El programa tinaja + sushi se anota como dos líneas**, una a cada centro.
+  El porcentaje que va al restaurante se ajusta en la hoja `Config`, en
+  `addonParteRestaurante` (viene en 50).
+- **Los pagos se registran con su medio**: efectivo, transferencia, tarjeta o
+  "lo cobra Booking". El campo *Abonado* de la reserva es el espejo de esos
+  pagos, así que una vez que hay pagos se llena solo y deja de editarse a mano.
+- **Nada se borra.** Un movimiento equivocado se *anula*: deja de sumar pero
+  queda en la planilla como rastro de lo que pasó.
+
+### Turistas extranjeros y el IVA
+
+Los servicios de hotelería a turistas extranjeros sin domicilio ni residencia
+en Chile van **exentos del 19%**, cuando el ingreso se percibe en moneda
+extranjera y la empresa está registrada ante el SII; se documenta con factura
+de exportación y la calidad de turista se acredita con el pasaporte y la
+tarjeta de turismo que entrega la PDI al entrar al país. Ojo: el SII aclaró
+que **no se le puede exigir al huésped que pague en dólares**.
+
+En la cuenta hay una marca *Turista extranjero — exento de IVA* y un campo
+para el número de la tarjeta de turismo. Al marcarla, **toda la cuenta queda
+sin IVA, también lo que ya estaba anotado**: la exención es una condición de
+la persona, no de cada línea, y una cuenta mitad con IVA y mitad sin no se
+puede llevar a una boleta. Si se marcó por error, se desmarca y vuelve todo
+atrás.
+
+## Cierre de día
+
+Es lo que en un hotel grande se llama *night audit*, y es el corazón de que
+los números cuadren. En la pestaña **Cierre** eliges la noche y aprietas
+*Cerrar el día*. El sistema:
+
+1. Anota en la cuenta de cada huésped alojado el alojamiento de esa noche.
+2. Deja registrado el día como cerrado, con la hora y quién lo cerró.
+3. Muestra el total del día separado en lodge y restaurante, con su neto y su
+   IVA.
+4. Lista **lo que hay que revisar antes de irse a dormir**: quién llegaba y no
+   se registró, quién salía y no se marcó el check-out, quién está alojado sin
+   firmar la ficha, quién se fue con saldo y qué habitaciones quedaron sucias.
+
+Se puede ejecutar **más de una vez sin miedo**: no cobra dos veces la misma
+noche. Y a propósito **no cambia el estado de nadie**: el check-in y los
+no-show los sigue decidiendo recepción a mano, como pediste. El cierre solo
+avisa.
+
+Para dejarlo automático, en el editor de Apps Script: **Activadores → Añadir
+activador → función `cierreAutomatico`, temporizador diario, entre 3 y 4 de la
+mañana**. Cierra solo la noche que acaba de terminar.
+
 ## Aseo
 
 Solo tres estados, que es lo que se usa a diario: **sucia**, **limpia** y
@@ -233,6 +301,12 @@ guardadas, para el período que elijas:
 Cuando una estadía cruza el borde del período, solo se cuentan las noches
 que caen dentro, para que los totales de meses distintos no se pisen.
 
+Debajo va la **Caja del período**, que responde otra pregunta. Lo de arriba
+dice *cuánto vendimos*; esto dice *cuánto pasó por la caja y de dónde salió*,
+tomado de las cuentas de los huéspedes: lo cargado, lo cobrado, cuánto es del
+lodge y cuánto del restaurante, el neto y el IVA, cuánto se facturó exento a
+turistas extranjeros, y los desgloses por tipo de consumo y por medio de pago.
+
 ## Agregar habitaciones y carpas
 
 En la pestaña **Alojamiento** (solo administración) se agregan unidades nuevas
@@ -245,6 +319,27 @@ como filas nuevas del calendario.
   fila propia del calendario.
 - Las unidades no se borran, se **archivan**: dejan de aparecer en el
   calendario pero se conserva su historial de reservas.
+
+### Categorías, y cómo publicar la oferta en un canal
+
+Cada unidad lleva una **categoría** — *Matrimonial con baño privado*, *Twin
+con baño privado*, *Carpa glamping*… Es solo una etiqueta: **no cambia cómo se
+reserva**, cada reserva sigue tomando una pieza concreta y se asigna a mano
+como siempre. Si la dejas en blanco, se arma sola con la capacidad y el tipo
+de baño.
+
+Sirve para dos cosas:
+
+1. **Responder rápido.** Cuando llega el mensaje "¿tienes algo matrimonial con
+   baño privado del 12 al 15?", el sistema contesta por categoría y muestra
+   cuáles quedan libres.
+2. **Saber cómo publicar.** En Booking o Airbnb no se publica pieza por pieza
+   sino por categoría, diciendo cuántas unidades tiene cada una. Abajo de la
+   pestaña *Alojamiento* está la tabla **Cómo publicarlo en un canal**, ya
+   armada: la categoría, cuántas unidades, desde qué precio y cuáles son.
+
+Con casi una sola unidad por variante, esa tabla también deja ver dónde está
+el riesgo real de sobreventa: las categorías con **una** unidad.
 
 ## Cómo se cuentan las noches
 
@@ -330,10 +425,19 @@ editor la función `crearUsuario("nombre", "pin", "admin")`.
 
 ## Lo que todavía no hace
 
-- No genera boletas ni facturas.
-- No importa reservas automáticamente desde Booking o Airbnb.
+- **No emite la boleta ni la factura de exportación.** Lleva la cuenta con su
+  neto y su IVA, y marca lo exento, pero el documento se emite fuera.
+- **No importa reservas desde Booking ni Airbnb.** Es lo siguiente: la vía
+  realista es leer los correos de reserva de Booking desde el mismo Apps
+  Script y crear la reserva sola. La conexión de dos vías con Booking solo la
+  abren a socios de conectividad certificados, así que eso pasaría por un
+  channel manager intermedio.
+- **Las tarifas son por temporada, no por fecha.** Todavía no hay precio por
+  día, estadía mínima ni "cerrado a la llegada".
+- No hay perfil de huésped con historial de estadías anteriores.
+- La política de cancelación está escrita en el reglamento pero no se calcula
+  sola.
+- No cobra en línea: no genera enlaces de pago.
 - No envía el enlace de la ficha solo: abre WhatsApp o el correo con el
   mensaje escrito, pero el envío lo haces tú.
 - La app interna está solo en español; la página del huésped sí es bilingüe.
-- No hay reportes de ocupación e ingresos dentro de la app; por ahora se
-  pueden sacar desde la planilla con una tabla dinámica.
