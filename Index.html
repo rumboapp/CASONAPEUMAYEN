@@ -45,7 +45,9 @@
   #app{display:flex;flex-direction:column;height:100vh}
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;
     padding:0 16px;height:52px;background:var(--surface);border-bottom:1px solid var(--line);flex:none}
-  header .marca{height:30px;width:auto;border-radius:4px;display:block}
+  header .marca{height:34px;width:auto;border-radius:5px;display:block;flex:none}
+  header .tit{font-size:13px;color:var(--tx2);font-weight:500;letter-spacing:.02em}
+  @media(max-width:640px){ header .tit{display:none} header .marca{height:28px} }
   header .who{font-size:13px;color:var(--tx2)}
   nav{display:flex;gap:2px;padding:0 12px;background:var(--surface);
     border-bottom:1px solid var(--line);flex:none;overflow-x:auto}
@@ -93,6 +95,11 @@
   .rname.aseo-sucia{background:#fdf6f5}
   .rname.aseo-bloqueada{background:#f2f3f5;color:var(--tx2)}
   .rname .sub{color:var(--tx2);font-size:12.5px;flex:none}
+  /* Baño privado o compartido, visible sin abrir nada. */
+  .bano{font-size:9.5px;font-weight:700;padding:1px 5px;border-radius:20px;flex:none;
+    margin-left:auto;letter-spacing:.03em;text-transform:uppercase}
+  .bano.priv{background:#e3f5ec;color:#0b6b4a}
+  .bano.comp{background:#eef0f3;color:#6b7280}
   .grp{position:sticky;left:0;z-index:7;background:#f0f2f5;border-bottom:1px solid var(--line);
     padding:5px 10px;font-size:11px;font-weight:600;letter-spacing:.06em;
     text-transform:uppercase;color:var(--tx2);min-height:26px !important;display:flex;align-items:center}
@@ -320,7 +327,10 @@
 <!-- ==================== APP ==================== -->
 <div id="app" class="hide">
   <header>
-    <img class="marca" src="<?= logo ?>" alt="Casona Peumayén">
+    <div style="display:flex;align-items:center;gap:11px;min-width:0">
+      <img class="marca" src="<?= logo ?>" alt="Casona Peumayén">
+      <span class="tit">Gestión de alojamiento</span>
+    </div>
     <div style="display:flex;align-items:center;gap:12px">
       <span class="who" id="who"></span>
       <button class="btn gh sm" id="bSalir">Salir</button>
@@ -500,9 +510,13 @@
         </div>
       </div>
       <div class="g2">
+        <div class="fld">
+          <label>Personas <span class="muted" id="rPaxTope"></span></label>
+          <input id="rPax" type="number" min="1" value="1">
+        </div>
         <div class="fld"><label>Total ($)</label><input id="rTot" type="number" min="0" step="1000"></div>
-        <div class="fld"><label>Abonado ($)</label><input id="rAnt" type="number" min="0" step="1000" value="0"></div>
       </div>
+      <div class="fld"><label>Abonado ($)</label><input id="rAnt" type="number" min="0" step="1000" value="0"></div>
       <div class="fld hide" id="rAddonBox">
         <label class="chk"><input type="checkbox" id="rAddon"> Programa tinaja + tabla de sushi</label>
         <input type="datetime-local" id="rAddonF" class="hide" style="margin-top:8px">
@@ -927,30 +941,49 @@ $('cDias').onchange=function(){ CAL.dias=+this.value; cargarCal(); };
 /* Apps Script falla de vez en cuando al despertar. En vez de dejar el
    calendario en blanco, se reintenta solo y, si igual falla, se ofrece
    volver a intentar sin tener que recargar la página entera. */
-function cargarCal(intento){
+/* Se pide al servidor una ventana más ancha que la que se ve. Así moverse
+   de semana en semana repinta al instante con lo que ya está en memoria, y
+   solo se vuelve a pedir cuando de verdad se sale de lo cargado. */
+var MARGEN = 21;
+
+function dentroDeLoCargado(){
+  return CAL.ventana &&
+         CAL.inicio >= CAL.ventana.desde &&
+         mas(CAL.inicio, CAL.dias) <= CAL.ventana.hasta;
+}
+
+function recargarCal(){ CAL.ventana=null; cargarCal(); }
+
+function cargarCal(intento, silencioso){
   intento = intento || 1;
-  var fin = mas(CAL.inicio, CAL.dias);
-  $('cal').classList.add('recargando');
+
+  // Si el rango pedido ya está cargado, se dibuja de inmediato y se
+  // refresca por detrás sin que se note.
+  if(dentroDeLoCargado() && !silencioso){
+    pintarCal();
+    refrescarSilencioso();
+    return;
+  }
+
+  var desde = mas(CAL.inicio, -MARGEN);
+  var hasta = mas(mas(CAL.inicio, CAL.dias), MARGEN);
+  if(!silencioso) $('cal').classList.add('recargando');
   var quitar=function(){ $('cal').classList.remove('recargando'); };
-  srv('cargarTablero')(CAL.inicio, fin).then(function(d){
+
+  srv('cargarTablero')(desde, hasta).then(function(d){
     quitar();
     $('avisoCarga').classList.add('hide');
     if(!d || !d.recursos){
       toast('El servidor no devolvió datos. Revisa la instalación desde la pantalla de acceso.', true);
       return;
     }
-    CAL.recursos=d.recursos||[]; CAL.reservas=d.reservas||[];
-    CAL.hoy=d.hoy||fmtHoy(); CAL.cfg=d.cfg||{}; CAL.aseo=d.aseo||{};
-    var av=$('avisoIleg');
-    if(d.ilegibles){
-      av.textContent = d.ilegibles+' reserva(s) están guardadas en la planilla pero no se '+
-        'pueden mostrar porque su fecha quedó ilegible. Ejecuta repararReservas() desde el '+
-        'editor de Apps Script para revisarlas.';
-      av.classList.remove('hide');
-    } else av.classList.add('hide');
+    CAL.ventana = { desde: desde, hasta: hasta };
+    CAL.ilegibles = d.ilegibles||0;
+    aplicarTablero(d);
     pintarCal();
   }).catch(function(e){
     quitar();
+    if(silencioso) return;            // un refresco de fondo no molesta al usuario
     if(intento < 3){
       setTimeout(function(){ cargarCal(intento+1); }, intento*700);
       return;
@@ -968,13 +1001,47 @@ function cargarCal(intento){
 
 /* Se refresca solo: así una ficha que el huésped firma desde su teléfono, o
    un cambio hecho por la otra persona del equipo, aparece sin recargar. */
+/* Refresco de fondo: no toca la pantalla si nada cambió, para que no
+   parpadee mientras se está trabajando. */
+/* Un solo lugar donde se guardan los datos que llegan del servidor, para
+   que la carga normal y el refresco de fondo no se desincronicen. */
+function aplicarTablero(d){
+  CAL.recursos=d.recursos||[]; CAL.reservas=d.reservas||[];
+  CAL.hoy=d.hoy||fmtHoy(); CAL.cfg=d.cfg||{}; CAL.aseo=d.aseo||{};
+
+  var av=$('avisoIleg');
+  if(d.ilegibles){
+    av.textContent = d.ilegibles+' reserva(s) están guardadas en la planilla pero no se '+
+      'pueden mostrar porque su fecha quedó ilegible. Ejecuta repararReservas() desde el '+
+      'editor de Apps Script para revisarlas.';
+    av.classList.remove('hide');
+  } else av.classList.add('hide');
+}
+
+var refrescando=false;
+function refrescarSilencioso(){
+  if(refrescando || !CAL.ventana) return;
+  refrescando=true;
+  srv('cargarTablero')(CAL.ventana.desde, CAL.ventana.hasta).then(function(d){
+    refrescando=false;
+    if(!d || !d.recursos) return;
+    // Solo se repinta si de verdad cambió algo, para que no parpadee.
+    var igual = JSON.stringify(d.reservas)===JSON.stringify(CAL.reservas) &&
+                JSON.stringify(d.aseo)===JSON.stringify(CAL.aseo) &&
+                (d.ilegibles||0)===(CAL.ilegibles||0);
+    CAL.ilegibles = d.ilegibles||0;
+    aplicarTablero(d);
+    if(!igual) pintarCal();
+  }).catch(function(){ refrescando=false; });
+}
+
 var relojCal=null;
 function autoRefresco(){
   clearInterval(relojCal);
   relojCal=setInterval(function(){
     if(document.hidden) return;
     var visible=!$('v-cal').classList.contains('hide');
-    if(visible && !document.querySelector('.ov:not(.hide)')) cargarCal();
+    if(visible && !document.querySelector('.ov:not(.hide)') && CAL.ventana) refrescarSilencioso();
   }, 45000);
 }
 document.addEventListener('visibilitychange', function(){
@@ -1007,7 +1074,7 @@ function pintarCal(){
   $('cRng').textContent = corto(dias[0])+' – '+corto(dias[N-1]);
 
   var anchoDia = N>20 ? 58 : (N>10 ? 84 : 128);
-  cal.style.gridTemplateColumns = '230px repeat('+N+', minmax('+anchoDia+'px, 1fr))';
+  cal.style.gridTemplateColumns = '252px repeat('+N+', minmax('+anchoDia+'px, 1fr))';
 
   // Encabezado
   var esq=document.createElement('div');
@@ -1052,9 +1119,12 @@ function pintarCal(){
     // decidir al vuelo dónde meter a alguien que llega sin reserva.
     var aseo = (CAL.aseo && CAL.aseo[f.r.id]) || 'limpia';
     var rotulo = { limpia:'Limpia', sucia:'Sucia, por limpiar', bloqueada:'Fuera de servicio' };
+    var bano = f.r.bano==='privado'
+      ? '<span class="bano priv" title="Baño privado">priv</span>'
+      : '<span class="bano comp" title="Baño compartido">comp</span>';
     nm.innerHTML='<i class="pa '+aseo+'" title="'+(rotulo[aseo]||aseo)+'"></i>'+
                  '<span>'+etiq+'</span>'+
-                 (f.r.nombre?'<span class="sub">· '+f.r.nombre+'</span>':'');
+                 (f.r.nombre?'<span class="sub">· '+f.r.nombre+'</span>':'')+bano;
     if(aseo!=='limpia') nm.classList.add('aseo-'+aseo);
     cal.appendChild(nm);
 
@@ -1080,7 +1150,8 @@ function pintarCal(){
     var b=document.createElement('div');
     b.className='bar '+r.estado;
     b.style.gridArea = fila+' / '+col+' / '+(fila+1)+' / '+(col+span);
-    b.title = r.huesped+'  ·  '+largo(r.checkIn)+' → '+largo(r.checkOut)+'  ·  '+plata(r.total);
+    b.title = r.huesped+'  ·  '+largo(r.checkIn)+' → '+largo(r.checkOut)+
+              '  ·  '+(r.pax||1)+' pax  ·  '+plata(r.total);
     // Un tilde blanco cuando la ficha está firmada, para no tener que abrir
     // una por una y ver quién falta por registrar.
     b.innerHTML = (r.firmada ? '<span class="ok" title="Ficha firmada">✓</span>'
@@ -1216,9 +1287,9 @@ window.addEventListener('pointerup', function(){
   srv('moverReserva')(e.r.id, e.r.recurso, e.checkIn, e.checkOut)
     .then(function(){
       toast('Estadía actualizada: '+noches(e.checkIn,e.checkOut)+' noches');
-      cargarCal();
+      recargarCal();
     })
-    .catch(function(err){ fallo(err); cargarCal(); });
+    .catch(function(err){ fallo(err); recargarCal(); });
 });
 
 /* ---------- Mover reservas arrastrando ---------- */
@@ -1249,8 +1320,8 @@ $('cal').addEventListener('drop', function(e){
     return;
   }
   srv('moverReserva')(r.id, c.dataset.rec, ini, fin)
-    .then(function(){ toast('Reserva movida'); cargarCal(); })
-    .catch(function(err){ fallo(err); cargarCal(); });
+    .then(function(){ toast('Reserva movida'); recargarCal(); })
+    .catch(function(err){ fallo(err); recargarCal(); });
 });
 
 /* ==================================================================
@@ -1263,7 +1334,8 @@ function opcionesRecurso(sel){
     if(r.grupo!==grupo){ grupo=r.grupo; og=document.createElement('optgroup'); og.label=grupo; s.appendChild(og); }
     var o=document.createElement('option');
     o.value=r.id;
-    o.textContent=r.unidad+(r.nombre?' — '+r.nombre:'');
+    o.textContent=r.unidad+(r.nombre?' — '+r.nombre:'')+'  ·  '+etiquetaBano(r)+
+                  '  ·  hasta '+r.capacidad+' pax';
     if(r.id===sel) o.selected=true;
     og.appendChild(o);
   });
@@ -1275,7 +1347,23 @@ function pintarFechas(){
   $('rFn').textContent = n ? (n===1?'1 noche':n+' noches') : '';
 }
 
+function etiquetaBano(r){
+  return r.bano==='privado' ? 'baño privado' : 'baño compartido';
+}
+
+/* El máximo de personas lo pone la capacidad del alojamiento elegido. */
+function ajustarPax(){
+  var r=CAL.recursos.filter(function(x){ return x.id===$('rRec').value; })[0];
+  if(!r) return;
+  var tope=Number(r.capacidad)||1;
+  $('rPax').max=tope;
+  $('rPaxTope').textContent='· '+etiquetaBano(r)+' · hasta '+tope;
+  if(Number($('rPax').value) > tope) $('rPax').value=tope;
+  if(!Number($('rPax').value)) $('rPax').value=Math.min(2, tope);
+}
+
 function recalcularTotal(){
+  ajustarPax();
   if(!RANGO.in) return;
   var r=CAL.recursos.filter(function(x){ return x.id===$('rRec').value; })[0];
   if(!r) return;
@@ -1296,6 +1384,7 @@ function nuevaReserva(rec, entrada, salida){
   opcionesRecurso(rec);
   $('rNom').value=''; $('rTel').value=''; $('rMail').value=''; $('rCan').value='whatsapp';
   $('rEst').value='confirmada'; $('rAnt').value=0; $('rNot').value='';
+  $('rPax').value='';   // lo rellena ajustarPax() según lo que quepa
   $('rAddon').checked=false; $('rAddonF').value=''; $('rAddonF').classList.add('hide');
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
@@ -1315,6 +1404,7 @@ function abrirReserva(r){
   $('rNom').value=r.huesped; $('rTel').value=String(r.telefono||'');
   $('rMail').value=r.email||''; $('rCan').value=r.canal||'whatsapp';
   $('rEst').value=r.estado; $('rTot').value=r.total; $('rAnt').value=r.anticipo;
+  $('rPax').value=r.pax||1; ajustarPax();
   $('rNot').value=r.notas||'';
   $('rAddon').checked=!!r.addon;
   $('rAddonF').value=r.addonFecha||'';
@@ -1377,7 +1467,7 @@ function avanzarEstado(nuevo, aviso){
   ocupado(nuevo==='en_casa'?'rHacerIn':'rHacerOut', llamada).then(function(n){
     cerrar('mRes');
     toast(todoElGrupo ? aviso+' · '+n+' reservas del grupo' : aviso);
-    cargarCal();
+    recargarCal();
   }).catch(fallo);
 }
 $('rHacerIn').onclick=function(){ avanzarEstado('en_casa','Check-in registrado'); };
@@ -1415,11 +1505,12 @@ $('rGuardar').onclick=function(){
     checkIn:RANGO.in, checkOut:RANGO.out,
     huesped:$('rNom').value.trim(), telefono:$('rTel').value, email:$('rMail').value,
     canal:$('rCan').value,
-    estado:$('rEst').value, total:+$('rTot').value||0, anticipo:+$('rAnt').value||0,
+    estado:$('rEst').value, pax:+$('rPax').value||1,
+    total:+$('rTot').value||0, anticipo:+$('rAnt').value||0,
     addon:$('rAddon').checked, addonFecha:$('rAddonF').value, notas:$('rNot').value
   };
   ocupado('rGuardar', srv('guardarReserva')(datos)).then(function(){
-    cerrar('mRes'); toast(RES?'Reserva actualizada':'Reserva creada'); cargarCal();
+    cerrar('mRes'); toast(RES?'Reserva actualizada':'Reserva creada'); recargarCal();
   }).catch(function(e){
     $('rErr').textContent=e.message||String(e); $('rErr').classList.remove('hide');
   });
@@ -1428,7 +1519,7 @@ $('rGuardar').onclick=function(){
 $('rCancelar').onclick=function(){
   if(!RES || !confirm('¿Cancelar la reserva de '+RES.huesped+'?')) return;
   srv('cambiarEstado')(RES.id,'cancelada').then(function(){
-    cerrar('mRes'); toast('Reserva cancelada'); cargarCal();
+    cerrar('mRes'); toast('Reserva cancelada'); recargarCal();
   }).catch(fallo);
 };
 
@@ -1552,7 +1643,7 @@ $('gGuardar').onclick=function(){
   })).then(function(res){
     cerrar('mGrupo');
     toast('Grupo creado: '+res.ids.length+' reservas');
-    cargarCal();
+    recargarCal();
   }).catch(function(e){ muestra(e.message||String(e)); });
 };
 
@@ -1637,6 +1728,7 @@ function cargarHoy(){
     var comunes=[
       ['Huésped', function(r){ return '<b>'+r.huesped+'</b>'+(r.telefono?'<br><span class="muted">'+String(r.telefono)+'</span>':''); }],
       ['Unidad',  function(r){ return r.recurso; }],
+      ['Pax',     function(r){ return r.pax||1; }],
       ['Estado',  function(r){ return '<span class="tag '+r.estado+'">'+etq(r.estado)+'</span>'; }]
     ];
     tabla('tLleg', d.llegadas, comunes.concat([
@@ -1652,6 +1744,7 @@ function cargarHoy(){
     tabla('tAdd', d.addons, [
       ['Huésped', function(r){ return r.huesped; }],
       ['Unidad',  function(r){ return r.recurso; }],
+      ['Pax',     function(r){ return r.pax||1; }],
       ['Llegada', function(r){ return largo(r.checkIn); }],
       ['Agendado',function(r){ return r.addonFecha? String(r.addonFecha).replace('T',' ') : '<span class="muted">por coordinar</span>'; }]
     ], 'Sin programas de tinaja + sushi pendientes.');
@@ -1938,7 +2031,7 @@ function cargarInventario(){
         if(u.activa && !confirm('¿Archivar "'+u.nombre+'"? Dejará de aparecer en el calendario, '+
                                 'pero se conservan sus reservas anteriores.')) return;
         srv('archivarUnidad')(u.id, !u.activa).then(function(){
-          toast(u.activa?'Archivada':'Reactivada'); cargarInventario(); cargarCal();
+          toast(u.activa?'Archivada':'Reactivada'); cargarInventario(); recargarCal();
         }).catch(fallo);
       };
       acc.appendChild(bAr);
@@ -1974,7 +2067,7 @@ $('uGuardar').onclick=function(){
     bano:$('uBano').value, capacidad:+$('uCap').value||1, porCama:$('uPorCama').checked,
     precioBase:+$('uPb').value||0, precioAlta:+$('uPa').value||0
   })).then(function(){
-    cerrar('mUni'); toast('Guardado'); cargarInventario(); cargarCal();
+    cerrar('mUni'); toast('Guardado'); cargarInventario(); recargarCal();
   }).catch(function(e){ $('uErr').textContent=e.message||String(e); $('uErr').classList.remove('hide'); });
 };
 
@@ -1993,7 +2086,7 @@ $('cGuardar').onclick=function(){
     id: CAMA?CAMA.id:'', idUnidad: UNI.id, nombre:$('cNom').value.trim(),
     precioBase:+$('cPb').value||0, precioAlta:+$('cPa').value||0
   })).then(function(){
-    cerrar('mCama'); toast('Guardado'); cargarInventario(); cargarCal();
+    cerrar('mCama'); toast('Guardado'); cargarInventario(); recargarCal();
   }).catch(function(e){ $('cErr').textContent=e.message||String(e); $('cErr').classList.remove('hide'); });
 };
 
@@ -2066,7 +2159,7 @@ $('fGuardar').onclick=function(){
     motivo:$('fMot').value, emergencia:$('fEme').value, acepta:true,
     firma:c.toDataURL('image/png')
   })).then(function(){
-    cerrar('mFicha'); toast('Check-in registrado'); cargarCal();
+    cerrar('mFicha'); toast('Check-in registrado'); recargarCal();
   }).catch(function(e){ errFicha(e.message||String(e)); });
 };
 function errFicha(m){ $('fErr').textContent=m; $('fErr').classList.remove('hide'); }

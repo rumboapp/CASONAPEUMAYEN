@@ -97,6 +97,11 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
   ✓ y las que no, un rayado diagonal. Así se ve quién falta sin abrirlas una
   por una.
 - El precio se calcula solo según temporada, y siempre se puede editar a mano.
+- **Personas**: cada reserva lleva su número de pax, con el máximo puesto por
+  la capacidad del alojamiento. Una matrimonial parte en 2 y no deja poner
+  más; una cama individual queda en 1. Los informes suman las pax-noche.
+- **Baño**: cada fila indica `PRIV` o `COMP` según sea privado o compartido,
+  y el selector de la reserva lo repite junto a la capacidad.
 - **El estado de aseo se ve en el propio calendario**: cada fila lleva un
   punto verde (limpia), rojo (sucia) o gris (fuera de servicio), y las sucias
   quedan con un tinte distinto. Sirve para decidir al vuelo dónde meter a
@@ -242,6 +247,27 @@ En el **selector de fechas** eliges entrada y salida: del 7 al 9 son 2 noches.
 En la **grilla del calendario** cada celda es una noche, así que marcar el 7
 y el 8 también son 2 noches — entra el 7 y sale el 9, que es justo lo que
 muestra después el formulario. Un clic simple sobre un día vale por 1 noche.
+
+## Por qué es rápido
+
+Apps Script es lento sobre todo por las llamadas a la planilla: cada lectura
+es una llamada remota. El sistema está armado para hacer las menos posibles.
+
+- **Cada hoja se lee una sola vez por ejecución.** Antes, abrir el calendario
+  leía la planilla 11 veces; ahora son 3.
+- **El inventario y la configuración quedan guardados** entre llamadas,
+  porque casi nunca cambian, y se descartan solos en cuanto alguien los
+  edita. La sesión también, por unos minutos.
+- **Al guardar, la fila se escribe completa de una vez** en vez de campo por
+  campo.
+- **El calendario pide tres semanas de más a cada lado.** Moverse de semana
+  en semana se dibuja al instante con lo que ya está en memoria, sin esperar
+  al servidor; solo se vuelve a pedir cuando de verdad te sales de ese rango.
+- **El refresco de fondo no repinta si nada cambió**, para que la pantalla no
+  parpadee mientras estás trabajando.
+
+En total, las siete operaciones más usadas bajaron de 45 a 16 lecturas de
+planilla.
 
 ## Reglas del modelo
 

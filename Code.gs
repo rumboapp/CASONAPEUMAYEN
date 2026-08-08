@@ -16,7 +16,7 @@ var HOJAS = {
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
   // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
   // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo'],
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax'],
   Aseo: ['idUnidad', 'estado', 'responsable', 'notas', 'actualizado'],
   Fichas: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'procedencia', 'destino', 'motivo', 'emergencia', 'firmaUrl', 'fecha'],
   Usuarios: ['nombre', 'rol', 'pinHash', 'activo'],
@@ -84,37 +84,58 @@ function hoja_(nombre) {
   return sh;
 }
 
+/* ===================== MEMORIA DE LA EJECUCIÓN =====================
+   Cada getValues() de Sheets es una llamada remota y es lo que hace lento
+   todo. Dentro de una misma ejecución la planilla no cambia sola, así que
+   cada hoja se lee UNA vez y se reutiliza; al escribir se descarta lo
+   guardado de esa hoja para no trabajar con datos viejos. */
+var MEMO = {};
+
 function leer_(nombre) {
+  if (MEMO[nombre]) return MEMO[nombre];
   var v = hoja_(nombre).getDataRange().getValues();
-  if (v.length < 2) return [];
-  var cab = v[0], out = [];
-  for (var i = 1; i < v.length; i++) {
-    if (String(v[i].join('')).trim() === '') continue;
-    var o = {};
-    for (var j = 0; j < cab.length; j++) o[cab[j]] = v[i][j];
-    out.push(o);
+  var out = [];
+  if (v.length >= 2) {
+    var cab = v[0];
+    for (var i = 1; i < v.length; i++) {
+      if (String(v[i].join('')).trim() === '') continue;
+      var o = {};
+      for (var j = 0; j < cab.length; j++) o[cab[j]] = v[i][j];
+      out.push(o);
+    }
   }
+  MEMO[nombre] = out;
   return out;
+}
+
+function olvidar_(nombre) {
+  delete MEMO[nombre];
+  delete MEMO['__cab_' + nombre];
+  if (nombre === 'Unidades' || nombre === 'Camas') olvidarRecursos_();
+  if (nombre === 'Config') olvidarConfig_();
 }
 
 /* Encabezado REAL de la hoja. Nunca se escribe por posición fija: siempre
    según los nombres que la hoja tiene hoy, para que agregar columnas más
    adelante no descoloque las filas ya guardadas. */
 function cabecera_(nombre) {
+  if (MEMO['__cab_' + nombre]) return MEMO['__cab_' + nombre];
   var sh = hoja_(nombre);
   var ancho = Math.max(sh.getLastColumn(), 1);
   var cab = sh.getRange(1, 1, 1, ancho).getValues()[0]
     .map(function (c) { return String(c).trim(); });
 
   var faltan = HOJAS[nombre].filter(function (c) { return cab.indexOf(c) === -1; });
-  if (!faltan.length) return cab;
+  if (!faltan.length) { MEMO['__cab_' + nombre] = cab; return cab; }
 
   if (cab.join('') === '') {                       // hoja recién creada
     sh.getRange(1, 1, 1, HOJAS[nombre].length).setValues([HOJAS[nombre]]);
-    return HOJAS[nombre].slice();
+    MEMO['__cab_' + nombre] = HOJAS[nombre].slice();
+    return MEMO['__cab_' + nombre];
   }
   sh.getRange(1, cab.length + 1, 1, faltan.length).setValues([faltan]);
-  return cab.concat(faltan);
+  MEMO['__cab_' + nombre] = cab.concat(faltan);
+  return MEMO['__cab_' + nombre];
 }
 
 function insertar_(nombre, obj) {
@@ -122,6 +143,7 @@ function insertar_(nombre, obj) {
   hoja_(nombre).appendRow(cab.map(function (c) {
     return obj[c] === undefined || obj[c] === null ? '' : obj[c];
   }));
+  olvidar_(nombre);
 }
 
 function actualizar_(nombre, campoId, valorId, cambios) {
@@ -129,10 +151,16 @@ function actualizar_(nombre, campoId, valorId, cambios) {
   var ci = cab.indexOf(campoId);
   for (var i = 1; i < v.length; i++) {
     if (String(v[i][ci]) === String(valorId)) {
+      // Se escribe el bloque completo de la fila de una vez: una llamada a
+      // Sheets en lugar de una por cada campo que cambia.
+      var fila = v[i].slice();
+      var cambio = false;
       Object.keys(cambios).forEach(function (k) {
         var c = cab.indexOf(k);
-        if (c > -1) sh.getRange(i + 1, c + 1).setValue(cambios[k]);
+        if (c > -1) { fila[c] = cambios[k]; cambio = true; }
       });
+      if (cambio) sh.getRange(i + 1, 1, 1, fila.length).setValues([fila]);
+      olvidar_(nombre);
       return true;
     }
   }
@@ -146,6 +174,7 @@ function guardarOCrear_(nombre, campoId, valorId, obj) {
 function borrar_(nombre, campoId, valorId) {
   var sh = hoja_(nombre), v = sh.getDataRange().getValues(), ci = v[0].indexOf(campoId);
   for (var i = v.length - 1; i >= 1; i--) if (String(v[i][ci]) === String(valorId)) sh.deleteRow(i + 1);
+  olvidar_(nombre);
 }
 
 function uid_(p) { return p + Utilities.getUuid().slice(0, 8); }
@@ -179,9 +208,31 @@ function hoy_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
 /* Dos estadías chocan si se pisan. El día de check-out queda libre para el siguiente. */
 function chocan_(inA, outA, inB, outB) { return inA < outB && inB < outA; }
 
+/* La configuración casi nunca cambia, así que también se guarda armada. */
+function configTodo_() {
+  if (MEMO.__cfg) return MEMO.__cfg;
+  try {
+    var g = CacheService.getScriptCache().get('config');
+    if (g) { MEMO.__cfg = JSON.parse(g); return MEMO.__cfg; }
+  } catch (e) {}
+  var mapa = {};
+  leer_('Config').forEach(function (r) {
+    mapa[r.clave] = (Object.prototype.toString.call(r.valor) === '[object Date]')
+      ? hora_(r.valor) : r.valor;
+  });
+  MEMO.__cfg = mapa;
+  try { CacheService.getScriptCache().put('config', JSON.stringify(mapa), 21600); } catch (e) {}
+  return mapa;
+}
+
+function olvidarConfig_() {
+  try { CacheService.getScriptCache().remove('config'); } catch (e) {}
+  MEMO.__cfg = null;
+}
+
 function config_(clave, porDefecto) {
-  var f = leer_('Config').filter(function (r) { return r.clave === clave; })[0];
-  return f ? f.valor : porDefecto;
+  var v = configTodo_()[clave];
+  return (v === undefined || v === '') ? porDefecto : v;
 }
 
 function esAlta_(fechaYmd) {
@@ -212,6 +263,9 @@ function setup() {
     var sh = ss.getSheetByName(n);
     if (sh && ss.getSheets().length > 1) ss.deleteSheet(sh);
   });
+
+  olvidarRecursos_();
+  olvidarConfig_();
 
   if (!leer_('Config').length) {
     var cfg = {
@@ -327,19 +381,59 @@ function entrar(nombre, pin) {
   return { token: token, nombre: u.nombre, rol: u.rol };
 }
 
-function salir(token) { borrar_('Sesiones', 'token', token); return true; }
+function salir(token) {
+  borrar_('Sesiones', 'token', token);
+  try { CacheService.getScriptCache().remove('ses_' + token); } catch (e) {}
+  return true;
+}
 
+/* La sesión se recuerda unos minutos para no leer la hoja en cada llamada.
+   El plazo es corto a propósito, y al salir se borra igual. */
 function sesion_(token) {
+  if (!token) throw new Error('Sesión no válida. Vuelve a entrar.');
+  var clave = 'ses_' + token;
+  if (MEMO[clave]) return MEMO[clave];
+  try {
+    var guardada = CacheService.getScriptCache().get(clave);
+    if (guardada) { MEMO[clave] = JSON.parse(guardada); return MEMO[clave]; }
+  } catch (e) {}
+
   var s = leer_('Sesiones').filter(function (x) { return x.token === token; })[0];
   if (!s) throw new Error('Sesión no válida. Vuelve a entrar.');
   if (String(s.expira) < ahora_()) { borrar_('Sesiones', 'token', token); throw new Error('Sesión expirada.'); }
-  return { nombre: s.nombre, rol: s.rol };
+
+  var datos = { nombre: s.nombre, rol: s.rol };
+  MEMO[clave] = datos;
+  try { CacheService.getScriptCache().put(clave, JSON.stringify(datos), 180); } catch (e) {}
+  return datos;
 }
 
 /* ===================== DATOS DEL CALENDARIO ===================== */
 
-/* Recursos = filas del calendario. Cada habitación entera, o cada cama en las compartidas. */
+/* ===================== CACHÉ ENTRE EJECUCIONES =====================
+   El inventario cambia muy de vez en cuando, así que se guarda ya armado y
+   se descarta solo cuando alguien lo edita. Ahorra dos lecturas de planilla
+   en cada carga del calendario. */
+function olvidarRecursos_() {
+  try { CacheService.getScriptCache().remove('recursos'); } catch (e) {}
+  MEMO.__recursos = null;
+}
+
 function recursos_() {
+  if (MEMO.__recursos) return MEMO.__recursos;
+  try {
+    var guardado = CacheService.getScriptCache().get('recursos');
+    if (guardado) { MEMO.__recursos = JSON.parse(guardado); return MEMO.__recursos; }
+  } catch (e) { /* sin caché se lee de la planilla igual */ }
+
+  var lista = recursosDesdePlanilla_();
+  MEMO.__recursos = lista;
+  try { CacheService.getScriptCache().put('recursos', JSON.stringify(lista), 21600); } catch (e) {}
+  return lista;
+}
+
+/* Recursos = filas del calendario. Cada habitación entera, o cada cama en las compartidas. */
+function recursosDesdePlanilla_() {
   var unidades = leer_('Unidades').filter(function (u) { return u.activa; })
     .sort(function (a, b) { return Number(a.orden) - Number(b.orden); });
   var camas = leer_('Camas').filter(function (c) { return c.activa; })
@@ -350,14 +444,15 @@ function recursos_() {
       camas.filter(function (c) { return c.idUnidad === u.id; }).forEach(function (c) {
         out.push({
           id: c.id, idUnidad: u.id, grupo: u.grupo, unidad: u.nombre, nombre: c.nombre,
-          precioBase: Number(c.precioBase) || 0, precioAlta: Number(c.precioAlta) || 0, capacidad: 1
+          precioBase: Number(c.precioBase) || 0, precioAlta: Number(c.precioAlta) || 0,
+          capacidad: 1, bano: u.bano || 'compartido'
         });
       });
     } else {
       out.push({
         id: u.id, idUnidad: u.id, grupo: u.grupo, unidad: u.nombre, nombre: '',
         precioBase: Number(u.precioBase) || 0, precioAlta: Number(u.precioAlta) || 0,
-        capacidad: Number(u.capacidad) || 2
+        capacidad: Number(u.capacidad) || 2, bano: u.bano || 'privado'
       });
     }
   });
@@ -381,7 +476,8 @@ function cargarTablero(token, desde, hasta) {
         checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
         estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
         addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
-        notas: r.notas || '', grupo: String(r.grupo || '')
+        notas: r.notas || '', grupo: String(r.grupo || ''),
+        pax: Number(r.pax) || 1
       };
     });
   var todas = leer_('Reservas').filter(function (r) { return r.estado !== 'cancelada'; });
@@ -454,7 +550,12 @@ function guardarReserva(token, datos) {
     verificarLibre_(datos.recurso, f.checkIn, f.checkOut, datos.id);
     var unidad = recursos_().filter(function (x) { return x.id === datos.recurso; })[0];
 
+    // Los pax no pueden pasarse de lo que cabe en el alojamiento.
+    var tope = unidad ? (Number(unidad.capacidad) || 1) : 1;
+    var pax = Math.min(Math.max(Number(datos.pax) || 1, 1), tope);
+
     var campos = {
+      pax: pax,
       recurso: datos.recurso, idUnidad: unidad ? unidad.idUnidad : '',
       huesped: datos.huesped, telefono: datos.telefono || '', email: datos.email || '',
       canal: datos.canal || 'whatsapp',
@@ -539,6 +640,8 @@ function guardarReservaGrupo(token, datos) {
       var idR = uid_('R');
       insertar_('Reservas', {
         id: idR, recurso: id, idUnidad: rec.idUnidad,
+        pax: Math.min(Math.max(Number(item.pax) || Number(rec.capacidad) || 1, 1),
+                      Number(rec.capacidad) || 1),
         huesped: datos.huesped, telefono: datos.telefono || '', email: datos.email || '',
         canal: datos.canal || 'whatsapp',
         checkIn: f.checkIn, checkOut: f.checkOut, estado: datos.estado || 'confirmada',
@@ -976,13 +1079,15 @@ function guardarUnidad(token, d) {
 
   if (d.id) {
     actualizar_('Unidades', 'id', d.id, campos);
-    logCambio_(u.nombre, 'unidad_editada', d.id);
+    olvidarRecursos_();
+  logCambio_(u.nombre, 'unidad_editada', d.id);
     return { id: d.id };
   }
   var existentes = leer_('Unidades');
   campos.id = uid_(campos.grupo === 'Glamping' ? 'G' : 'U');
   campos.orden = existentes.length + 1;
   insertar_('Unidades', campos);
+  olvidarRecursos_();
   logCambio_(u.nombre, 'unidad_creada', campos.nombre);
   return { id: campos.id };
 }
@@ -1007,6 +1112,7 @@ function guardarCama(token, d) {
   insertar_('Camas', campos);
   // Una unidad con camas propias se vende por cama.
   actualizar_('Unidades', 'id', d.idUnidad, { porCama: true });
+  olvidarRecursos_();
   logCambio_(u.nombre, 'cama_creada', d.nombre);
   return { id: campos.id };
 }
@@ -1018,6 +1124,7 @@ function archivarUnidad(token, id, activa) {
   actualizar_('Unidades', 'id', id, { activa: !!activa });
   leer_('Camas').filter(function (c) { return c.idUnidad === id; })
     .forEach(function (c) { actualizar_('Camas', 'id', c.id, { activa: !!activa }); });
+  olvidarRecursos_();
   logCambio_(u.nombre, 'unidad_archivada', id + ' activa=' + !!activa);
   return true;
 }
@@ -1026,6 +1133,7 @@ function archivarCama(token, id, activa) {
   var u = sesion_(token);
   exigirAdmin_(u);
   actualizar_('Camas', 'id', id, { activa: !!activa });
+  olvidarRecursos_();
   return true;
 }
 
@@ -1095,7 +1203,7 @@ function informes(token, desde, hasta) {
       chocan_(ymd_(r.checkIn), ymd_(r.checkOut), d, h);
   });
 
-  var nochesVendidas = 0, ingresos = 0, abonado = 0, conAddon = 0;
+  var nochesVendidas = 0, ingresos = 0, abonado = 0, conAddon = 0, paxNoches = 0;
   var porCanal = {}, porUnidad = {}, porMes = {};
 
   reservas.forEach(function (r) {
@@ -1111,6 +1219,7 @@ function informes(token, desde, hasta) {
     var proporcion = total * (nDentro / nTotal);
 
     nochesVendidas += nDentro;
+    paxNoches += nDentro * (Number(r.pax) || 1);
     ingresos += proporcion;
     abonado += (Number(r.anticipo) || 0) * (nDentro / nTotal);
     if (r.addon) conAddon++;
@@ -1159,6 +1268,8 @@ function informes(token, desde, hasta) {
     // Ingreso por unidad disponible, incluyendo las que quedaron vacías.
     ingresoPorUnidad: nochesDisponibles ? Math.round(ingresos / nochesDisponibles) : 0,
     estadiaMedia: reservas.length ? Math.round(nochesVendidas / reservas.length * 10) / 10 : 0,
+    paxNoches: paxNoches,
+    paxPromedio: nochesVendidas ? Math.round(paxNoches / nochesVendidas * 10) / 10 : 0,
     programasGlamping: conAddon,
     fichasFirmadas: fichas,
     porCanal: ordenar(porCanal, 'ingresos'),
