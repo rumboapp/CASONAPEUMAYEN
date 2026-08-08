@@ -161,6 +161,31 @@ El botón **Copiar enlace de la ficha** lo genera y lo deja copiado de una
 sola vez, listo para pegar donde sea. Si ya está firmada, ese botón
 desaparece y en su lugar aparece *Ver ficha firmada*.
 
+## Quiénes se alojan
+
+**Firma una sola persona**, la que hace la reserva. No hay que perseguir a
+todo el grupo con el teléfono.
+
+Pero el registro de huéspedes tiene que nombrar a todos los que pernoctan, así
+que la reserva lleva el número de personas y los datos del resto:
+
+- En la reserva, el botón **Acompañantes** abre un bloque por cada persona
+  además del titular. Lo único obligatorio es el nombre; documento,
+  nacionalidad y fecha de nacimiento son opcionales.
+- **El huésped los completa desde su enlace.** Si la reserva es para dos, la
+  página que firma muestra un bloque de acompañante; si es para cuatro, tres.
+  Vienen ya rellenos con lo que recepción hubiera cargado.
+- **No se le exige.** Si todavía no sabe con quién viaja, puede firmar igual —
+  es peor que invente un nombre para poder seguir. Los que falten aparecen en
+  el cierre de día como *faltan acompañantes por registrar*, para pedirlos en
+  el mesón, que es donde igual se ven los documentos.
+- El texto que acepta dice explícitamente que firma **en su nombre y en el de
+  las personas que lo acompañan**, en español y en inglés.
+
+Si van más personas de las que dice la reserva, primero hay que subir el
+número de personas: el sistema no deja anotar más acompañantes que los que
+caben.
+
 ## Estados de una reserva
 
 Se ven en el calendario por color y se cambian con un toque desde la propia
@@ -182,6 +207,28 @@ hora real, que después alimenta los informes.
 equipo de aseo lo ve al instante en su pantalla sin que nadie tenga que
 avisarle.
 
+## El precio se arma noche a noche
+
+El total de una reserva **no es un número suelto: es la suma de lo que vale
+cada noche**. Cada noche parte con la tarifa que le corresponde por fecha
+(baja o alta), y de ahí:
+
+- **Si alargas la estadía, el total sube solo.** Estiras la reserva un día en
+  el calendario y esa noche entra con su tarifa; el aviso te dice el total
+  nuevo sin que tengas que abrir la reserva. Si la acortas, la noche se resta
+  — y si ya se había cobrado, ese cargo se anula en la cuenta.
+- **Puedes bajar una noche suelta.** En la reserva, *Ver noche por noche* abre
+  el detalle y ahí cambias el valor de un día para una promoción, sin tocar
+  las demás. La noche queda marcada como *a mano* y se respeta aunque después
+  muevas la reserva.
+- **O negociar el paquete completo.** Escribes el total acordado y se reparte
+  entre las noches; la última absorbe el redondeo, así que la suma da exacto.
+  También puedes escribir el total directo en el formulario de la reserva: si
+  lo tocas, ese número manda y se reparte al guardar.
+- **El cierre de día cobra el valor real de esa noche**, no un promedio. Si el
+  martes era promoción, en la cuenta aparece el martes con su precio de
+  promoción.
+
 ## La cuenta del huésped
 
 Cada reserva tiene su propia cuenta: un libro donde **los cargos suman y los
@@ -192,11 +239,10 @@ Arriba se ve de un vistazo lo cargado, lo pagado y lo que queda por cobrar.
 Ese número incluye **el alojamiento que todavía no se ha anotado**: si no,
 una estadía que recién empieza parecería no deber nada.
 
-- **El alojamiento lo anota el cierre de día**, noche por noche, prorrateando
-  el total acordado. La última noche absorbe el redondeo, así que las líneas
-  suman exactamente el total y nunca queda un peso de diferencia. Si prefieres
-  dejar la cuenta lista al hacer el check-in, el botón *Postear el alojamiento*
-  las anota todas de una vez.
+- **El alojamiento lo anota el cierre de día**, noche por noche, cada una por
+  lo que vale (ver *El precio se arma noche a noche*). Si prefieres dejar la
+  cuenta lista al hacer el check-in, el botón *Postear el alojamiento* las
+  anota todas de una vez.
 - **Lo demás se agrega cuando ocurre**: una cena, el bar, lavandería, un daño.
   Hay botones rápidos para lo más común.
 - **Cada cargo sabe a qué centro de ingreso pertenece**, el lodge o el
@@ -245,6 +291,40 @@ Se puede ejecutar **más de una vez sin miedo**: no cobra dos veces la misma
 noche. Y a propósito **no cambia el estado de nadie**: el check-in y los
 no-show los sigue decidiendo recepción a mano, como pediste. El cierre solo
 avisa.
+
+### Un ejemplo: dos noches pagadas al llegar
+
+Alguien llega el lunes, se va el miércoles y paga las dos noches completas al
+hacer el check-in. Son 55.000 por noche, 110.000 en total.
+
+**Lunes (noche 1).** Registras el pago de 110.000. Aunque todavía no cierres
+nada, la cuenta ya muestra **saldo 0**, porque cuenta el alojamiento que falta
+por anotar. Al cerrar el lunes, el cierre muestra:
+
+| | |
+|---|---|
+| Alojamiento | 55.000 — lo que consumió *esta* noche |
+| Cobrado hoy | 110.000 |
+| De eso, adelanto de noches futuras | 55.000 |
+| Por cobrar | 0 |
+
+**Martes (noche 2).** Al cerrar el martes:
+
+| | |
+|---|---|
+| Alojamiento | 55.000 |
+| Cobrado hoy | 0 — ya había pagado |
+| Adelanto | 0 |
+| Por cobrar | 0 |
+
+Y la cuenta del huésped queda: cargado 110.000, pagado 110.000, saldo 0.
+
+Lo importante: **lo cobrado en un día no tiene por qué calzar con lo consumido
+ese día**, y eso no es un descuadre. La plata entra el lunes pero se va
+consumiendo noche a noche. Por eso el cierre muestra las dos cifras por
+separado y dice cuánto de lo cobrado es adelanto. Es exactamente lo que hace
+un hotel grande, y es lo que después permite decir "en agosto vendimos X
+noches" sin que se mezcle con "en agosto entraron Y pesos a la caja".
 
 Para dejarlo automático, en el editor de Apps Script: **Activadores → Añadir
 activador → función `cierreAutomatico`, temporizador diario, entre 3 y 4 de la

@@ -17,6 +17,10 @@ var HOJAS = {
   // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
   // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
   Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo'],
+  // Lo que se cobra por CADA noche de una reserva. El total de la reserva es
+  // la suma de estas filas, así que alargarla o acortarla recalcula el precio
+  // solo, y una noche de promoción se baja sin tocar las demás.
+  Noches: ['idReserva', 'fecha', 'valor', 'ajustada', 'nota'],
   // La cuenta del huésped: cargos y pagos en un solo libro, en orden.
   // Un cargo suma y un pago resta; el saldo es la diferencia.
   Cuenta: ['id', 'idReserva', 'fecha', 'clase', 'tipo', 'centro', 'descripcion', 'cantidad', 'unitario', 'total', 'exento', 'medio', 'anulado', 'creado', 'creadoPor'],
@@ -24,6 +28,9 @@ var HOJAS = {
   Cierres: ['fecha', 'ejecutado', 'por', 'noches', 'alojamiento', 'consumos', 'pagos', 'avisos'],
   Aseo: ['idUnidad', 'estado', 'responsable', 'notas', 'actualizado'],
   Fichas: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'procedencia', 'destino', 'motivo', 'emergencia', 'firmaUrl', 'fecha'],
+  // Quiénes más duermen en esa reserva. Firma solo el representante, pero el
+  // registro de huéspedes tiene que nombrar a todos los que pernoctan.
+  Acompanantes: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'notas', 'creado'],
   Usuarios: ['nombre', 'rol', 'pinHash', 'activo'],
   Sesiones: ['token', 'nombre', 'rol', 'expira'],
   Log: ['fecha', 'usuario', 'accion', 'detalle'],
@@ -35,6 +42,8 @@ var HOJAS = {
    "2026-08-07" en un objeto Date con hora local y las comparaciones fallaban. */
 var COLS_TEXTO = {
   Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo'],
+  Noches: ['fecha'],
+  Acompanantes: ['nacimiento', 'creado'],
   Cuenta: ['fecha', 'creado'],
   Cierres: ['fecha', 'ejecutado'],
   Fichas: ['nacimiento', 'fecha'],
@@ -218,6 +227,41 @@ function insertarVarias_(nombre, objs) {
     filas.forEach(function (f) { sh.appendRow(f); });   // la hoja se quedó sin filas libres
   }
   olvidar_(nombre);
+}
+
+/* Cambia VARIAS filas de una hoja con una sola lectura y una sola escritura.
+   `decidir(fila)` recibe cada fila como objeto y devuelve los cambios, o
+   null si no hay que tocarla. Sin esto, corregir el precio de cinco noches
+   costaba cinco viajes a Google en vez de uno. */
+function actualizarVarias_(nombre, decidir) {
+  var sh = hoja_(nombre), v = crudo_(nombre), cab = v[0] || [];
+  if (!cab.length) return 0;
+  var min = -1, max = -1, tocadas = 0;
+  for (var i = 1; i < v.length; i++) {
+    var obj = {};
+    for (var j = 0; j < cab.length; j++) obj[cab[j]] = v[i][j];
+    var cambios = decidir(obj);
+    if (!cambios) continue;
+    for (var k in cambios) {
+      var c = cab.indexOf(k);
+      if (c > -1) v[i][c] = cambios[k];
+    }
+    tocadas++;
+    if (min === -1) min = i;
+    max = i;
+  }
+  if (!tocadas) return 0;
+  // Se escribe el bloque completo entre la primera y la última fila tocada:
+  // las de en medio se reescriben con su mismo contenido, que no cuesta nada.
+  var bloque = [];
+  for (var r = min; r <= max; r++) {
+    var fila = (v[r] || []).slice(0, cab.length);
+    while (fila.length < cab.length) fila.push('');
+    bloque.push(fila);
+  }
+  sh.getRange(min + 1, 1, bloque.length, cab.length).setValues(bloque);
+  olvidar_(nombre);
+  return tocadas;
 }
 
 function actualizar_(nombre, campoId, valorId, cambios) {
@@ -684,6 +728,21 @@ function tarifaNoche(token, recursoId, fecha) {
 
 /* ===================== RESERVAS ===================== */
 
+/* Calza el plan de noches con las fechas y, si desde el formulario vino un
+   total distinto al que suman las noches, lo reparte entre ellas. Así el
+   número que se ve en la reserva y el detalle noche a noche nunca se
+   contradicen. */
+function ajustarPlan_(reserva, totalPedido, quien) {
+  var r = sincronizarNoches_(reserva, quien);
+  if (totalPedido === null || totalPedido === r.total) return r.total;
+  // Un total en cero suele ser "todavía no lo cotizo": se deja la tarifa.
+  if (totalPedido <= 0) return r.total;
+  var plan = planDe_(reserva.id);
+  if (!plan.length) return r.total;
+  aplicarValores_(reserva.id, repartir_(totalPedido, plan), 'Total acordado');
+  return totalPedido;
+}
+
 /* Verificación autoritativa de disponibilidad. Se ejecuta SIEMPRE antes de escribir. */
 function verificarLibre_(recurso, checkIn, checkOut, ignorarId) {
   var ocupadas = leer_('Reservas').filter(function (r) {
@@ -740,13 +799,18 @@ function guardarReserva(token, datos) {
     };
     if (datos.grupo !== undefined) campos.grupo = datos.grupo || '';
 
+    var pedido = (datos.total === undefined || datos.total === null || datos.total === '')
+      ? null : Math.round(Number(datos.total) || 0);
+
     if (datos.id) {
       // Si la cuenta ya tiene pagos anotados, ella manda: el abonado de la
       // reserva es su espejo y no se puede pisar desde este formulario.
       var pagados = movimientosDe_(datos.id).filter(function (m) { return m.clase === 'pago'; });
       if (pagados.length) delete campos.anticipo;
+      delete campos.total;                     // el total lo fija el plan de noches
       actualizar_('Reservas', 'id', datos.id, campos);
-      return { id: datos.id };
+      campos.id = datos.id;
+      return { id: datos.id, total: ajustarPlan_(campos, pedido, u.nombre) };
     }
 
     var id = uid_('R');
@@ -754,7 +818,12 @@ function guardarReserva(token, datos) {
     campos.tokenFicha = '';
     campos.creado = ahora_();
     campos.creadoPor = u.nombre;
+    // Las noches se arman antes de guardar, para que el total que queda en la
+    // reserva sea ya la suma de sus noches y no haya que corregirlo después.
+    var plan = armarNoches_(id, datos.recurso, f.checkIn, f.checkOut, pedido);
+    campos.total = plan.total;
     insertar_('Reservas', campos);
+    insertarVarias_('Noches', plan.noches);
     // El abono que se escribe al crear la reserva entra a la cuenta como un
     // pago, para que exista un solo lugar donde vive la plata.
     if (campos.anticipo > 0) {
@@ -764,7 +833,7 @@ function guardarReserva(token, datos) {
         medio: datos.medioAnticipo || 'otro', fecha: hoy_()
       }, u.nombre);
     }
-    return { id: id };
+    return { id: id, total: plan.total };
   } finally {
     lock.releaseLock();
   }
@@ -864,8 +933,21 @@ function guardarReservaGrupo(token, datos) {
         creado: ahora_(), creadoPor: u.nombre
       };
     });
-    // Todas las habitaciones del grupo se escriben de una sola vez.
+    // Las noches se arman ANTES de escribir, para que el total que queda
+    // guardado en cada reserva sea ya el que suman sus noches.
+    var noches = [];
+    filas.forEach(function (x) {
+      var plan = armarNoches_(x.id, x.recurso, f.checkIn, f.checkOut,
+                              Math.round(Number(x.total) || 0));
+      x.total = plan.total;
+      noches = noches.concat(plan.noches);
+    });
+
+    // Todas las habitaciones del grupo se escriben de una sola vez, y sus
+    // noches también: si no, un grupo de tres piezas costaría tres rondas
+    // completas de lectura y escritura.
     insertarVarias_('Reservas', filas);
+    insertarVarias_('Noches', noches);
     var ids = filas.map(function (x) { return x.id; });
     logCambio_(u.nombre, 'grupo_creado', grupo + ' · ' + ids.length + ' alojamientos · ' + datos.huesped);
     return { grupo: grupo, ids: ids };
@@ -916,7 +998,11 @@ function moverReserva(token, id, recurso, checkIn, checkOut) {
       recurso: recurso, idUnidad: unidad ? unidad.idUnidad : '',
       checkIn: f.checkIn, checkOut: f.checkOut
     });
-    return true;
+    // Alargar la reserva agrega esas noches al precio, y acortarla las quita:
+    // el total nunca se queda pegado en lo que valía antes.
+    var r = sincronizarNoches_({ id: id, recurso: recurso, checkIn: f.checkIn, checkOut: f.checkOut },
+                               sesion_(token).nombre);
+    return { total: r.total, agregadas: r.agregadas, quitadas: r.quitadas };
   } finally {
     lock.releaseLock();
   }
@@ -952,7 +1038,221 @@ function eliminarReserva(token, id) {
   if (u.rol !== 'admin') throw new Error('Solo administración puede eliminar reservas.');
   borrar_('Reservas', 'id', id);
   borrar_('Cuenta', 'idReserva', id);
+  borrar_('Noches', 'idReserva', id);
+  borrar_('Acompanantes', 'idReserva', id);
   return true;
+}
+
+/* ===================== PRECIO NOCHE A NOCHE =====================
+   El total de una reserva NO es un número suelto: es la suma de lo que vale
+   cada noche. Con eso, alargar la reserva un día suma esa noche sola,
+   acortarla la resta, y una noche de promoción se baja sin tocar las demás.
+
+   Cada noche parte con la tarifa que corresponde a esa fecha (baja o alta) y
+   queda marcada como "ajustada" si alguien le puso un precio a mano, para
+   respetarlo cuando después se mueva la reserva. */
+
+function planDe_(idReserva) {
+  return leer_('Noches')
+    .filter(function (n) { return String(n.idReserva) === String(idReserva); })
+    .map(function (n) {
+      return {
+        idReserva: n.idReserva, fecha: ymd_(n.fecha),
+        valor: Math.round(Number(n.valor) || 0),
+        ajustada: !!n.ajustada, nota: String(n.nota || '')
+      };
+    })
+    .sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; });
+}
+
+function tarifaDe_(recursoId, fecha) {
+  var r = recursos_().filter(function (x) { return x.id === recursoId; })[0];
+  if (!r) return 0;
+  return Math.round(Number(esAlta_(fecha) ? r.precioAlta : r.precioBase) || 0);
+}
+
+/* Deja el plan calzado con las fechas de la reserva: agrega las noches que
+   falten con su tarifa, y saca las que sobren si la estadía se acortó. Las
+   noches que ya estaban se respetan tal cual, incluidas las de promoción. */
+function sincronizarNoches_(reserva, quien) {
+  var ci = ymd_(reserva.checkIn), co = ymd_(reserva.checkOut);
+  if (!ci || !co) return { total: Math.round(Number(reserva.total) || 0), agregadas: 0, quitadas: 0 };
+
+  var actuales = {};
+  planDe_(reserva.id).forEach(function (n) { actuales[n.fecha] = n; });
+
+  var quiero = {};
+  for (var f = ci; f < co; f = sumarDias_(f, 1)) quiero[f] = true;
+
+  // El total se lleva en memoria mientras se decide qué agregar y qué sacar:
+  // así no hay que volver a leer la hoja para saber cuánto quedó.
+  var total = 0, agregadas = 0, quitadas = 0, nuevas = [], sobran = {};
+  Object.keys(quiero).forEach(function (f) {
+    if (actuales[f]) { total += actuales[f].valor; return; }
+    var valor = tarifaDe_(reserva.recurso, f);
+    nuevas.push({ idReserva: reserva.id, fecha: f, valor: valor, ajustada: false, nota: '' });
+    total += valor;
+    agregadas++;
+  });
+  Object.keys(actuales).forEach(function (f) {
+    if (quiero[f]) return;
+    sobran[f] = true;
+    quitadas++;
+  });
+
+  if (quitadas) {
+    borrarNoches_(reserva.id, sobran);
+    // Las noches que ya se habían anotado en la cuenta se anulan: la estadía
+    // se acortó y cobrarlas sería un error.
+    actualizarVarias_('Cuenta', function (m) {
+      if (String(m.idReserva) !== String(reserva.id) || m.anulado) return null;
+      if (m.clase !== 'cargo' || m.tipo !== 'alojamiento') return null;
+      if (!sobran[ymd_(m.fecha)]) return null;
+      return { anulado: true,
+               descripcion: String(m.descripcion || '') + ' · ANULADO: la estadía se acortó' };
+    });
+  }
+  if (nuevas.length) insertarVarias_('Noches', nuevas);
+
+  actualizar_('Reservas', 'id', reserva.id, { total: total });
+  if (agregadas || quitadas) {
+    logCambio_(quien || '', 'noches', reserva.id + ' · +' + agregadas + ' / -' + quitadas +
+      ' · total ' + total);
+  }
+  return { total: total, agregadas: agregadas, quitadas: quitadas };
+}
+
+/* Borra de una vez todas las noches que sobran, en lugar de una por una. */
+function borrarNoches_(idReserva, fechas) {
+  var sh = hoja_('Noches'), v = crudo_('Noches'), cab = v[0] || [];
+  var ci = cab.indexOf('idReserva'), cf = cab.indexOf('fecha');
+  if (ci === -1 || cf === -1) return;
+  for (var i = v.length - 1; i >= 1; i--) {
+    if (String(v[i][ci]) === String(idReserva) && fechas[ymd_(v[i][cf])]) sh.deleteRow(i + 1);
+  }
+  olvidar_('Noches');
+}
+
+function totalDelPlan_(idReserva) {
+  var t = 0;
+  planDe_(idReserva).forEach(function (n) { t += n.valor; });
+  return Math.round(t);
+}
+
+/* El detalle noche a noche, para verlo y editarlo desde la reserva. */
+function nochesDe(token, idReserva) {
+  sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  var movs = movimientosDe_(idReserva);
+  var posteadas = {};
+  movs.forEach(function (m) {
+    if (m.clase === 'cargo' && m.tipo === 'alojamiento') posteadas[ymd_(m.fecha)] = true;
+  });
+  var plan = planDe_(idReserva).map(function (n) {
+    n.posteada = !!posteadas[n.fecha];
+    n.tarifa = tarifaDe_(r.recurso, n.fecha);
+    return n;
+  });
+  return {
+    idReserva: idReserva, noches: plan, total: totalDelPlan_(idReserva),
+    checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut)
+  };
+}
+
+/* Cambia lo que vale UNA noche. Es lo que se usa para una promoción o para
+   corregir un precio mal puesto, sin tocar el resto de la estadía. */
+function guardarNoche(token, idReserva, fecha, valor, nota) {
+  var u = sesion_(token);
+  var f = ymd_(fecha);
+  var existe = planDe_(idReserva).filter(function (n) { return n.fecha === f; })[0];
+  if (!existe) throw new Error('Esa noche no es parte de la reserva.');
+
+  var v = Math.round(Number(valor) || 0);
+  if (v < 0) throw new Error('El valor de la noche no puede ser negativo.');
+
+  var nuevos = {};
+  nuevos[f] = v;
+  var total = aplicarValores_(idReserva, nuevos, String(nota || ''));
+  logCambio_(u.nombre, 'noche_editada', idReserva + ' · ' + f + ' · ' + v);
+  return { total: total };
+}
+
+/* Deja las noches indicadas en su nuevo valor, corrige de paso las que ya
+   estaban anotadas en la cuenta y actualiza el total de la reserva. Todo con
+   una lectura y una escritura por hoja, aunque cambien diez noches. */
+function aplicarValores_(idReserva, valorPorFecha, nota) {
+  actualizarVarias_('Noches', function (n) {
+    if (String(n.idReserva) !== String(idReserva)) return null;
+    var f = ymd_(n.fecha);
+    if (valorPorFecha[f] === undefined) return null;
+    return { valor: valorPorFecha[f], ajustada: true, nota: nota || n.nota || '' };
+  });
+
+  actualizarVarias_('Cuenta', function (m) {
+    if (String(m.idReserva) !== String(idReserva) || m.anulado) return null;
+    if (m.clase !== 'cargo' || m.tipo !== 'alojamiento') return null;
+    var f = ymd_(m.fecha);
+    if (valorPorFecha[f] === undefined) return null;
+    return { unitario: valorPorFecha[f], total: valorPorFecha[f] };
+  });
+
+  var total = totalDelPlan_(idReserva);
+  actualizar_('Reservas', 'id', idReserva, { total: total });
+  return total;
+}
+
+/* Cuando se negocia un precio por el paquete completo ("las 3 noches en
+   150.000"), se reparte entre las noches y la última absorbe el redondeo,
+   para que la suma dé exactamente lo acordado. */
+function repartirTotal(token, idReserva, total) {
+  var u = sesion_(token);
+  var plan = planDe_(idReserva);
+  if (!plan.length) throw new Error('La reserva no tiene noches que repartir.');
+  var t = Math.round(Number(total) || 0);
+  if (t < 0) throw new Error('El total no puede ser negativo.');
+
+  var reparto = repartir_(t, plan);
+  aplicarValores_(idReserva, reparto, 'Total repartido');
+  logCambio_(u.nombre, 'total_repartido', idReserva + ' · ' + t);
+  return { total: t, porNoche: Math.round(t / plan.length) };
+}
+
+/* Arma el plan de noches de una reserva SIN escribir nada: devuelve las filas
+   y el total. Sirve para dejar la reserva y sus noches guardadas de una sola
+   vez, en vez de crear la reserva y después corregirle el total. */
+function armarNoches_(idReserva, recurso, checkIn, checkOut, totalPedido) {
+  var dias = [];
+  for (var d = checkIn; d < checkOut; d = sumarDias_(d, 1)) {
+    dias.push({ fecha: d, valor: tarifaDe_(recurso, d) });
+  }
+  if (!dias.length) return { noches: [], total: 0 };
+
+  var acordado = (totalPedido === null || totalPedido === undefined || totalPedido <= 0)
+    ? null : Math.round(totalPedido);
+  var valores = acordado ? repartir_(acordado, dias) : null;
+
+  var noches = dias.map(function (n) {
+    return {
+      idReserva: idReserva, fecha: n.fecha,
+      valor: valores ? valores[n.fecha] : n.valor,
+      ajustada: !!valores, nota: valores ? 'Total acordado' : ''
+    };
+  });
+  var total = acordado || dias.reduce(function (a, n) { return a + n.valor; }, 0);
+  return { noches: noches, total: total };
+}
+
+/* Reparte un total entre las noches. La última absorbe el redondeo, para que
+   la suma dé exactamente lo acordado y no sobre ni falte un peso. */
+function repartir_(total, plan) {
+  var porNoche = Math.round(total / plan.length), puesto = 0, mapa = {};
+  plan.forEach(function (n, i) {
+    var v = (i === plan.length - 1) ? (total - puesto) : porNoche;
+    puesto += v;
+    mapa[n.fecha] = v;
+  });
+  return mapa;
 }
 
 /* ===================== CUENTA DEL HUÉSPED =====================
@@ -995,15 +1295,17 @@ function movimientosDe_(idReserva) {
   });
 }
 
-/* Cuánto del alojamiento acordado todavía no se ha posteado. Sirve para que
-   el saldo que ve recepción sea el de la estadía completa y no solo el de
-   las noches ya cerradas. */
+/* Cuánto del alojamiento todavía no se ha anotado en la cuenta: la suma de
+   las noches del plan que el cierre aún no ha posteado. Sirve para que el
+   saldo que ve recepción sea el de la estadía completa y no solo el de las
+   noches ya cerradas. */
 function alojamientoPendiente_(reserva, movs) {
-  var posteado = 0;
+  var puestas = {};
   movs.forEach(function (m) {
-    if (m.clase === 'cargo' && m.tipo === 'alojamiento') posteado += Number(m.total) || 0;
+    if (m.clase === 'cargo' && m.tipo === 'alojamiento') puestas[ymd_(m.fecha)] = true;
   });
-  var pend = (Number(reserva.total) || 0) - posteado;
+  var pend = 0;
+  planDe_(reserva.id).forEach(function (n) { if (!puestas[n.fecha]) pend += n.valor; });
   return pend > 0 ? pend : 0;
 }
 
@@ -1165,33 +1467,25 @@ function sumarDias_(ymd, n) {
   return Utilities.formatDate(d, TZ, 'yyyy-MM-dd');
 }
 
-/* Postea UNA noche de alojamiento, si no estaba ya puesta.
-   El valor de cada noche sale de prorratear el total acordado; la última
-   noche absorbe el redondeo para que la suma dé exactamente el total. */
+/* Postea UNA noche de alojamiento, si no estaba ya puesta. El monto sale del
+   plan de noches: es exactamente lo que se acordó cobrar por ESA noche, con
+   su promoción si la tiene. */
 function postearNoche_(reserva, fecha, quien) {
   var ci = ymd_(reserva.checkIn), co = ymd_(reserva.checkOut);
   if (!(fecha >= ci && fecha < co)) return false;
 
-  var movs = movimientosDe_(reserva.id);
-  var yaEsta = movs.some(function (m) {
+  var yaEsta = movimientosDe_(reserva.id).some(function (m) {
     return m.clase === 'cargo' && m.tipo === 'alojamiento' && ymd_(m.fecha) === fecha;
   });
   if (yaEsta) return false;
 
-  var total = Math.round(Number(reserva.total) || 0);
-  if (total <= 0) return false;
-  var n = noches_(ci, co) || 1;
-  var esUltima = sumarDias_(fecha, 1) === co;
-  var puesto = 0;
-  movs.forEach(function (m) {
-    if (m.clase === 'cargo' && m.tipo === 'alojamiento') puesto += Number(m.total) || 0;
-  });
-  var monto = esUltima ? (total - puesto) : Math.round(total / n);
+  var noche = planDe_(reserva.id).filter(function (n) { return n.fecha === fecha; })[0];
+  var monto = noche ? noche.valor : 0;
   if (monto <= 0) return false;
 
   anotar_(reserva.id, {
     clase: 'cargo', tipo: 'alojamiento', centro: 'lodge',
-    descripcion: 'Noche del ' + fecha,
+    descripcion: 'Noche del ' + fecha + (noche.nota ? ' · ' + noche.nota : ''),
     cantidad: 1, unitario: monto, total: monto,
     exento: !!reserva.exentoIva, fecha: fecha
   }, quien || 'cierre de día');
@@ -1324,6 +1618,24 @@ function resumenDia_(dia, reservas) {
     neto += d.neto; iva += d.iva;
   });
 
+  // Lo cobrado en el día no tiene por qué calzar con lo consumido en el día:
+  // si alguien paga la estadía completa al llegar, parte de esa plata es un
+  // anticipo de noches que todavía no llegan. Se calcula para poder decirlo
+  // en pantalla y que el cierre no parezca descuadrado.
+  var anticipos = 0, porCobrar = 0;
+  reservas.forEach(function (r) {
+    var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
+    if (!ci || !co || ci > dia || co <= dia) return;   // no está adentro esa noche
+    var cargado = 0, pagado = 0;
+    movimientosDe_(r.id).forEach(function (m) {
+      if (ymd_(m.fecha) > dia) return;                 // aún no ocurre
+      var t = Math.round(Number(m.total) || 0);
+      if (m.clase === 'pago') pagado += t; else cargado += t;
+    });
+    if (pagado > cargado) anticipos += pagado - cargado;
+    else porCobrar += cargado - pagado;
+  });
+
   // Lo que conviene mirar antes de irse a dormir.
   var avisos = [];
   var firmadas = firmadas_();
@@ -1342,6 +1654,17 @@ function resumenDia_(dia, reservas) {
     if (ci <= dia && co > dia && !firmadas[r.id]) {
       avisos.push({ tipo: 'sin_firma', idReserva: r.id, huesped: r.huesped,
         texto: 'Está alojado y no ha firmado la ficha de registro.' });
+    }
+    // El registro de huéspedes tiene que nombrar a todos los que duermen. La
+    // ficha los pide pero no obliga, así que acá se avisa de los que faltan.
+    if (ci <= dia && co > dia) {
+      var esperados = Math.max((Number(r.pax) || 1) - 1, 0);
+      var anotados = acompanantesDe_(r.id).length;
+      if (esperados > anotados) {
+        avisos.push({ tipo: 'sin_acompanantes', idReserva: r.id, huesped: r.huesped,
+          texto: 'Faltan ' + (esperados - anotados) + ' de ' + esperados +
+                 ' acompañante(s) por registrar.' });
+      }
     }
     if (co === dia) {
       var movs = movimientosDe_(r.id);
@@ -1367,6 +1690,9 @@ function resumenDia_(dia, reservas) {
     fecha: dia,
     alojamiento: alojamiento, consumos: consumos, pagos: pagos,
     total: alojamiento + consumos,
+    // De lo que hay cobrado a los que están adentro esta noche, cuánto es
+    // adelanto de noches futuras y cuánto queda todavía por cobrar.
+    anticipos: anticipos, porCobrar: porCobrar,
     porCentro: porCentro, neto: neto, iva: iva,
     avisos: avisos,
     cerrado: !!cerrado,
@@ -1584,6 +1910,9 @@ function guardarFicha_(idReserva, d) {
     procedencia: d.procedencia || '', destino: d.destino || '', motivo: d.motivo || '',
     emergencia: d.emergencia || '', firmaUrl: archivo.getUrl(), fecha: ahora_()
   });
+  // Los acompañantes van con la ficha: firma uno solo, pero el registro de
+  // huéspedes tiene que nombrar a todos los que van a pernoctar.
+  guardarAcompanantes_(idReserva, d.acompanantes || []);
   // Si firma antes de llegar, la reserva sigue "confirmada": solo pasa a
   // "en casa" cuando el registro se hace el día de la llegada o después.
   // El check-in lo hace siempre recepción a mano, así que firmar la ficha
@@ -1594,13 +1923,80 @@ function guardarFicha_(idReserva, d) {
 function fichaDe(token, idReserva) {
   sesion_(token);
   var f = leer_('Fichas').filter(function (x) { return x.idReserva === idReserva; })[0];
-  if (!f) return null;
+  if (!f) return { acompanantes: acompanantesDe_(idReserva) };
   return {
     nombre: f.nombre || '', documento: f.documento || '', nacionalidad: f.nacionalidad || '',
     nacimiento: String(f.nacimiento || ''), procedencia: f.procedencia || '',
     destino: f.destino || '', motivo: f.motivo || '', emergencia: f.emergencia || '',
-    firmaUrl: f.firmaUrl || '', fecha: String(f.fecha || '')
+    firmaUrl: f.firmaUrl || '', fecha: String(f.fecha || ''),
+    acompanantes: acompanantesDe_(idReserva)
   };
+}
+
+/* ===================== ACOMPAÑANTES =====================
+   La ficha la firma una sola persona, la que hace la reserva. Pero el
+   registro de huéspedes tiene que decir quiénes más durmieron, así que la
+   reserva guarda los nombres de los acompañantes. El único dato obligatorio
+   es el nombre; el resto se pide por si se necesita, no para trabar. */
+
+function acompanantesDe_(idReserva) {
+  return leer_('Acompanantes')
+    .filter(function (a) { return String(a.idReserva) === String(idReserva); })
+    .map(function (a) {
+      return {
+        id: a.id, nombre: String(a.nombre || ''), documento: String(a.documento || ''),
+        nacionalidad: String(a.nacionalidad || ''), nacimiento: String(a.nacimiento || ''),
+        notas: String(a.notas || '')
+      };
+    });
+}
+
+function acompanantesDe(token, idReserva) {
+  sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  return {
+    idReserva: idReserva, huesped: r.huesped, pax: Number(r.pax) || 1,
+    // El titular cuenta como una de las personas de la reserva.
+    faltan: Math.max((Number(r.pax) || 1) - 1 - acompanantesDe_(idReserva).length, 0),
+    lista: acompanantesDe_(idReserva)
+  };
+}
+
+/* Reemplaza la lista completa: es más simple de entender que ir agregando y
+   borrando de a uno, y evita quedar con gente repetida. */
+function guardarAcompanantes_(idReserva, lista) {
+  var limpia = (lista || [])
+    .filter(function (a) { return String((a && a.nombre) || '').trim() !== ''; })
+    .map(function (a) {
+      return {
+        id: uid_('A'), idReserva: idReserva,
+        nombre: String(a.nombre || '').trim(),
+        documento: String(a.documento || '').trim(),
+        nacionalidad: String(a.nacionalidad || '').trim(),
+        nacimiento: String(a.nacimiento || '').trim(),
+        notas: String(a.notas || '').trim(),
+        creado: ahora_()
+      };
+    });
+  borrar_('Acompanantes', 'idReserva', idReserva);
+  if (limpia.length) insertarVarias_('Acompanantes', limpia);
+  return limpia.length;
+}
+
+function guardarAcompanantes(token, idReserva, lista) {
+  var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  var tope = Math.max((Number(r.pax) || 1) - 1, 0);
+  if ((lista || []).length > tope) {
+    throw new Error('La reserva es para ' + (Number(r.pax) || 1) + ' persona(s): ' +
+      'caben ' + tope + ' acompañante(s) además del titular. ' +
+      'Sube el número de personas de la reserva si van más.');
+  }
+  var n = guardarAcompanantes_(idReserva, lista);
+  logCambio_(u.nombre, 'acompanantes', idReserva + ' · ' + n);
+  return { guardados: n };
 }
 
 /* ===================== REGLAMENTO =====================
@@ -1674,7 +2070,11 @@ function fichaPublicaCargar(t) {
     checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
     horaEntrada: hora_(config_('checkIn'), '15:00'),
     horaSalida: hora_(config_('checkOut'), '11:00'),
-    firmada: yaFirmo
+    firmada: yaFirmo,
+    // Cuántas personas vienen: la página pide los datos del resto, para que
+    // el titular los complete de una vez y no haya que perseguirlos después.
+    pax: Number(r.pax) || 1,
+    acompanantes: acompanantesDe_(r.id)
   };
 }
 

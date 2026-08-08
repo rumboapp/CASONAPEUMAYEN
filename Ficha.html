@@ -108,6 +108,17 @@
       <div class="fld"><label data-t="lMot">Motivo del viaje</label><input id="fMot"></div>
     </div>
 
+    <!-- Solo aparece si la reserva es para más de una persona. Firma el
+         titular, pero el registro tiene que nombrar a todos los que duermen. -->
+    <div class="card hide" id="cardAcom">
+      <h2 data-t="acomTit">Quiénes te acompañan</h2>
+      <p style="font-size:13px;color:var(--tx2);margin-bottom:12px" data-t="acomAyuda">
+        Tu reserva es para más de una persona. Basta el nombre de cada acompañante;
+        lo demás es opcional. Si todavía no lo sabes, lo completamos al llegar.
+      </p>
+      <div id="acomCampos"></div>
+    </div>
+
     <div class="card">
       <h2 data-t="normas">Normas de convivencia</h2>
       <ul class="reglas" id="listaReglas"></ul>
@@ -142,7 +153,14 @@ var T = {
     lNacim:'Fecha de nacimiento', lEme:'Contacto de emergencia',
     lPro:'Ciudad de procedencia', lDes:'Destino al salir', lMot:'Motivo del viaje',
     normas:'Normas de convivencia',
-    acepto:'He leído y acepto las normas de convivencia y las condiciones de la estadía.',
+    acepto:'He leído y acepto las normas de convivencia y las condiciones de la estadía, '+
+           'en mi nombre y en el de las personas que me acompañan.',
+    acomTit:'Quiénes te acompañan',
+    acomAyuda:'Tu reserva es para más de una persona. Basta el nombre de cada acompañante; '+
+              'lo demás es opcional. Si todavía no lo sabes, lo completamos al llegar.',
+    acomN:'Acompañante', acomNombre:'Nombre completo',
+    acomDoc:'RUT o pasaporte (opcional)', acomNac:'Nacionalidad (opcional)',
+    acomNacim:'Fecha de nacimiento (opcional)',
     firma:'Firma', firmaAyuda:'Firma con el dedo dentro del recuadro.',
     borrar:'Borrar', enviar:'Enviar registro',
     listoTit:'¡Registro completo!',
@@ -160,7 +178,14 @@ var T = {
     lNacim:'Date of birth', lEme:'Emergency contact',
     lPro:'Coming from', lDes:'Going to', lMot:'Purpose of trip',
     normas:'House rules',
-    acepto:'I have read and accept the house rules and the conditions of my stay.',
+    acepto:'I have read and accept the house rules and the conditions of my stay, '+
+           'on my own behalf and on behalf of the people travelling with me.',
+    acomTit:'Who is travelling with you',
+    acomAyuda:'Your booking is for more than one person. The name of each guest is enough; '+
+              'anything else is optional. If you do not know it yet, we will complete it on arrival.',
+    acomN:'Guest', acomNombre:'Full name',
+    acomDoc:'ID or passport (optional)', acomNac:'Nationality (optional)',
+    acomNacim:'Date of birth (optional)',
     firma:'Signature', firmaAyuda:'Sign with your finger inside the box.',
     borrar:'Clear', enviar:'Submit registration',
     listoTit:'You are all set!',
@@ -187,6 +212,11 @@ function aplicarIdioma(){
   document.querySelectorAll('[data-t]').forEach(function(el){
     var k = el.getAttribute('data-t');
     if (typeof t[k] === 'string') el.textContent = t[k];
+  });
+  // "Acompañante 1", "Acompañante 2"…: el rótulo lleva el número al lado.
+  document.querySelectorAll('[data-tN]').forEach(function(el){
+    var k = el.getAttribute('data-tN');
+    if (typeof t[k] === 'string') el.textContent = t[k] + ' ' + el.getAttribute('data-n');
   });
   $('bEs').classList.toggle('on', IDIOMA==='es');
   $('bEn').classList.toggle('on', IDIOMA==='en');
@@ -235,6 +265,7 @@ llamar('fichaPublicaCargar', [TOKEN], function(d){
   if (d.firmada){ $('listo').classList.remove('hide'); return; }
   $('form').classList.remove('hide');
   $('fNom').value = d.huesped || '';
+  pintarAcompanantes();
   aplicarIdioma();
   prepararLienzo();
 }, function(e){
@@ -242,6 +273,46 @@ llamar('fichaPublicaCargar', [TOKEN], function(d){
   $('aviso').classList.remove('hide');
   $('aviso').textContent = e.message || String(e);
 });
+
+/* Un bloque por cada persona además del titular. Si la reserva es para dos,
+   sale un bloque; si es para cuatro, salen tres. */
+function pintarAcompanantes(){
+  var pax = Number(DATOS && DATOS.pax) || 1;
+  var cupos = Math.max(pax - 1, 0);
+  $('cardAcom').classList.toggle('hide', cupos === 0);
+  if (!cupos) return;
+  var ya = (DATOS.acompanantes || []);
+  var h = '';
+  for (var i = 0; i < cupos; i++){
+    var a = ya[i] || {};
+    h += '<div class="acomBloque" style="border:1px solid var(--line);border-radius:8px;'+
+         'padding:12px;margin-bottom:10px">'+
+         '<div style="font-size:12px;color:var(--tx2);font-weight:600;margin-bottom:9px" '+
+           'data-tN="acomN" data-n="'+(i+1)+'"></div>'+
+         '<div class="fld"><label data-t="acomNombre"></label>'+
+           '<input data-a="nombre" data-i="'+i+'" value="'+(a.nombre||'')+'"></div>'+
+         '<div class="g2">'+
+           '<div class="fld"><label data-t="acomDoc"></label>'+
+             '<input data-a="documento" data-i="'+i+'" value="'+(a.documento||'')+'"></div>'+
+           '<div class="fld"><label data-t="acomNac"></label>'+
+             '<input data-a="nacionalidad" data-i="'+i+'" value="'+(a.nacionalidad||'')+'"></div>'+
+         '</div>'+
+         '<div class="fld"><label data-t="acomNacim"></label>'+
+           '<input type="date" data-a="nacimiento" data-i="'+i+'" value="'+(a.nacimiento||'')+'"></div>'+
+         '</div>';
+  }
+  $('acomCampos').innerHTML = h;
+}
+
+function leerAcompanantes(){
+  var lista = [];
+  Array.prototype.forEach.call(document.querySelectorAll('#acomCampos [data-a]'), function(inp){
+    var i = +inp.dataset.i;
+    if (!lista[i]) lista[i] = {};
+    lista[i][inp.dataset.a] = inp.value.trim();
+  });
+  return lista;
+}
 
 function prepararLienzo(){
   var c = $('lienzo');
@@ -260,7 +331,9 @@ function prepararLienzo(){
   c.addEventListener('pointerdown', function(e){
     pintando=true; firmado=true;
     $('err').classList.add('hide');
-    c.setPointerCapture(e.pointerId);
+    // Si el navegador no puede capturar el puntero, la firma igual funciona:
+    // no vale la pena romper el registro por esto.
+    try { c.setPointerCapture(e.pointerId); } catch(_){}
     var p=pos(e); CTX.beginPath(); CTX.moveTo(p.x,p.y);
   });
   c.addEventListener('pointermove', function(e){
@@ -282,6 +355,10 @@ $('form').addEventListener('submit', function(e){
   var mostrar = function(m){ $('err').textContent=m; $('err').classList.remove('hide'); };
 
   if (!$('fNom').value.trim() || !$('fDoc').value.trim()) return mostrar(t.faltaNombre);
+  // Los acompañantes se piden pero NO se exigen: si alguien todavía no sabe
+  // con quién viaja, es peor que invente un nombre para poder seguir. Los que
+  // falten se completan en recepción, que igual ve los documentos al llegar.
+  var acom = leerAcompanantes().filter(function(a){ return String(a.nombre||'').trim(); });
   if (!$('fAcc').checked) return mostrar(t.faltaAcepta);
   if (!firmado) return mostrar(t.faltaFirma);
 
@@ -292,6 +369,7 @@ $('form').addEventListener('submit', function(e){
     nombre:$('fNom').value, documento:$('fDoc').value, nacionalidad:$('fNac').value,
     nacimiento:$('fNacim').value, procedencia:$('fPro').value, destino:$('fDes').value,
     motivo:$('fMot').value, emergencia:$('fEme').value, acepta:true,
+    acompanantes: acom,
     firma:$('lienzo').toDataURL('image/png')
   }], function(){
     $('form').classList.add('hide');

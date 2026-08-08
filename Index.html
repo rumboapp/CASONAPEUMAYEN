@@ -589,7 +589,15 @@
           <label>Personas <span class="muted" id="rPaxTope"></span></label>
           <input id="rPax" type="number" min="1" value="1">
         </div>
-        <div class="fld"><label>Total ($)</label><input id="rTot" type="number" min="0" step="1000"></div>
+        <div class="fld">
+          <label>Total ($)</label>
+          <input id="rTot" type="number" min="0" step="1000">
+          <div style="font-size:11.5px;margin-top:5px">
+            <span class="muted" id="rTotNota">Suma de las noches</span>
+            <button type="button" id="rVerNoches" class="hide"
+              style="color:var(--ac);text-decoration:underline;margin-left:6px">Ver noche por noche</button>
+          </div>
+        </div>
       </div>
       <div class="fld">
         <label>Abonado ($)</label>
@@ -608,6 +616,7 @@
     <footer>
       <div class="left">
         <button class="btn gh sm hide" id="rCuenta">Cuenta</button>
+        <button class="btn gh sm hide" id="rAcom">Acompañantes</button>
         <button class="btn gh sm hide" id="rVerFicha">Ver ficha firmada</button>
         <button class="btn gh sm hide" id="rEnviar">Copiar enlace de la ficha</button>
         <button class="btn gh sm hide" id="rFicha">Firmar aquí</button>
@@ -615,6 +624,54 @@
       </div>
       <button class="btn gh" data-cerrar="mRes">Cerrar</button>
       <button class="btn" id="rGuardar">Guardar</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ==================== NOCHE POR NOCHE ==================== -->
+<div class="ov hide" id="mNoches">
+  <div class="mo" style="max-width:480px">
+    <header><h3>Precio noche por noche</h3><button class="x" data-cerrar="mNoches">×</button></header>
+    <div class="body">
+      <p class="muted" style="font-size:12.5px;margin-bottom:12px">
+        El total de la reserva es la suma de estas noches. Si alargas la estadía,
+        la noche nueva entra con su tarifa y el total sube solo. Cambia el valor
+        de una noche suelta para una promoción.
+      </p>
+      <div id="nchLista"></div>
+      <div class="ctaCaja" style="margin-top:14px">
+        <div class="ctaTit">O fijar el total del paquete</div>
+        <div class="ctaForm">
+          <input id="nchTotal" type="number" min="0" step="1000" placeholder="Total acordado">
+          <button class="btn sm" id="nchRepartir">Repartir entre las noches</button>
+        </div>
+      </div>
+      <div class="err hide" id="nchErr"></div>
+    </div>
+    <footer>
+      <div class="left"><b id="nchTot"></b></div>
+      <button class="btn gh" data-cerrar="mNoches">Cerrar</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ==================== ACOMPAÑANTES ==================== -->
+<div class="ov hide" id="mAcom">
+  <div class="mo" style="max-width:520px">
+    <header><h3 id="acoTit">Quiénes se alojan</h3><button class="x" data-cerrar="mAcom">×</button></header>
+    <div class="body">
+      <p class="muted" style="font-size:12.5px;margin-bottom:12px">
+        La ficha la firma solo el titular, pero el registro de huéspedes tiene que
+        nombrar a todos los que pernoctan. Basta el nombre; el resto es opcional.
+        Si van más personas, sube primero el número de la reserva.
+      </p>
+      <div id="acoLista"></div>
+      <div class="err hide" id="acoErr"></div>
+    </div>
+    <footer>
+      <div class="left"><span class="muted" id="acoCuenta"></span></div>
+      <button class="btn gh" data-cerrar="mAcom">Cerrar</button>
+      <button class="btn" id="acoGuardar">Guardar</button>
     </footer>
   </div>
 </div>
@@ -1499,8 +1556,15 @@ function aplicarYGuardar(reserva, cambios, aviso){
   pintarCal();
 
   srv('moverReserva')(reserva.id, reserva.recurso, reserva.checkIn, reserva.checkOut)
-    .then(function(){
+    .then(function(d){
       reserva._guardando = false;
+      // Alargar o acortar cambia el precio: se avisa el total nuevo para no
+      // tener que abrir la reserva a mirarlo.
+      if(d && d.total !== undefined){
+        reserva.total = d.total;
+        if(d.agregadas)      aviso += ' · +'+d.agregadas+' noche(s) · total '+plata(d.total);
+        else if(d.quitadas)  aviso += ' · −'+d.quitadas+' noche(s) · total '+plata(d.total);
+      }
       pintarCal();
       toast(aviso);
       // Se confirma por detrás, sin volver a bloquear la pantalla.
@@ -1584,14 +1648,22 @@ function ajustarPax(){
   if(!Number($('rPax').value)) $('rPax').value=Math.min(2, tope);
 }
 
+/* El total lo manda el plan de noches del servidor. Acá solo se calcula para
+   mostrarlo mientras se arma la reserva; si la persona escribe otro número a
+   mano, ese gana y el servidor lo reparte entre las noches. */
+var TOTAL_TOCADO = false;
+
 function recalcularTotal(){
   ajustarPax();
   if(!RANGO.in) return;
   var r=CAL.recursos.filter(function(x){ return x.id===$('rRec').value; })[0];
   if(!r) return;
-  var t=0;
-  for(var f=RANGO.in; f<RANGO.out; f=mas(f,1)) t += esAlta(f)? r.precioAlta : r.precioBase;
-  $('rTot').value=t;
+  var t=0, n=0;
+  for(var f=RANGO.in; f<RANGO.out; f=mas(f,1)){ t += esAlta(f)? r.precioAlta : r.precioBase; n++; }
+  if(!TOTAL_TOCADO) $('rTot').value=t;
+  $('rTotNota').textContent = TOTAL_TOCADO
+    ? 'Se reparte entre las '+n+' noche(s) al guardar'
+    : 'Suma de '+n+' noche(s)';
   var esGlamping = r.grupo==='Glamping';
   $('rAddonBox').classList.toggle('hide', !esGlamping);
   if(!esGlamping){ $('rAddon').checked=false; $('rAddonF').classList.add('hide'); }
@@ -1611,8 +1683,10 @@ function nuevaReserva(rec, entrada, salida){
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
   $('rEnviar').classList.add('hide'); $('rVerFicha').classList.add('hide');
-  $('rCuenta').classList.add('hide');
+  $('rCuenta').classList.add('hide'); $('rAcom').classList.add('hide');
+  $('rVerNoches').classList.add('hide');
   $('rAnt').readOnly=false; $('rAntNota').classList.add('hide');
+  TOTAL_TOCADO=false;
   $('rPaso').classList.add('hide'); $('rGrupoTodo').classList.add('hide');
   $('rGrupoChk').checked=false;
   pintarFechas(); recalcularTotal();
@@ -1628,6 +1702,10 @@ function abrirReserva(r){
   $('rNom').value=r.huesped; $('rTel').value=String(r.telefono||'');
   $('rMail').value=r.email||''; $('rCan').value=r.canal||'whatsapp';
   $('rEst').value=r.estado; $('rTot').value=r.total; $('rAnt').value=r.anticipo;
+  TOTAL_TOCADO=false;
+  $('rVerNoches').classList.remove('hide');
+  $('rTotNota').textContent='Suma de '+noches(r.checkIn,r.checkOut)+' noche(s)';
+  $('rAcom').classList.remove('hide');
   $('rPax').value=r.pax||1; ajustarPax();
   $('rNot').value=r.notas||'';
   $('rAddon').checked=!!r.addon;
@@ -1858,6 +1936,135 @@ $('ctaPrograma').onclick=function(){
 
 function errCta(m){ var e=$('ctaErr'); e.textContent=m; e.classList.remove('hide'); }
 
+/* ==================================================================
+   Precio noche por noche
+   ================================================================== */
+var NCH = null;
+
+$('rTot').addEventListener('input', function(){ TOTAL_TOCADO=true; recalcularTotal(); });
+$('rVerNoches').onclick=function(){ if(RES) abrirNoches(RES.id); };
+
+function abrirNoches(id){
+  $('nchErr').classList.add('hide');
+  $('nchLista').innerHTML='<div class="esqueleto"></div>';
+  abrir('mNoches');
+  refrescarNoches(id);
+}
+
+function refrescarNoches(id){
+  return srv('nochesDe')(id).then(function(d){ NCH=d; pintarNoches(); });
+}
+
+function pintarNoches(){
+  if(!NCH) return;
+  $('nchTot').textContent='Total: '+plata(NCH.total);
+  $('nchTotal').value=NCH.total;
+  if(!NCH.noches.length){
+    $('nchLista').innerHTML='<div class="empty">La reserva no tiene noches.</div>';
+    return;
+  }
+  var h='<table class="ctaMov"><thead><tr><th>Noche</th><th class="n">Valor</th>'+
+        '<th></th></tr></thead><tbody>';
+  NCH.noches.forEach(function(n){
+    h+='<tr><td>'+largo(n.fecha)+
+       (n.ajustada?'<span class="cen">a mano</span>':'')+
+       (n.posteada?'<span class="cen">ya cobrada</span>':'')+
+       (n.nota?'<br><span class="muted" style="font-size:11px">'+n.nota+'</span>':'')+'</td>'+
+       '<td class="n"><input type="number" min="0" step="1000" data-noche="'+n.fecha+'" '+
+       'value="'+n.valor+'" style="width:110px;text-align:right"></td>'+
+       '<td class="n muted" style="font-size:11px">tarifa '+plata(n.tarifa)+'</td></tr>';
+  });
+  $('nchLista').innerHTML=h+'</tbody></table>';
+
+  Array.prototype.forEach.call($('nchLista').querySelectorAll('[data-noche]'), function(inp){
+    inp.onchange=function(){
+      srv('guardarNoche')(NCH.idReserva, inp.dataset.noche, +inp.value||0, '')
+        .then(function(){ return refrescarNoches(NCH.idReserva); })
+        .then(function(){
+          toast('Noche actualizada · total '+plata(NCH.total));
+          if(RES){ RES.total=NCH.total; $('rTot').value=NCH.total; }
+          recargarCal();
+        })
+        .catch(function(e){ $('nchErr').textContent=e.message||String(e);
+                            $('nchErr').classList.remove('hide'); });
+    };
+  });
+}
+
+$('nchRepartir').onclick=function(){
+  if(!NCH) return;
+  ocupado('nchRepartir', srv('repartirTotal')(NCH.idReserva, +$('nchTotal').value||0))
+    .then(function(){ return refrescarNoches(NCH.idReserva); })
+    .then(function(){
+      toast('Total repartido entre las noches');
+      if(RES){ RES.total=NCH.total; $('rTot').value=NCH.total; }
+      recargarCal();
+    })
+    .catch(function(e){ $('nchErr').textContent=e.message||String(e);
+                        $('nchErr').classList.remove('hide'); });
+};
+
+/* ==================================================================
+   Acompañantes
+   ================================================================== */
+var ACO = null;
+
+$('rAcom').onclick=function(){ if(RES) abrirAcompanantes(RES.id); };
+
+function abrirAcompanantes(id){
+  $('acoErr').classList.add('hide');
+  $('acoLista').innerHTML='<div class="esqueleto"></div>';
+  abrir('mAcom');
+  srv('acompanantesDe')(id).then(function(d){ ACO=d; pintarAcompanantes(); }).catch(fallo);
+}
+
+function pintarAcompanantes(){
+  if(!ACO) return;
+  $('acoTit').textContent='Quiénes se alojan · '+ACO.huesped;
+  var cupos=Math.max(ACO.pax-1, 0);
+  $('acoCuenta').textContent = cupos
+    ? 'Reserva para '+ACO.pax+' persona(s): el titular y '+cupos+' acompañante(s)'
+    : 'Reserva para 1 persona: no lleva acompañantes';
+
+  if(!cupos){
+    $('acoLista').innerHTML='<div class="empty">Sube el número de personas de la '+
+      'reserva para poder anotar acompañantes.</div>';
+    return;
+  }
+  var h='';
+  for(var i=0;i<cupos;i++){
+    var a=ACO.lista[i]||{};
+    h+='<div style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px">'+
+       '<div class="ctaTit">Acompañante '+(i+1)+'</div>'+
+       '<div class="fld"><label>Nombre completo</label>'+
+         '<input data-a="nombre" data-i="'+i+'" value="'+(a.nombre||'')+'"></div>'+
+       '<div class="g2">'+
+         '<div class="fld"><label>Documento o pasaporte</label>'+
+           '<input data-a="documento" data-i="'+i+'" value="'+(a.documento||'')+'"></div>'+
+         '<div class="fld"><label>Nacionalidad</label>'+
+           '<input data-a="nacionalidad" data-i="'+i+'" value="'+(a.nacionalidad||'')+'"></div>'+
+       '</div>'+
+       '<div class="fld"><label>Fecha de nacimiento</label>'+
+         '<input type="date" data-a="nacimiento" data-i="'+i+'" value="'+(a.nacimiento||'')+'"></div>'+
+       '</div>';
+  }
+  $('acoLista').innerHTML=h;
+}
+
+$('acoGuardar').onclick=function(){
+  if(!ACO) return;
+  var lista=[];
+  Array.prototype.forEach.call($('acoLista').querySelectorAll('[data-a]'), function(inp){
+    var i=+inp.dataset.i;
+    if(!lista[i]) lista[i]={};
+    lista[i][inp.dataset.a]=inp.value.trim();
+  });
+  ocupado('acoGuardar', srv('guardarAcompanantes')(ACO.idReserva, lista))
+    .then(function(){ cerrar('mAcom'); toast('Acompañantes guardados'); })
+    .catch(function(e){ $('acoErr').textContent=e.message||String(e);
+                        $('acoErr').classList.remove('hide'); });
+};
+
 function avanzarEstado(nuevo, aviso){
   if(!RES) return;
   var todoElGrupo = RES.grupo && $('rGrupoChk').checked;
@@ -1906,11 +2113,17 @@ $('rGuardar').onclick=function(){
     huesped:$('rNom').value.trim(), telefono:$('rTel').value, email:$('rMail').value,
     canal:$('rCan').value,
     estado:$('rEst').value, pax:+$('rPax').value||1,
-    total:+$('rTot').value||0, anticipo:+$('rAnt').value||0,
+    // El total solo se manda si alguien lo escribió a mano; si no, lo arma el
+    // servidor sumando las noches, y así una promoción no se pierde al guardar.
+    total: TOTAL_TOCADO ? (+$('rTot').value||0) : null,
+    anticipo:+$('rAnt').value||0,
     addon:$('rAddon').checked, addonFecha:$('rAddonF').value, notas:$('rNot').value
   };
-  ocupado('rGuardar', srv('guardarReserva')(datos)).then(function(){
-    cerrar('mRes'); toast(RES?'Reserva actualizada':'Reserva creada'); recargarCal();
+  ocupado('rGuardar', srv('guardarReserva')(datos)).then(function(d){
+    cerrar('mRes');
+    toast((RES?'Reserva actualizada':'Reserva creada') +
+          (d && d.total ? ' · '+plata(d.total) : ''));
+    recargarCal();
   }).catch(function(e){
     $('rErr').textContent=e.message||String(e); $('rErr').classList.remove('hide');
   });
@@ -2305,6 +2518,7 @@ function pintarCierre(d){
     sin_llegar:'No se registró la llegada',
     sin_salir:'No se marcó el check-out',
     sin_firma:'Ficha sin firmar',
+    sin_acompanantes:'Faltan acompañantes por registrar',
     saldo:'Se fue con saldo pendiente',
     sucia:'Habitación sucia'
   };
@@ -2316,12 +2530,21 @@ function pintarCierre(d){
         : '<span class="tag tentativa">Sin cerrar</span>')+
     '</div>'+
     '<div class="ctaResumen">'+
-      caja('Alojamiento', plata(d.alojamiento))+
+      caja('Alojamiento', plata(d.alojamiento), '', 'lo que consumió esta noche')+
       caja('Consumos', plata(d.consumos))+
       caja('Total del día', plata(d.total))+
-      caja('Cobrado', plata(d.pagos), 'pagado')+
+      caja('Cobrado hoy', plata(d.pagos), 'pagado',
+           d.anticipos ? plata(d.anticipos)+' es adelanto de noches futuras' : '')+
       caja('Neto / IVA', plata(d.neto), '', 'IVA '+plata(d.iva))+
+      (d.porCobrar ? caja('Por cobrar', plata(d.porCobrar), 'debe',
+                          'de los que están adentro') : '')+
     '</div>'+
+    (d.pagos !== d.total
+      ? '<p class="muted" style="font-size:12px;margin-top:10px">'+
+        'Lo cobrado no tiene por qué calzar con lo consumido: si alguien paga toda '+
+        'la estadía al llegar, esa plata entra hoy pero se va consumiendo en las '+
+        'noches siguientes.</p>'
+      : '')+
     '<div class="ctaResumen" style="margin-top:12px">'+
       caja('Lodge', plata((d.porCentro&&d.porCentro.lodge)||0))+
       caja('Restaurante', plata((d.porCentro&&d.porCentro.restaurante)||0))+
