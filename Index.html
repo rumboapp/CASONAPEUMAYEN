@@ -312,7 +312,7 @@
 <!-- ==================== LOGIN ==================== -->
 <div id="login">
   <form id="fLogin">
-    <img class="logo" src="<?= logo ?>" alt="Casona Peumayén"
+    <img class="logo" id="logoImg" src="<?= logo ?>" alt="Casona Peumayén"
          onerror="this.style.display='none';document.getElementById('logoTxt').style.display='block'">
     <h1 id="logoTxt" style="display:none;font-size:19px;font-weight:600;text-align:center;margin-bottom:4px">Casona Peumayén</h1>
     <p class="s" style="text-align:center">Gestión de alojamiento</p>
@@ -336,7 +336,9 @@
 <div id="app" class="hide">
   <header>
     <div style="display:flex;align-items:center;gap:11px;min-width:0">
-      <img class="marca" src="<?= logo ?>" alt="Casona Peumayén"
+      <!-- El logo se incrusta UNA sola vez, en la pantalla de acceso, y acá
+           se reutiliza esa misma imagen: la página pesa la mitad. -->
+      <img class="marca" id="marcaImg" alt="Casona Peumayén"
            onerror="this.style.display='none';document.getElementById('marcaTxt').style.display='block'">
       <span id="marcaTxt" style="display:none;font-weight:600;font-size:15px">Casona Peumayén</span>
       <span class="tit">Gestión de alojamiento</span>
@@ -749,7 +751,7 @@
    Estado
    ================================================================== */
 var S = { token:null, user:null, rol:null };
-var CAL = { inicio:null, dias:14, recursos:[], reservas:[], hoy:null, cfg:{} };
+var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{} };
 var RES = null;               // reserva abierta en el modal
 var SEL = null;               // selección en curso sobre el calendario
 var RANGO = { in:null, out:null };
@@ -758,6 +760,13 @@ var DRAG = null;
 var $ = function(id){ return document.getElementById(id); };
 var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 var DIAS = ['dom','lun','mar','mié','jue','vie','sáb'];
+
+/* El logo del encabezado toma la misma imagen que ya cargó la pantalla de
+   acceso: así viaja una sola vez en la página, en vez de dos. */
+(function(){
+  var origen = $('logoImg'), destino = $('marcaImg');
+  if(origen && destino) destino.src = origen.getAttribute('src');
+})();
 
 /* ---------- Fechas: siempre texto "YYYY-MM-DD", nunca objetos Date ---------- */
 function ymd(d){
@@ -980,10 +989,10 @@ function cargarCal(intento, silencioso){
   if(!silencioso) $('cal').classList.add('recargando');
   var quitar=function(){ $('cal').classList.remove('recargando'); };
 
-  srv('cargarTablero')(desde, hasta).then(function(d){
+  srv('cargarTablero')(desde, hasta, CAL.recursosVer||'').then(function(d){
     quitar();
     $('avisoCarga').classList.add('hide');
-    if(!d || !d.recursos){
+    if(!d || !d.hoy || (!d.recursos && !CAL.recursos.length)){
       toast('El servidor no devolvió datos. Revisa la instalación desde la pantalla de acceso.', true);
       return;
     }
@@ -1016,7 +1025,11 @@ function cargarCal(intento, silencioso){
 /* Un solo lugar donde se guardan los datos que llegan del servidor, para
    que la carga normal y el refresco de fondo no se desincronicen. */
 function aplicarTablero(d){
-  CAL.recursos=d.recursos||[]; CAL.reservas=d.reservas||[];
+  // La lista de habitaciones y camas solo viaja cuando de verdad cambió: si
+  // no viene, se conserva la que ya está en pantalla.
+  if(d.recursos) CAL.recursos=d.recursos;
+  if(d.recursosVer) CAL.recursosVer=d.recursosVer;
+  CAL.reservas=d.reservas||[];
   CAL.hoy=d.hoy||fmtHoy(); CAL.cfg=d.cfg||{}; CAL.aseo=d.aseo||{};
 
   var av=$('avisoIleg');
@@ -1032,11 +1045,13 @@ var refrescando=false;
 function refrescarSilencioso(){
   if(refrescando || !CAL.ventana) return;
   refrescando=true;
-  srv('cargarTablero')(CAL.ventana.desde, CAL.ventana.hasta).then(function(d){
+  srv('cargarTablero')(CAL.ventana.desde, CAL.ventana.hasta, CAL.recursosVer||'').then(function(d){
     refrescando=false;
-    if(!d || !d.recursos) return;
+    if(!d || !d.hoy) return;
     // Solo se repinta si de verdad cambió algo, para que no parpadee.
-    var igual = JSON.stringify(d.reservas)===JSON.stringify(CAL.reservas) &&
+    // Si viene el inventario es porque cambió, y entonces siempre se repinta.
+    var igual = !d.recursos &&
+                JSON.stringify(d.reservas)===JSON.stringify(CAL.reservas) &&
                 JSON.stringify(d.aseo)===JSON.stringify(CAL.aseo) &&
                 (d.ilegibles||0)===(CAL.ilegibles||0);
     CAL.ilegibles = d.ilegibles||0;
@@ -1083,6 +1098,9 @@ function pintarCal(animar){
   // toda la grilla parpadea cada vez que se mueve una reserva.
   cal.classList.toggle('sin-anim', !animar);
   cal.innerHTML='';
+  // Toda la grilla se arma aparte, fuera de la pantalla, y se cuelga de una
+  // sola vez: así el navegador calcula la disposición una vez y no cientos.
+  var frag=document.createDocumentFragment();
   var dias=[]; for(var i=0;i<N;i++) dias.push(mas(CAL.inicio,i));
   $('cRng').textContent = corto(dias[0])+' – '+corto(dias[N-1]);
 
@@ -1092,13 +1110,13 @@ function pintarCal(animar){
   // Encabezado
   var esq=document.createElement('div');
   esq.className='hd corner'; esq.style.gridArea='1 / 1';
-  cal.appendChild(esq);
+  frag.appendChild(esq);
   dias.forEach(function(f,i){
-    var h=document.createElement('div');
+    var h=document.createElement('div'), fd=aDate(f);
     h.className='hd'+(finde(f)?' wknd':'')+(f===CAL.hoy?' today':'');
     h.style.gridArea='1 / '+(i+2);
-    h.innerHTML='<span>'+DIAS[aDate(f).getDay()]+'</span><span class="dn">'+aDate(f).getDate()+'</span>';
-    cal.appendChild(h);
+    h.innerHTML='<span>'+DIAS[fd.getDay()]+'</span><span class="dn">'+fd.getDate()+'</span>';
+    frag.appendChild(h);
   });
 
   // Filas: encabezados de grupo + un recurso por fila
@@ -1110,6 +1128,12 @@ function pintarCal(animar){
 
   var mapa=ocupacion();
   var filaDe={};
+  // Fin de semana y días pasados son iguales para todas las filas: se
+  // calculan una vez y no una por cada casilla de la grilla.
+  var claseDia=dias.map(function(f){
+    return 'cell'+(finde(f)?' wknd':'')+(f<CAL.hoy?' past':'');
+  });
+  var rotulo = { limpia:'Limpia', sucia:'Sucia, por limpiar', bloqueada:'Fuera de servicio' };
 
   filas.forEach(function(f, idx){
     var fila=idx+2;
@@ -1117,7 +1141,7 @@ function pintarCal(animar){
       var g=document.createElement('div');
       g.className='grp'; g.textContent=f.nombre;
       g.style.gridArea=fila+' / 1 / '+(fila+1)+' / '+(N+2);
-      cal.appendChild(g);
+      frag.appendChild(g);
       return;
     }
     filaDe[f.r.id]=fila;
@@ -1131,7 +1155,6 @@ function pintarCal(animar){
     // Un punto de color dice si está limpia, sucia o bloqueada: sirve para
     // decidir al vuelo dónde meter a alguien que llega sin reserva.
     var aseo = (CAL.aseo && CAL.aseo[f.r.id]) || 'limpia';
-    var rotulo = { limpia:'Limpia', sucia:'Sucia, por limpiar', bloqueada:'Fuera de servicio' };
     var bano = f.r.bano==='privado'
       ? '<span class="bano priv" title="Baño privado">priv</span>'
       : '<span class="bano comp" title="Baño compartido">comp</span>';
@@ -1139,15 +1162,14 @@ function pintarCal(animar){
                  '<span>'+etiq+'</span>'+
                  (f.r.nombre?'<span class="sub">· '+f.r.nombre+'</span>':'')+bano;
     if(aseo!=='limpia') nm.classList.add('aseo-'+aseo);
-    cal.appendChild(nm);
+    frag.appendChild(nm);
 
     dias.forEach(function(fecha, i){
       var c=document.createElement('div');
-      var ocupado=!!mapa[f.r.id+'|'+fecha];
-      c.className='cell'+(finde(fecha)?' wknd':'')+(fecha<CAL.hoy?' past':'')+(ocupado?' busy':'');
+      c.className=claseDia[i]+(mapa[f.r.id+'|'+fecha]?' busy':'');
       c.style.gridArea=fila+' / '+(i+2);
       c.dataset.rec=f.r.id; c.dataset.f=fecha;
-      cal.appendChild(c);
+      frag.appendChild(c);
     });
   });
 
@@ -1195,8 +1217,10 @@ function pintarCal(animar){
       try{ ev.dataTransfer.setData('text/plain', r.id); }catch(_){}
     });
     b.addEventListener('dragend', function(){ DRAG=null; limpiarSel(); });
-    cal.appendChild(b);
+    frag.appendChild(b);
   });
+
+  cal.appendChild(frag);
 }
 
 /* ---------- Selección arrastrando sobre días libres ---------- */
@@ -1775,35 +1799,47 @@ function tabla(cont, filas, cols, vacio){
   el.innerHTML=h+'</tbody></table>';
 }
 
+/* Lo último que devolvió el servidor. Al volver a la pestaña se pinta esto
+   al tiro y el servidor se consulta por detrás: no se queda esperando. */
+var HOY_DATOS = null;
+
 function cargarHoy(){
-  ['tLleg','tSal','tCasa','tAdd'].forEach(function(x){ esqueleto(x,2); });
+  if(HOY_DATOS) pintarHoy(HOY_DATOS);
+  else ['tLleg','tSal','tCasa','tAdd'].forEach(function(x){ esqueleto(x,2); });
   srv('panelHoy')('').then(function(d){
     d = d || {};
     ['llegadas','salidas','enCasa','addons'].forEach(function(k){ if(!d[k]) d[k]=[]; });
-    var comunes=[
-      ['Huésped', function(r){ return '<b>'+r.huesped+'</b>'+(r.telefono?'<br><span class="muted">'+String(r.telefono)+'</span>':''); }],
-      ['Unidad',  function(r){ return r.recurso; }],
-      ['Pax',     function(r){ return r.pax||1; }],
-      ['Estado',  function(r){ return '<span class="tag '+r.estado+'">'+etq(r.estado)+'</span>'; }]
-    ];
-    tabla('tLleg', d.llegadas, comunes.concat([
-      ['Saldo', function(r){ return r.saldo>0? '<b>'+plata(r.saldo)+'</b>' : '<span class="muted">pagado</span>'; }],
-      ['Notas', function(r){ return '<span class="muted">'+(r.notas||'')+'</span>'; }]
-    ]), 'Sin llegadas hoy.');
-    tabla('tSal', d.salidas, comunes.concat([
-      ['Saldo', function(r){ return r.saldo>0? '<b>'+plata(r.saldo)+'</b>' : '<span class="muted">pagado</span>'; }]
-    ]), 'Sin salidas hoy.');
-    tabla('tCasa', d.enCasa, comunes.concat([
-      ['Sale', function(r){ return largo(r.checkOut); }]
-    ]), 'No hay huéspedes alojados.');
-    tabla('tAdd', d.addons, [
-      ['Huésped', function(r){ return r.huesped; }],
-      ['Unidad',  function(r){ return r.recurso; }],
-      ['Pax',     function(r){ return r.pax||1; }],
-      ['Llegada', function(r){ return largo(r.checkIn); }],
-      ['Agendado',function(r){ return r.addonFecha? String(r.addonFecha).replace('T',' ') : '<span class="muted">por coordinar</span>'; }]
-    ], 'Sin programas de tinaja + sushi pendientes.');
+    // Si nada cambió no se vuelve a dibujar, para que no parpadee.
+    var igual = HOY_DATOS && JSON.stringify(d)===JSON.stringify(HOY_DATOS);
+    HOY_DATOS = d;
+    if(!igual) pintarHoy(d);
   }).catch(fallo);
+}
+
+function pintarHoy(d){
+  var comunes=[
+    ['Huésped', function(r){ return '<b>'+r.huesped+'</b>'+(r.telefono?'<br><span class="muted">'+String(r.telefono)+'</span>':''); }],
+    ['Unidad',  function(r){ return r.recurso; }],
+    ['Pax',     function(r){ return r.pax||1; }],
+    ['Estado',  function(r){ return '<span class="tag '+r.estado+'">'+etq(r.estado)+'</span>'; }]
+  ];
+  tabla('tLleg', d.llegadas, comunes.concat([
+    ['Saldo', function(r){ return r.saldo>0? '<b>'+plata(r.saldo)+'</b>' : '<span class="muted">pagado</span>'; }],
+    ['Notas', function(r){ return '<span class="muted">'+(r.notas||'')+'</span>'; }]
+  ]), 'Sin llegadas hoy.');
+  tabla('tSal', d.salidas, comunes.concat([
+    ['Saldo', function(r){ return r.saldo>0? '<b>'+plata(r.saldo)+'</b>' : '<span class="muted">pagado</span>'; }]
+  ]), 'Sin salidas hoy.');
+  tabla('tCasa', d.enCasa, comunes.concat([
+    ['Sale', function(r){ return largo(r.checkOut); }]
+  ]), 'No hay huéspedes alojados.');
+  tabla('tAdd', d.addons, [
+    ['Huésped', function(r){ return r.huesped; }],
+    ['Unidad',  function(r){ return r.recurso; }],
+    ['Pax',     function(r){ return r.pax||1; }],
+    ['Llegada', function(r){ return largo(r.checkIn); }],
+    ['Agendado',function(r){ return r.addonFecha? String(r.addonFecha).replace('T',' ') : '<span class="muted">por coordinar</span>'; }]
+  ], 'Sin programas de tinaja + sushi pendientes.');
 }
 function etq(e){
   return {tentativa:'Tentativa',confirmada:'Confirmada',en_casa:'Check-in',
@@ -1813,10 +1849,21 @@ function etq(e){
 /* ==================================================================
    Aseo
    ================================================================== */
+var ASEO_DATOS = null;
+
 function cargarAseo(){
-  esqueleto('hk',3);
+  if(ASEO_DATOS) pintarAseo(ASEO_DATOS);
+  else esqueleto('hk',3);
   srv('panelAseo')().then(function(lista){
     lista = lista || [];
+    var igual = ASEO_DATOS && JSON.stringify(lista)===JSON.stringify(ASEO_DATOS);
+    ASEO_DATOS = lista;
+    if(!igual) pintarAseo(lista);
+  }).catch(fallo);
+}
+
+function pintarAseo(lista){
+  {
     pintarResumenAseo(lista);
     var c=$('hk'); c.innerHTML='';
     if(!lista.length){ c.innerHTML='<div class="empty">Sin alojamientos.</div>'; return; }
@@ -1848,6 +1895,8 @@ function cargarAseo(){
         b.textContent=e[1]; b.dataset.e=e[0];
         if(u.estado===e[0]) b.classList.add('on');
         b.onclick=function(){
+          // El botón responde al toque y el servidor se anota después.
+          u.estado=e[0]; pintarAseo(lista);
           srv('marcarAseo')(u.id, e[0], '').then(cargarAseo).catch(fallo);
         };
         segs.appendChild(b);
@@ -1859,7 +1908,7 @@ function cargarAseo(){
       d.appendChild(up);
       c.appendChild(d);
     });
-  }).catch(fallo);
+  }
 }
 
 function pintarResumenAseo(lista){

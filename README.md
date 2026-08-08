@@ -59,6 +59,10 @@ Implementar**. La URL no cambia.
 Si no puedes entrar, la pantalla de acceso tiene un enlace
 *"¿No puedes entrar? Revisar la instalación"* que dice exactamente qué falta.
 
+Si alguna vez editas las columnas de la planilla **a mano**, vuelve a
+ejecutar `setup()`: además de dejar el encabezado en orden, borra todo lo que
+el sistema tenía guardado en memoria, para que nada quede desactualizado.
+
 ### Si una reserva sale en la planilla pero no en el calendario
 
 Le pasó a la primera versión: se agregaron columnas **en medio** del
@@ -255,21 +259,49 @@ muestra después el formulario. Un clic simple sobre un día vale por 1 noche.
 Apps Script es lento sobre todo por las llamadas a la planilla: cada lectura
 es una llamada remota. El sistema está armado para hacer las menos posibles.
 
-- **Cada hoja se lee una sola vez por ejecución.** Antes, abrir el calendario
-  leía la planilla 11 veces; ahora son 3.
-- **El inventario y la configuración quedan guardados** entre llamadas,
-  porque casi nunca cambian, y se descartan solos en cuanto alguien los
-  edita. La sesión también, por unos minutos.
+- **Cada hoja se lee una sola vez por ejecución**, y leer y escribir comparten
+  esa misma lectura: guardar una reserva ya no vuelve a pedir la hoja para
+  saber en qué fila está.
+- **Lo que el calendario necesita de las hojas grandes queda resumido y
+  guardado** entre llamadas: qué reservas tienen la ficha firmada y cómo está
+  el aseo de cada pieza. Los resúmenes se descartan solos en cuanto alguien
+  firma una ficha o marca una habitación, así que nunca muestran algo viejo.
+  Abrir el calendario pasó de leer tres hojas a leer una sola.
+- **El inventario y la configuración también quedan guardados**, porque casi
+  nunca cambian. La sesión, por unos minutos.
+- **El inventario solo viaja cuando cambia.** Cada respuesta trae una huella
+  de la lista de habitaciones y camas; si es la misma que ya tiene la
+  pantalla, no se manda de nuevo y el refresco de fondo pesa menos.
 - **Al guardar, la fila se escribe completa de una vez** en vez de campo por
-  campo.
+  campo, y una reserva de grupo escribe todas sus habitaciones en una sola
+  llamada.
 - **El calendario pide tres semanas de más a cada lado.** Moverse de semana
   en semana se dibuja al instante con lo que ya está en memoria, sin esperar
   al servidor; solo se vuelve a pedir cuando de verdad te sales de ese rango.
+- **Volver a una pestaña ya vista es instantáneo.** Hoy y Aseo se pintan con
+  lo último que llegó y se actualizan por detrás.
 - **El refresco de fondo no repinta si nada cambió**, para que la pantalla no
   parpadee mientras estás trabajando.
+- **El logo viaja una sola vez y comprimido.** La página interna pasó de 232
+  KB a 118 KB, y las de huésped y aseo de 79 KB a 31 KB: se abren mucho más
+  rápido desde el teléfono.
 
-En total, las siete operaciones más usadas bajaron de 45 a 16 lecturas de
-planilla.
+Lecturas de planilla por operación, antes y ahora:
+
+| Operación | Antes | Ahora |
+|---|---|---|
+| Abrir el calendario | 3 | **1** |
+| Pestaña Hoy | 2 | **1** |
+| Pestaña Aseo | 2 | 2 |
+| Guardar una reserva | 2 | **1** |
+| Cambiar de estado | 3 | **1** |
+| Ver disponibilidad | 1 | 1 |
+| Informes de un mes | 2 | **1** |
+| Reserva de grupo de 3 piezas | 6 lecturas y 5 escrituras | **1 lectura y 2 escrituras** |
+| **Total** | **21** | **10** |
+
+(La primera carga del día lee 6 veces mientras arma lo que va a guardar; de
+ahí en adelante son las cifras de la tabla.)
 
 ## Reglas del modelo
 
