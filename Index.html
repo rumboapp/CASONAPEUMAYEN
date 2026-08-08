@@ -45,7 +45,7 @@
   #app{display:flex;flex-direction:column;height:100vh}
   header{display:flex;align-items:center;justify-content:space-between;gap:12px;
     padding:0 16px;height:52px;background:var(--surface);border-bottom:1px solid var(--line);flex:none}
-  header .marca{height:34px;width:auto;border-radius:5px;display:block;flex:none}
+  header .marca{height:38px;width:auto;border-radius:5px;display:block;flex:none}
   header .tit{font-size:13px;color:var(--tx2);font-weight:500;letter-spacing:.02em}
   @media(max-width:640px){ header .tit{display:none} header .marca{height:28px} }
   header .who{font-size:13px;color:var(--tx2)}
@@ -138,6 +138,11 @@
     width:14px;height:14px;display:inline-flex;align-items:center;justify-content:center}
   /* Rayado suave en las que aún no firman: va como capa encima para no
      borrar el color del estado, que se define con un degradado. */
+  /* Mientras el servidor confirma, la barra late suave: se ve que ya quedó
+     pero que todavía se está guardando. */
+  .bar.estirando{box-shadow:0 0 0 2px var(--ac), 0 4px 10px rgba(0,0,0,.2);z-index:5}
+  .bar.guardando{opacity:.78;animation:latir 1.1s ease-in-out infinite}
+  @keyframes latir{0%,100%{opacity:.72}50%{opacity:.94}}
   .bar.sinfirma::after{content:'';position:absolute;inset:0;border-radius:inherit;
     pointer-events:none;background:repeating-linear-gradient(135deg,
       rgba(255,255,255,.16) 0 5px, rgba(255,255,255,0) 5px 11px)}
@@ -259,6 +264,7 @@
     .mo,.dp{animation:surgir .22s cubic-bezier(.2,.85,.3,1)}
     .toast{animation:subir .22s cubic-bezier(.2,.85,.3,1)}
     .bar{animation:entrarBarra .2s cubic-bezier(.2,.85,.3,1) both;transform-origin:left center}
+    .sin-anim .bar{animation:none}
     .vista,section[id^="v-"]:not(.hide){animation:deslizar .2s ease}
     .hkc,.tarjeta,.card{animation:deslizar .22s ease both}
     .cargando-ico{animation:girar .7s linear infinite}
@@ -306,7 +312,9 @@
 <!-- ==================== LOGIN ==================== -->
 <div id="login">
   <form id="fLogin">
-    <img class="logo" src="<?= logo ?>" alt="Casona Peumayén">
+    <img class="logo" src="<?= logo ?>" alt="Casona Peumayén"
+         onerror="this.style.display='none';document.getElementById('logoTxt').style.display='block'">
+    <h1 id="logoTxt" style="display:none;font-size:19px;font-weight:600;text-align:center;margin-bottom:4px">Casona Peumayén</h1>
     <p class="s" style="text-align:center">Gestión de alojamiento</p>
     <div class="fld"><label>Usuario</label><input id="lu" autocomplete="username" required></div>
     <div class="fld"><label>PIN</label><input id="lp" type="password" inputmode="numeric" autocomplete="current-password" required></div>
@@ -328,7 +336,9 @@
 <div id="app" class="hide">
   <header>
     <div style="display:flex;align-items:center;gap:11px;min-width:0">
-      <img class="marca" src="<?= logo ?>" alt="Casona Peumayén">
+      <img class="marca" src="<?= logo ?>" alt="Casona Peumayén"
+           onerror="this.style.display='none';document.getElementById('marcaTxt').style.display='block'">
+      <span id="marcaTxt" style="display:none;font-weight:600;font-size:15px">Casona Peumayén</span>
       <span class="tit">Gestión de alojamiento</span>
     </div>
     <div style="display:flex;align-items:center;gap:12px">
@@ -960,7 +970,7 @@ function cargarCal(intento, silencioso){
   // Si el rango pedido ya está cargado, se dibuja de inmediato y se
   // refresca por detrás sin que se note.
   if(dentroDeLoCargado() && !silencioso){
-    pintarCal();
+    pintarCal(true);
     refrescarSilencioso();
     return;
   }
@@ -980,7 +990,7 @@ function cargarCal(intento, silencioso){
     CAL.ventana = { desde: desde, hasta: hasta };
     CAL.ilegibles = d.ilegibles||0;
     aplicarTablero(d);
-    pintarCal();
+    pintarCal(true);
   }).catch(function(e){
     quitar();
     if(silencioso) return;            // un refresco de fondo no molesta al usuario
@@ -1031,7 +1041,7 @@ function refrescarSilencioso(){
                 (d.ilegibles||0)===(CAL.ilegibles||0);
     CAL.ilegibles = d.ilegibles||0;
     aplicarTablero(d);
-    if(!igual) pintarCal();
+    if(!igual) pintarCal(true);
   }).catch(function(){ refrescando=false; });
 }
 
@@ -1067,8 +1077,11 @@ function libre(mapa, recurso, desde, hasta, ignorar){
   return true;
 }
 
-function pintarCal(){
+function pintarCal(animar){
   var cal=$('cal'), N=CAL.dias;
+  // Al repintar por un cambio propio no se re-animan las barras: si no,
+  // toda la grilla parpadea cada vez que se mueve una reserva.
+  cal.classList.toggle('sin-anim', !animar);
   cal.innerHTML='';
   var dias=[]; for(var i=0;i<N;i++) dias.push(mas(CAL.inicio,i));
   $('cRng').textContent = corto(dias[0])+' – '+corto(dias[N-1]);
@@ -1148,7 +1161,7 @@ function pintarCal(){
     if(fin<=ini) return;
     var col = noches(CAL.inicio, ini)+2, span = noches(ini, fin);
     var b=document.createElement('div');
-    b.className='bar '+r.estado;
+    b.className='bar '+r.estado+(r._guardando?' guardando':'');
     b.style.gridArea = fila+' / '+col+' / '+(fila+1)+' / '+(col+span);
     b.title = r.huesped+'  ·  '+largo(r.checkIn)+' → '+largo(r.checkOut)+
               '  ·  '+(r.pax||1)+' pax  ·  '+plata(r.total);
@@ -1166,13 +1179,13 @@ function pintarCal(){
     if(r.checkIn >= CAL.inicio){
       var ti=document.createElement('span');
       ti.className='tirador izq'; ti.title='Arrastra para cambiar la llegada';
-      ti.addEventListener('pointerdown', function(ev){ iniciarEstirar(ev, r, 'inicio'); });
+      ti.addEventListener('pointerdown', function(ev){ iniciarEstirar(ev, r, 'inicio', b); });
       b.appendChild(ti);
     }
     if(r.checkOut <= finVentana){
       var tf=document.createElement('span');
       tf.className='tirador der'; tf.title='Arrastra para cambiar la salida';
-      tf.addEventListener('pointerdown', function(ev){ iniciarEstirar(ev, r, 'fin'); });
+      tf.addEventListener('pointerdown', function(ev){ iniciarEstirar(ev, r, 'fin', b); });
       b.appendChild(tf);
     }
     b.addEventListener('click', function(ev){ ev.stopPropagation(); abrirReserva(r); });
@@ -1251,11 +1264,26 @@ window.addEventListener('pointerup', function(){
 /* ---------- Estirar una reserva desde sus extremos ---------- */
 var ESTIRA = null;
 
-function iniciarEstirar(ev, r, extremo){
+function iniciarEstirar(ev, r, extremo, barra){
   ev.stopPropagation();
   ev.preventDefault();
-  ESTIRA = { r:r, extremo:extremo, checkIn:r.checkIn, checkOut:r.checkOut };
+  ESTIRA = { r:r, extremo:extremo, checkIn:r.checkIn, checkOut:r.checkOut,
+             barra:barra, fila:barra.style.gridRowStart };
+  barra.classList.add('estirando');
   document.body.style.cursor='col-resize';
+}
+
+/* Mueve la barra en vivo mientras se arrastra, para que se vea crecer en
+   lugar de solo pintar celdas y esperar. */
+function dibujarEstirado(){
+  if(!ESTIRA || !ESTIRA.barra) return;
+  var N=CAL.dias, finVentana=mas(CAL.inicio,N);
+  var ini = ESTIRA.checkIn < CAL.inicio ? CAL.inicio : ESTIRA.checkIn;
+  var fin = ESTIRA.checkOut > finVentana ? finVentana : ESTIRA.checkOut;
+  if(fin<=ini) return;
+  var col = noches(CAL.inicio, ini)+2, span = noches(ini, fin);
+  var f = ESTIRA.fila;
+  ESTIRA.barra.style.gridArea = f+' / '+col+' / '+(Number(f)+1)+' / '+(col+span);
 }
 
 $('cal').addEventListener('pointermove', function(e){
@@ -1272,25 +1300,54 @@ $('cal').addEventListener('pointermove', function(e){
     ESTIRA.checkOut=nueva;
   }
   pintarSel(ESTIRA.r.recurso, ESTIRA.checkIn, mas(ESTIRA.checkOut,-1));
+  dibujarEstirado();
 });
 
 window.addEventListener('pointerup', function(){
   if(!ESTIRA) return;
   var e=ESTIRA; ESTIRA=null;
   document.body.style.cursor='';
+  if(e.barra) e.barra.classList.remove('estirando');
   limpiarSel();
-  if(e.checkIn===e.r.checkIn && e.checkOut===e.r.checkOut) return;
+  if(e.checkIn===e.r.checkIn && e.checkOut===e.r.checkOut){ pintarCal(); return; }
   if(!libre(ocupacion(), e.r.recurso, e.checkIn, e.checkOut, e.r.id)){
     toast('No se puede: esas fechas chocan con otra reserva.', true);
+    pintarCal();
     return;
   }
-  srv('moverReserva')(e.r.id, e.r.recurso, e.checkIn, e.checkOut)
-    .then(function(){
-      toast('Estadía actualizada: '+noches(e.checkIn,e.checkOut)+' noches');
-      recargarCal();
-    })
-    .catch(function(err){ fallo(err); recargarCal(); });
+  aplicarYGuardar(e.r, { checkIn:e.checkIn, checkOut:e.checkOut },
+    'Estadía actualizada: '+noches(e.checkIn,e.checkOut)+' noches');
 });
+
+/* Cambio optimista: la barra se mueve al instante y recién después se
+   confirma con el servidor. Si el servidor dice que no, vuelve sola a donde
+   estaba. Así no queda la pantalla congelada esperando la respuesta. */
+function aplicarYGuardar(reserva, cambios, aviso){
+  var antes = { recurso:reserva.recurso, checkIn:reserva.checkIn, checkOut:reserva.checkOut };
+
+  reserva.recurso = cambios.recurso || reserva.recurso;
+  reserva.checkIn = cambios.checkIn;
+  reserva.checkOut = cambios.checkOut;
+  reserva._guardando = true;
+  pintarCal();
+
+  srv('moverReserva')(reserva.id, reserva.recurso, reserva.checkIn, reserva.checkOut)
+    .then(function(){
+      reserva._guardando = false;
+      pintarCal();
+      toast(aviso);
+      // Se confirma por detrás, sin volver a bloquear la pantalla.
+      if(CAL.ventana) refrescarSilencioso();
+    })
+    .catch(function(err){
+      reserva.recurso = antes.recurso;
+      reserva.checkIn = antes.checkIn;
+      reserva.checkOut = antes.checkOut;
+      reserva._guardando = false;
+      pintarCal();
+      fallo(err);
+    });
+}
 
 /* ---------- Mover reservas arrastrando ---------- */
 $('cal').addEventListener('dragover', function(e){
@@ -1319,9 +1376,7 @@ $('cal').addEventListener('drop', function(e){
     toast('No se puede mover ahí: esas fechas ya están ocupadas.', true);
     return;
   }
-  srv('moverReserva')(r.id, c.dataset.rec, ini, fin)
-    .then(function(){ toast('Reserva movida'); recargarCal(); })
-    .catch(function(err){ fallo(err); recargarCal(); });
+  aplicarYGuardar(r, { recurso:c.dataset.rec, checkIn:ini, checkOut:fin }, 'Reserva movida');
 });
 
 /* ==================================================================

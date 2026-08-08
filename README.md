@@ -90,9 +90,11 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
   un calendario donde el primer clic es la **entrada** y el segundo la
   **salida**, igual que en Booking. Del 7 al 9 son 2 noches.
 - **Alargar o acortar**: pasa el cursor sobre una reserva y arrastra el
-  tirador de cualquiera de sus dos extremos. El izquierdo cambia la llegada
-  y el derecho la salida; si el nuevo rango choca con otra reserva, no se
-  aplica.
+  tirador de cualquiera de sus dos extremos. La barra **se estira en vivo**
+  mientras arrastras y, al soltar, queda puesta de inmediato: no hay que
+  esperar al servidor. Mientras se confirma late suave, y si el servidor
+  rechaza el cambio vuelve sola a donde estaba. Lo mismo al mover una
+  reserva de día o de habitación.
 - **Fichas sin firmar**: las reservas cuya ficha ya está firmada llevan un
   ✓ y las que no, un rayado diagonal. Así se ve quién falta sin abrirlas una
   por una.
