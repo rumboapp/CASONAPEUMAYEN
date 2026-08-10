@@ -12,7 +12,10 @@
 var TZ = 'America/Santiago';
 
 var HOJAS = {
-  Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa', 'categoria'],
+  // 'modo' dice cómo se vende cada pieza: entera, por camas, o las dos cosas.
+  // Se agrega al final y convive con el 'porCama' antiguo, que sigue sirviendo
+  // de respaldo para las instalaciones que vienen de antes.
+  Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa', 'categoria', 'modo'],
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
   // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
   // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
@@ -77,11 +80,16 @@ function doGet(e) {
     titulo = 'Casona Peumayén';
   }
 
-  pagina.logo = LOGO;
+  // El logo ya NO se incrusta en la plantilla: la página lo pide aparte con
+  // logoImagen(). Así, si algo falla, falla solo el logo y no la página
+  // entera, y además el HTML que viaja pesa bastante menos.
   return pagina.evaluate()
     .setTitle(titulo)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
+
+/* El logo, para las tres pantallas. No pide clave: es la imagen del lugar. */
+function logoImagen() { return LOGO; }
 
 /* ===================== INFRAESTRUCTURA ===================== */
 
@@ -635,6 +643,20 @@ function categoriaPorDefecto_(u) {
 }
 
 /* Recursos = filas del calendario. Cada habitación entera, o cada cama en las compartidas. */
+/* Cómo se vende una pieza:
+     'entera' — solo la habitación completa (una fila en el calendario)
+     'camas'  — solo por cama (una fila por cama)
+     'ambas'  — las dos cosas: la habitación y sus camas conviven en el
+                calendario y se bloquean entre sí, para poder vender la pieza
+                completa a una familia o cama por cama a mochileros.
+   Las instalaciones antiguas no tienen esta columna, así que se deduce del
+   'porCama' de siempre. */
+function modoDe_(u) {
+  var m = String(u.modo || '').trim();
+  if (m === 'entera' || m === 'camas' || m === 'ambas') return m;
+  return u.porCama ? 'camas' : 'entera';
+}
+
 function recursosDesdePlanilla_() {
   var unidades = leer_('Unidades').filter(function (u) { return u.activa; })
     .sort(function (a, b) { return Number(a.orden) - Number(b.orden); });
@@ -642,25 +664,50 @@ function recursosDesdePlanilla_() {
     .sort(function (a, b) { return Number(a.orden) - Number(b.orden); });
   var out = [];
   unidades.forEach(function (u) {
-    if (u.porCama) {
-      camas.filter(function (c) { return c.idUnidad === u.id; }).forEach(function (c) {
-        out.push({
-          id: c.id, idUnidad: u.id, grupo: u.grupo, unidad: u.nombre, nombre: c.nombre,
-          precioBase: Number(c.precioBase) || 0, precioAlta: Number(c.precioAlta) || 0,
-          capacidad: 1, bano: u.bano || 'compartido',
-          categoria: String(u.categoria || '') || categoriaPorDefecto_(u)
-        });
-      });
-    } else {
+    var modo = modoDe_(u);
+    var mias = camas.filter(function (c) { return c.idUnidad === u.id; });
+    var cat = String(u.categoria || '') || categoriaPorDefecto_(u);
+
+    if (modo === 'entera' || modo === 'ambas') {
       out.push({
         id: u.id, idUnidad: u.id, grupo: u.grupo, unidad: u.nombre, nombre: '',
         precioBase: Number(u.precioBase) || 0, precioAlta: Number(u.precioAlta) || 0,
         capacidad: Number(u.capacidad) || 2, bano: u.bano || 'privado',
-        categoria: String(u.categoria || '') || categoriaPorDefecto_(u)
+        categoria: cat, modo: modo, esUnidad: true,
+        // Vender la pieza completa deja sin cupo a todas sus camas.
+        bloquea: modo === 'ambas' ? mias.map(function (c) { return c.id; }) : []
+      });
+    }
+    if (modo === 'camas' || modo === 'ambas') {
+      mias.forEach(function (c) {
+        out.push({
+          id: c.id, idUnidad: u.id, grupo: u.grupo, unidad: u.nombre, nombre: c.nombre,
+          precioBase: Number(c.precioBase) || 0, precioAlta: Number(c.precioAlta) || 0,
+          capacidad: 1, bano: u.bano || 'compartido',
+          categoria: cat, modo: modo, esUnidad: false,
+          // Vender una cama deja sin cupo a la pieza completa.
+          bloquea: modo === 'ambas' ? [u.id] : []
+        });
       });
     }
   });
   return out;
+}
+
+/* Todos los recursos que quedan tomados cuando se reserva uno: él mismo y
+   los que se pisan con él. Es lo que evita vender la habitación completa y
+   una cama de esa misma habitación para la misma noche. */
+function conflictosDe_(recursoId) {
+  var todos = recursos_();
+  var yo = todos.filter(function (r) { return r.id === recursoId; })[0];
+  var set = {};
+  set[recursoId] = true;
+  if (yo && yo.bloquea) yo.bloquea.forEach(function (id) { set[id] = true; });
+  // Y al revés: si alguien más me nombra, también choca conmigo.
+  todos.forEach(function (r) {
+    if (r.bloquea && r.bloquea.indexOf(recursoId) > -1) set[r.id] = true;
+  });
+  return set;
 }
 
 /* Huella del inventario. Sirve para no mandar de vuelta la lista completa de
@@ -745,16 +792,27 @@ function ajustarPlan_(reserva, totalPedido, quien) {
 
 /* Verificación autoritativa de disponibilidad. Se ejecuta SIEMPRE antes de escribir. */
 function verificarLibre_(recurso, checkIn, checkOut, ignorarId) {
+  // No basta con mirar ese mismo recurso: en una habitación que se vende
+  // completa Y por cama, tomar la pieza deja sin cupo a sus camas, y tomar
+  // una cama deja sin cupo a la pieza.
+  var choca = conflictosDe_(recurso);
   var ocupadas = leer_('Reservas').filter(function (r) {
-    return String(r.recurso) === String(recurso)
+    return choca[String(r.recurso)]
       && r.estado !== 'cancelada' && r.estado !== 'no_show'
       && String(r.id) !== String(ignorarId || '')
       && chocan_(ymd_(r.checkIn), ymd_(r.checkOut), checkIn, checkOut);
   });
   if (ocupadas.length) {
     var o = ocupadas[0];
+    var nombres = {};
+    recursos_().forEach(function (x) {
+      nombres[x.id] = x.unidad + (x.nombre ? ' — ' + x.nombre : '');
+    });
+    var mismo = String(o.recurso) === String(recurso);
     throw new Error('Ocupado: ya hay una reserva de ' + o.huesped +
-      ' del ' + ymd_(o.checkIn) + ' al ' + ymd_(o.checkOut) + '.');
+      ' del ' + ymd_(o.checkIn) + ' al ' + ymd_(o.checkOut) +
+      (mismo ? '.' : ' en ' + (nombres[o.recurso] || o.recurso) +
+        ', que ocupa el mismo espacio.'));
   }
 }
 
@@ -852,8 +910,18 @@ function disponibles(token, checkIn, checkOut, ignorarGrupo) {
       String(r.grupo || '') !== String(ignorarGrupo || '\u0000') &&
       chocan_(ymd_(r.checkIn), ymd_(r.checkOut), f.checkIn, f.checkOut);
   });
+  // Una cama tomada deja sin cupo a su habitación completa, y al revés: por
+  // eso lo ocupado se propaga a los recursos que se pisan entre sí.
   var tomadas = {};
-  ocupadas.forEach(function (r) { tomadas[r.recurso] = r.huesped; });
+  var porId = {};
+  recursos_().forEach(function (x) { porId[x.id] = x; });
+  ocupadas.forEach(function (r) {
+    tomadas[r.recurso] = r.huesped;
+    var rec = porId[r.recurso];
+    if (rec && rec.bloquea) {
+      rec.bloquea.forEach(function (id) { if (!tomadas[id]) tomadas[id] = r.huesped; });
+    }
+  });
 
   var alta = esAlta_(f.checkIn);
   var noches = Math.round((new Date(f.checkOut) - new Date(f.checkIn)) / 86400000);
@@ -1721,7 +1789,245 @@ function cierreAutomatico() {
     noches: puestas, alojamiento: resumen.alojamiento, consumos: resumen.consumos,
     pagos: resumen.pagos, avisos: resumen.avisos.length
   });
+  // Y si hay un correo configurado, el resumen de la noche sale solo.
+  var para = String(config_('correoDueno', '') || '').trim();
+  if (para) {
+    try { enviarCierre_(dia, para); }
+    catch (e) { logCambio_('automático', 'cierre_envio_falló', String(e.message || e)); }
+  }
   return puestas;
+}
+
+/* ===================== DOCUMENTOS EN PDF =====================
+   Apps Script no tiene una librería de PDF: lo que sí sabe hacer es convertir
+   un HTML en PDF. Así que los documentos se arman como página y se convierten.
+   Quedan guardados en una carpeta de Drive y se comparten por enlace, que es
+   lo que después se pega en un WhatsApp o en un correo. */
+
+function carpetaDocs_() {
+  var nombre = 'Casona Peumayén — Documentos';
+  var it = DriveApp.getFoldersByName(nombre);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(nombre);
+}
+
+function pdfDesdeHtml_(html, nombreArchivo, publico) {
+  var blob = Utilities.newBlob(html, 'text/html', nombreArchivo + '.html')
+    .getAs('application/pdf').setName(nombreArchivo + '.pdf');
+  var archivo = carpetaDocs_().createFile(blob);
+  if (publico) {
+    // El enlace es largo y no se adivina; se comparte solo con quien lo recibe.
+    try { archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); }
+    catch (e) { /* si el dominio no lo permite, queda privado */ }
+  }
+  return { url: archivo.getUrl(), id: archivo.getId(), nombre: archivo.getName() };
+}
+
+function plata_(n) {
+  var s = String(Math.round(Number(n) || 0));
+  return '$' + s.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+function escapar_(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* El marco común de los dos documentos: el logo arriba y una hoja sobria. */
+function hojaHtml_(titulo, cuerpo) {
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
+    'body{font:13px/1.5 Helvetica,Arial,sans-serif;color:#16191d;margin:34px}' +
+    'img.logo{height:52px;display:block;margin-bottom:18px}' +
+    'h1{font-size:19px;margin:0 0 4px}' +
+    '.sub{color:#6b7280;font-size:12px;margin-bottom:20px}' +
+    'h2{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;' +
+    'margin:22px 0 8px;border-bottom:1px solid #e4e6ea;padding-bottom:5px}' +
+    'table{width:100%;border-collapse:collapse;font-size:13px}' +
+    'td,th{padding:6px 4px;border-bottom:1px solid #eef0f3;text-align:left}' +
+    'th{color:#6b7280;font-weight:500;font-size:11px;text-transform:uppercase}' +
+    'td.n,th.n{text-align:right;white-space:nowrap}' +
+    '.tot td{border-top:2px solid #16191d;border-bottom:none;font-weight:bold;font-size:14px}' +
+    '.pie{margin-top:26px;color:#9aa1ab;font-size:11px;border-top:1px solid #e4e6ea;padding-top:10px}' +
+    '.reglas li{margin-bottom:5px;font-size:11.5px;color:#4b5563}' +
+    '</style></head><body>' +
+    (typeof LOGO === 'string' && LOGO.indexOf('data:image/') === 0
+      ? '<img class="logo" src="' + LOGO + '">' : '<h1>Casona Peumayén</h1>') +
+    cuerpo +
+    '<div class="pie">Casona Peumayén · Lodge, restaurante, sushi &amp; wok<br>' +
+    'Documento generado el ' + ahora_() + '</div>' +
+    '</body></html>';
+}
+
+/* ---------- Comprobante de la reserva, para mandarle al huésped ---------- */
+function comprobante(token, idReserva) {
+  var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+
+  var rec = recursos_().filter(function (x) { return x.id === r.recurso; })[0];
+  var plan = planDe_(idReserva);
+  var entrada = hora_(config_('checkIn'), '15:00');
+  var salida = hora_(config_('checkOut'), '11:00');
+  var reglas = reglamento().es;
+  var pagado = 0;
+  movimientosDe_(idReserva).forEach(function (m) {
+    if (m.clase === 'pago') pagado += Number(m.total) || 0;
+  });
+  var total = Math.round(Number(r.total) || 0);
+
+  var filas = plan.map(function (n) {
+    return '<tr><td>' + escapar_(n.fecha) + (n.nota ? ' · ' + escapar_(n.nota) : '') +
+           '</td><td class="n">' + plata_(n.valor) + '</td></tr>';
+  }).join('');
+
+  var acompanantes = acompanantesDe_(idReserva);
+  var cuerpo =
+    '<h1>Confirmación de reserva</h1>' +
+    '<div class="sub">' + escapar_(r.huesped) + ' · reserva ' + escapar_(r.id) + '</div>' +
+    '<h2>Tu estadía</h2>' +
+    '<table>' +
+    '<tr><td>Alojamiento</td><td class="n">' +
+      escapar_(rec ? rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '') : r.recurso) + '</td></tr>' +
+    '<tr><td>Llegada</td><td class="n">' + ymd_(r.checkIn) + ' desde las ' + entrada + '</td></tr>' +
+    '<tr><td>Salida</td><td class="n">' + ymd_(r.checkOut) + ' hasta las ' + salida + '</td></tr>' +
+    '<tr><td>Noches</td><td class="n">' + plan.length + '</td></tr>' +
+    '<tr><td>Personas</td><td class="n">' + (Number(r.pax) || 1) + '</td></tr>' +
+    (r.addon ? '<tr><td>Programa tinaja + tabla de sushi</td><td class="n">incluido</td></tr>' : '') +
+    '</table>' +
+    (acompanantes.length
+      ? '<h2>Quiénes se alojan</h2><table><tr><td>' + escapar_(r.huesped) +
+        ' <span style="color:#6b7280">(titular)</span></td></tr>' +
+        acompanantes.map(function (a) { return '<tr><td>' + escapar_(a.nombre) + '</td></tr>'; }).join('') +
+        '</table>'
+      : '') +
+    '<h2>Valor</h2>' +
+    '<table><tr><th>Noche</th><th class="n">Valor</th></tr>' + filas +
+    '<tr class="tot"><td>Total</td><td class="n">' + plata_(total) + '</td></tr>' +
+    (pagado ? '<tr><td>Abonado</td><td class="n">' + plata_(pagado) + '</td></tr>' +
+              '<tr><td><b>Saldo al llegar</b></td><td class="n"><b>' +
+              plata_(total - pagado) + '</b></td></tr>' : '') +
+    '</table>' +
+    '<h2>Condiciones de la estadía</h2><ul class="reglas">' +
+    reglas.map(function (x) { return '<li>' + escapar_(x) + '</li>'; }).join('') +
+    '</ul>';
+
+  var doc = pdfDesdeHtml_(hojaHtml_('Confirmación', cuerpo),
+    'Reserva ' + r.huesped + ' ' + ymd_(r.checkIn), true);
+
+  var texto = 'Hola ' + r.huesped + ', te confirmamos tu reserva en Casona Peumayén del ' +
+    ymd_(r.checkIn) + ' al ' + ymd_(r.checkOut) + '. Acá va el comprobante: ' + doc.url;
+  logCambio_(u.nombre, 'comprobante', idReserva);
+  return {
+    url: doc.url,
+    texto: texto,
+    whatsapp: 'https://wa.me/' + String(r.telefono || '').replace(/[^\d]/g, '') +
+              '?text=' + encodeURIComponent(texto),
+    correo: String(r.email || '')
+  };
+}
+
+function enviarComprobante(token, idReserva, correo) {
+  var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  var para = String(correo || r.email || '').trim();
+  if (!para) throw new Error('Esa reserva no tiene correo. Escríbelo en la reserva o pásalo por WhatsApp.');
+
+  var doc = comprobante(token, idReserva);
+  MailApp.sendEmail({
+    to: para,
+    subject: 'Casona Peumayén · confirmación de tu reserva',
+    body: doc.texto,
+    htmlBody: 'Hola ' + escapar_(r.huesped) + ',<br><br>Te confirmamos tu reserva del ' +
+      ymd_(r.checkIn) + ' al ' + ymd_(r.checkOut) + '.<br>' +
+      'Adjuntamos el comprobante, y también lo puedes ver acá: ' +
+      '<a href="' + doc.url + '">' + doc.url + '</a><br><br>Te esperamos.',
+    attachments: [DriveApp.getFileById(doc.url.replace(/.*\/d\/([^\/]+).*/, '$1')).getAs('application/pdf')]
+  });
+  logCambio_(u.nombre, 'comprobante_enviado', idReserva + ' → ' + para);
+  return { enviado: para, url: doc.url };
+}
+
+/* ---------- Resumen de la noche, para el dueño ---------- */
+function pdfCierre(token, fecha) {
+  sesion_(token);
+  return pdfCierre_(ymd_(fecha) || hoy_());
+}
+
+function pdfCierre_(dia) {
+  var d = resumenDia_(dia);
+  var rotulo = {
+    sin_llegar: 'No se registró la llegada', sin_salir: 'No se marcó el check-out',
+    sin_firma: 'Ficha sin firmar', sin_acompanantes: 'Faltan acompañantes por registrar',
+    saldo: 'Se fue con saldo pendiente', sucia: 'Habitación sucia'
+  };
+  var cuerpo =
+    '<h1>Cierre de la noche del ' + dia + '</h1>' +
+    '<div class="sub">' + (d.cerrado ? 'Cerrado por ' + escapar_(d.cerradoPor) + ' el ' +
+      escapar_(d.cerradoEl) : 'Todavía sin cerrar') + '</div>' +
+    '<h2>Ingresos de la noche</h2>' +
+    '<table>' +
+    '<tr><td>Alojamiento</td><td class="n">' + plata_(d.alojamiento) + '</td></tr>' +
+    '<tr><td>Consumos</td><td class="n">' + plata_(d.consumos) + '</td></tr>' +
+    '<tr class="tot"><td>Total consumido</td><td class="n">' + plata_(d.total) + '</td></tr>' +
+    '<tr><td>Neto</td><td class="n">' + plata_(d.neto) + '</td></tr>' +
+    '<tr><td>IVA</td><td class="n">' + plata_(d.iva) + '</td></tr>' +
+    '</table>' +
+    '<h2>Por centro de ingreso</h2>' +
+    '<table>' +
+    '<tr><td>Lodge</td><td class="n">' + plata_((d.porCentro || {}).lodge || 0) + '</td></tr>' +
+    '<tr><td>Restaurante</td><td class="n">' + plata_((d.porCentro || {}).restaurante || 0) + '</td></tr>' +
+    '</table>' +
+    '<h2>Caja</h2>' +
+    '<table>' +
+    '<tr><td>Cobrado hoy</td><td class="n">' + plata_(d.pagos) + '</td></tr>' +
+    '<tr><td>De eso, adelanto de noches futuras</td><td class="n">' + plata_(d.anticipos) + '</td></tr>' +
+    '<tr><td>Por cobrar a los que están adentro</td><td class="n">' + plata_(d.porCobrar) + '</td></tr>' +
+    '</table>' +
+    '<h2>Pendientes de la noche</h2>' +
+    (d.avisos.length
+      ? '<table><tr><th>Qué revisar</th><th>Quién</th></tr>' +
+        d.avisos.map(function (a) {
+          return '<tr><td>' + escapar_(rotulo[a.tipo] || a.tipo) + '</td><td>' +
+            escapar_(a.huesped || a.idUnidad || '') +
+            (a.monto ? ' · ' + plata_(a.monto) : '') + '</td></tr>';
+        }).join('') + '</table>'
+      : '<p style="color:#0e8a5f">Todo en orden: nada pendiente de esta noche.</p>');
+
+  return pdfDesdeHtml_(hojaHtml_('Cierre ' + dia, cuerpo), 'Cierre ' + dia, false);
+}
+
+function enviarCierre(token, fecha, correo) {
+  var u = sesion_(token);
+  var dia = ymd_(fecha) || hoy_();
+  var para = String(correo || config_('correoDueno', '') || '').trim();
+  if (!para) {
+    throw new Error('Falta el correo del dueño. Ponlo en Configuración, en ' +
+      '"Correo para el cierre de cada noche".');
+  }
+  var r = enviarCierre_(dia, para);
+  logCambio_(u.nombre, 'cierre_enviado', dia + ' → ' + para);
+  return r;
+}
+
+function enviarCierre_(dia, para) {
+  var d = resumenDia_(dia);
+  var doc = pdfCierre_(dia);
+  MailApp.sendEmail({
+    to: para,
+    subject: 'Casona Peumayén · cierre de la noche del ' + dia,
+    body: 'Alojamiento ' + plata_(d.alojamiento) + ', consumos ' + plata_(d.consumos) +
+      ', cobrado ' + plata_(d.pagos) + '. ' + d.avisos.length + ' punto(s) por revisar.',
+    htmlBody: '<p>Resumen de la noche del <b>' + dia + '</b>:</p><ul>' +
+      '<li>Alojamiento: ' + plata_(d.alojamiento) + '</li>' +
+      '<li>Consumos: ' + plata_(d.consumos) + '</li>' +
+      '<li>Cobrado en el día: ' + plata_(d.pagos) + '</li>' +
+      '<li>Lodge ' + plata_((d.porCentro || {}).lodge || 0) +
+      ' · restaurante ' + plata_((d.porCentro || {}).restaurante || 0) + '</li>' +
+      '<li>' + d.avisos.length + ' punto(s) por revisar</li></ul>' +
+      '<p>El detalle va adjunto en PDF.</p>',
+    attachments: [DriveApp.getFileById(doc.id).getAs('application/pdf')]
+  });
+  return { enviado: para, url: doc.url, avisos: d.avisos.length };
 }
 
 /* ===================== DÍA DE HOY ===================== */
@@ -2006,6 +2312,33 @@ function guardarAcompanantes(token, idReserva, lista) {
 function reglamento() {
   var entrada = hora_(config_('checkIn'), '15:00');
   var salida = hora_(config_('checkOut'), '11:00');
+  var propias = {
+    es: reglasGuardadas_('reglasEs'),
+    en: reglasGuardadas_('reglasEn')
+  };
+  // {entrada} y {salida} se reemplazan por las horas de la configuración, así
+  // que cambiar el horario de check-in actualiza las normas sin reescribirlas.
+  var poner = function (r) {
+    return String(r).replace(/\{entrada\}/g, entrada).replace(/\{salida\}/g, salida);
+  };
+  if (propias.es.length || propias.en.length) {
+    var base = reglamentoPorDefecto_(entrada, salida);
+    return {
+      es: (propias.es.length ? propias.es : base.es).map(poner),
+      en: (propias.en.length ? propias.en : base.en).map(poner)
+    };
+  }
+  return reglamentoPorDefecto_(entrada, salida);
+}
+
+function reglasGuardadas_(clave) {
+  return String(config_(clave, '') || '')
+    .split('\n')
+    .map(function (r) { return r.trim(); })
+    .filter(function (r) { return r !== ''; });
+}
+
+function reglamentoPorDefecto_(entrada, salida) {
   return {
     es: [
       'Check-in desde las ' + entrada + ' y check-out hasta las ' + salida + '.',
@@ -2036,6 +2369,65 @@ function reglamento() {
       '24 and 72 hours; no refund with less than 24 hours or in case of a no-show.'
     ]
   };
+}
+
+/* ===================== CONFIGURACIÓN =====================
+   Lo que cambia con el tiempo se edita desde la app y no desde el código:
+   horarios, normas, temporada, precios del programa y el correo del dueño. */
+
+var CONFIG_EDITABLE = [
+  { clave: 'checkIn', rotulo: 'Hora de check-in', tipo: 'hora' },
+  { clave: 'checkOut', rotulo: 'Hora de check-out', tipo: 'hora' },
+  { clave: 'temporadaAltaInicio', rotulo: 'Temporada alta desde (MM-DD)', tipo: 'texto' },
+  { clave: 'temporadaAltaFin', rotulo: 'Temporada alta hasta (MM-DD)', tipo: 'texto' },
+  { clave: 'addonBase', rotulo: 'Programa tinaja + sushi (baja)', tipo: 'numero' },
+  { clave: 'addonAlta', rotulo: 'Programa tinaja + sushi (alta)', tipo: 'numero' },
+  { clave: 'addonParteRestaurante', rotulo: '% del programa que va al restaurante', tipo: 'numero' },
+  { clave: 'iva', rotulo: 'IVA (%)', tipo: 'numero' },
+  { clave: 'correoDueno', rotulo: 'Correo para el cierre de cada noche', tipo: 'texto' },
+  { clave: 'reglasEs', rotulo: 'Normas de convivencia (español)', tipo: 'lineas' },
+  { clave: 'reglasEn', rotulo: 'Normas de convivencia (inglés)', tipo: 'lineas' }
+];
+
+function configuracion(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var actual = configTodo_();
+  var base = reglamentoPorDefecto_(hora_(config_('checkIn'), '15:00'),
+                                   hora_(config_('checkOut'), '11:00'));
+  return {
+    campos: CONFIG_EDITABLE.map(function (c) {
+      var v = actual[c.clave];
+      if (c.tipo === 'hora') v = hora_(v, '');
+      return { clave: c.clave, rotulo: c.rotulo, tipo: c.tipo,
+               valor: (v === undefined || v === null) ? '' : String(v) };
+    }),
+    // Para poder volver a las normas de fábrica de un botón.
+    reglasPorDefecto: { es: base.es.join('\n'), en: base.en.join('\n') },
+    // Se muestran para que se vea cómo quedan con los horarios de verdad.
+    vistaPrevia: reglamento()
+  };
+}
+
+function guardarConfiguracion(token, cambios) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var validas = {};
+  CONFIG_EDITABLE.forEach(function (c) { validas[c.clave] = c; });
+
+  Object.keys(cambios || {}).forEach(function (k) {
+    if (!validas[k]) return;                       // nada fuera de la lista
+    var v = cambios[k];
+    if (validas[k].tipo === 'hora') {
+      v = hora_(v, '');
+      if (!v) throw new Error('La hora de "' + validas[k].rotulo + '" tiene que ser como 15:00.');
+    }
+    if (validas[k].tipo === 'numero') v = Number(v) || 0;
+    guardarOCrear_('Config', 'clave', k, { clave: k, valor: v });
+  });
+  olvidarConfig_();
+  logCambio_(u.nombre, 'config', Object.keys(cambios || {}).join(', '));
+  return configuracion(token);
 }
 
 /* ===================== FIRMA A DISTANCIA =====================
@@ -2100,7 +2492,7 @@ function inventarioAdmin(token) {
     .map(function (x) {
       return {
         id: x.id, nombre: x.nombre, grupo: x.grupo, capacidad: Number(x.capacidad) || 0,
-        bano: x.bano, porCama: !!x.porCama,
+        bano: x.bano, porCama: !!x.porCama, modo: modoDe_(x),
         categoria: String(x.categoria || '') || categoriaPorDefecto_(x),
         precioBase: Number(x.precioBase) || 0, precioAlta: Number(x.precioAlta) || 0,
         orden: Number(x.orden) || 0, activa: !!x.activa,
@@ -2125,12 +2517,20 @@ function guardarUnidad(token, d) {
   exigirAdmin_(u);
   if (!String(d.nombre || '').trim()) throw new Error('Falta el nombre de la habitación o carpa.');
 
+  var modo = ['entera', 'camas', 'ambas'].indexOf(String(d.modo || '')) > -1
+    ? String(d.modo) : (d.porCama ? 'camas' : 'entera');
   var campos = {
     nombre: d.nombre, grupo: d.grupo || 'Lodge', capacidad: Number(d.capacidad) || 1,
-    bano: d.bano || 'privado', porCama: !!d.porCama,
+    bano: d.bano || 'privado',
+    modo: modo,
+    // Se mantiene al día para no romper nada que todavía lo mire.
+    porCama: modo === 'camas',
     precioBase: Number(d.precioBase) || 0, precioAlta: Number(d.precioAlta) || 0,
     activa: d.activa === false ? false : true
   };
+  if (modo !== 'camas' && !campos.precioBase) {
+    throw new Error('Para vender la habitación completa hay que ponerle precio.');
+  }
   campos.categoria = String(d.categoria || '').trim() || categoriaPorDefecto_(campos);
 
   if (d.id) {
@@ -2203,6 +2603,10 @@ function logCambio_(quien, accion, detalle) {
    bien instalado, en vez de quedarse adivinando por qué no entra. */
 function diagnostico() {
   var out = { ok: true, hojas: {}, usuarios: 0, unidades: 0, mensaje: '' };
+  // Si el logo no se ve, lo primero es saber si llegó completo: cuando se
+  // copia el código a medias, esta línea queda cortada y la imagen no carga.
+  out.logoLargo = (typeof LOGO === 'string') ? LOGO.length : 0;
+  out.logoOk = out.logoLargo > 5000 && LOGO.indexOf('data:image/') === 0;
   try {
     var ss = ss_();
     out.planilla = ss.getUrl();

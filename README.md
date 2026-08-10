@@ -63,6 +63,23 @@ Si alguna vez editas las columnas de la planilla **a mano**, vuelve a
 ejecutar `setup()`: además de dejar el encabezado en orden, borra todo lo que
 el sistema tenía guardado en memoria, para que nada quede desactualizado.
 
+**La primera vez que generes un PDF o mandes un correo**, Google va a pedir
+permiso para usar Drive y Gmail. Es normal: los documentos se guardan en tu
+Drive y los correos salen desde tu cuenta. Acepta una vez y no vuelve a
+preguntar.
+
+### Si no ves el logo
+
+El logo ya no viaja dentro de la página: se pide aparte, así que si algo falla
+falla solo el logo y en su lugar aparece el nombre escrito. Para saber qué
+pasó, entra a *¿No puedes entrar? Revisar la instalación* en la pantalla de
+acceso: ahí dice si el logo llegó y cuánto pesa. Si dice que **no llegó
+completo**, es que `Code.gs` quedó pegado a medias — la línea del logo es muy
+larga y se corta fácil al copiar. Vuelve a copiar el archivo entero, y después
+**crea una versión nueva de la implementación** (Implementar → Administrar
+implementaciones → ✏️ → Versión: *Nueva*), porque si no se sigue sirviendo la
+versión vieja.
+
 ### Si una reserva sale en la planilla pero no en el calendario
 
 Le pasó a la primera versión: se agregaron columnas **en medio** del
@@ -365,6 +382,46 @@ Si el calendario no carga —Apps Script a veces falla al despertar— se
 reintenta solo hasta tres veces y, si aun así falla, aparece un botón
 *Reintentar* en lugar de dejarte la pantalla en blanco.
 
+## Configuración
+
+Pestaña **Configuración** (solo administración). Acá se edita lo que cambia con
+el tiempo, sin tocar el código:
+
+- Horas de **check-in** y **check-out**.
+- Fechas de **temporada alta**.
+- Precio del **programa tinaja + sushi** y qué porcentaje va al restaurante.
+- **IVA**.
+- **Correo del dueño**, al que llega el cierre de cada noche.
+- **Las normas de convivencia**, en español y en inglés.
+
+Las normas van **una por línea** y son exactamente las que ve el huésped al
+firmar. Dentro de una norma puedes escribir `{entrada}` y `{salida}`: se
+reemplazan solos por las horas de check-in y check-out, así que si mañana
+cambian el horario **no hay que reescribir la norma**, se actualiza sola. Abajo
+hay una vista previa de cómo quedan.
+
+Si dejas las normas en blanco vuelven las de fábrica, y hay un botón para
+recuperarlas sin tener que escribirlas de nuevo.
+
+## Documentos en PDF
+
+El sistema arma dos documentos con el logo y los deja en una carpeta de Drive
+llamada *Casona Peumayén — Documentos*.
+
+**Comprobante de la reserva.** Botón *Comprobante* dentro de la reserva. Trae
+el alojamiento, las fechas con sus horarios, las noches con su valor, quiénes
+se alojan, lo abonado, el saldo que queda para el día de llegada y las
+condiciones de la estadía. Después se manda de tres formas: un botón que abre
+**WhatsApp** con el mensaje y el enlace ya escritos, un botón que lo **envía
+por correo** con el PDF adjunto, o el texto listo para copiar y pegar donde
+sea. El archivo queda compartido por enlace, así que el huésped lo abre sin
+tener cuenta de Google.
+
+**Cierre de la noche.** En la pestaña *Cierre*, *Generar PDF* baja el resumen
+de esa noche y *Enviar al dueño* se lo manda al correo configurado, con el PDF
+adjunto. Si además dejaste el cierre automático de madrugada, **el correo sale
+solo cada noche** apenas se cierra el día.
+
 ## Informes
 
 La pestaña *Informes* (solo administración) calcula sobre las reservas ya
@@ -399,6 +456,27 @@ como filas nuevas del calendario.
   fila propia del calendario.
 - Las unidades no se borran, se **archivan**: dejan de aparecer en el
   calendario pero se conserva su historial de reservas.
+
+### Cómo se vende cada pieza
+
+Cada alojamiento tiene un modo de venta:
+
+- **Solo la habitación completa** — una fila en el calendario. Es como quedan
+  las habitaciones 1 a 4 y las carpas.
+- **Solo por cama** — cada cama es una fila propia, estilo hostal.
+- **Las dos: completa o por cama** — la habitación **y** sus camas aparecen en
+  el calendario, y **se bloquean entre sí**: si vendes la pieza completa a una
+  familia, sus camas quedan sin cupo esas noches; si vendes una cama, la pieza
+  completa deja de estar disponible. Las casillas que quedan sin cupo por esta
+  razón salen rayadas en gris, y al pasar el mouse dicen quién tomó el
+  espacio.
+
+Esto se cambia cuando quieras desde *Alojamiento → Editar*. Si hoy prefieres
+vender las habitaciones 5 a 8 completas, ponlas en **solo la habitación
+completa** y dales un precio; las camas quedan guardadas y el día que quieras
+volver a venderlas por cama —o las dos cosas— basta cambiar el modo. Para
+vender una pieza completa hay que ponerle precio: el sistema no deja
+guardarla sin él.
 
 ### Categorías, y cómo publicar la oferta en un canal
 
@@ -512,12 +590,13 @@ editor la función `crearUsuario("nombre", "pin", "admin")`.
   Script y crear la reserva sola. La conexión de dos vías con Booking solo la
   abren a socios de conectividad certificados, así que eso pasaría por un
   channel manager intermedio.
-- **Las tarifas son por temporada, no por fecha.** Todavía no hay precio por
-  día, estadía mínima ni "cerrado a la llegada".
+- **Las tarifas base son por temporada, no por fecha.** Cada noche de una
+  reserva sí se puede editar a mano, pero todavía no hay un calendario de
+  precios por día, ni estadía mínima, ni "cerrado a la llegada".
 - No hay perfil de huésped con historial de estadías anteriores.
 - La política de cancelación está escrita en el reglamento pero no se calcula
   sola.
 - No cobra en línea: no genera enlaces de pago.
-- No envía el enlace de la ficha solo: abre WhatsApp o el correo con el
-  mensaje escrito, pero el envío lo haces tú.
+- El comprobante sí se manda por correo desde el sistema; el de WhatsApp abre
+  el chat con el mensaje escrito, pero el envío lo aprietas tú.
 - La app interna está solo en español; la página del huésped sí es bilingüe.

@@ -99,7 +99,7 @@
 <body>
 <div class="wrap">
   <header>
-    <img class="marca" src="<?= logo ?>" alt="Casona Peumayén">
+    <img class="marca hide" id="marcaImg" alt="Casona Peumayén">
     <h1>Aseo</h1>
     <div class="f" id="fecha"></div>
   </header>
@@ -310,6 +310,13 @@ try{ $('quien').value = localStorage.getItem('cp_aseo_quien') || ''; }catch(_){}
 $('quien').addEventListener('change', function(){
   try{ localStorage.setItem('cp_aseo_quien', this.value); }catch(_){}
 });
+
+/* El logo se pide aparte; si no llega, la pantalla de aseo funciona igual. */
+llamar('logoImagen', [], function(src){
+  if (!src || String(src).indexOf('data:image/') !== 0) return;
+  var el = $('marcaImg');
+  if (el){ el.src = src; el.classList.remove('hide'); }
+}, function(){});
 
 cargar();
 setInterval(function(){ if(!document.hidden) cargar(true); }, 60000);

@@ -110,6 +110,10 @@
   .cell.past{background:#f7f8f9}
   .cell:hover:not(.busy){box-shadow:inset 0 0 0 2px var(--ac);border-radius:4px}
   .cell.busy{cursor:default}
+  /* Sin cupo porque el mismo espacio se vendió de la otra forma: la pieza
+     completa si esto es una cama, o al revés. */
+  .cell.tomada{background-image:repeating-linear-gradient(45deg,
+    transparent 0 5px, rgba(107,114,128,.16) 5px 10px)}
   .cell.sel{background:var(--ac-soft) !important;box-shadow:inset 0 0 0 1px var(--ac)}
   .cell.drop{background:var(--ac-soft) !important}
 
@@ -347,8 +351,8 @@
 <!-- ==================== LOGIN ==================== -->
 <div id="login">
   <form id="fLogin">
-    <img class="logo" id="logoImg" src="<?= logo ?>" alt="Casona Peumayén"
-         onerror="this.style.display='none';document.getElementById('logoTxt').style.display='block'">
+    <img class="logo hide" id="logoImg" alt="Casona Peumayén"
+         onerror="this.classList.add('hide');document.getElementById('logoTxt').style.display='block'">
     <h1 id="logoTxt" style="display:none;font-size:19px;font-weight:600;text-align:center;margin-bottom:4px">Casona Peumayén</h1>
     <p class="s" style="text-align:center">Gestión de alojamiento</p>
     <div class="fld"><label>Usuario</label><input id="lu" autocomplete="username" required></div>
@@ -371,10 +375,8 @@
 <div id="app" class="hide">
   <header>
     <div style="display:flex;align-items:center;gap:11px;min-width:0">
-      <!-- El logo se incrusta UNA sola vez, en la pantalla de acceso, y acá
-           se reutiliza esa misma imagen: la página pesa la mitad. -->
-      <img class="marca" id="marcaImg" alt="Casona Peumayén"
-           onerror="this.style.display='none';document.getElementById('marcaTxt').style.display='block'">
+      <img class="marca hide" id="marcaImg" alt="Casona Peumayén"
+           onerror="this.classList.add('hide');document.getElementById('marcaTxt').style.display='block'">
       <span id="marcaTxt" style="display:none;font-weight:600;font-size:15px">Casona Peumayén</span>
       <span class="tit">Gestión de alojamiento</span>
     </div>
@@ -480,7 +482,12 @@
           <div class="fld" style="margin:0"><label>Noche</label><input type="date" id="cieF"></div>
           <button class="btn gh sm" id="cieVer">Ver el día</button>
           <button class="btn sm" id="cieCerrar">Cerrar el día</button>
+          <span style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
+            <button class="btn gh sm" id="ciePdf">Generar PDF</button>
+            <button class="btn gh sm" id="cieMail">Enviar al dueño</button>
+          </span>
         </div>
+        <div class="muted hide" id="cieDoc" style="font-size:12.5px;margin-top:10px"></div>
       </div>
       <div id="cieCuerpo"></div>
     </section>
@@ -504,6 +511,33 @@
           Adentro sigues asignando la habitación exacta, como siempre.
         </p>
         <div id="invCats"></div>
+      </div>
+    </section>
+
+    <!-- ---------- Configuración ---------- -->
+    <section id="v-cfg" class="hide">
+      <div class="card">
+        <h2>Configuración</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Lo que cambia con el tiempo se edita acá, sin tocar el código. Las normas
+          de convivencia van una por línea y son las mismas que ve el huésped al
+          firmar. Puedes escribir <b>{entrada}</b> y <b>{salida}</b> dentro de una
+          norma: se reemplazan solos por las horas de check-in y check-out, así que
+          si cambias el horario no hay que reescribirlas.
+        </p>
+        <div id="cfgCampos"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+          <button class="btn sm" id="cfgGuardar">Guardar</button>
+          <button class="btn gh sm" id="cfgDefault">Volver a las normas de fábrica</button>
+        </div>
+        <div class="err hide" id="cfgErr"></div>
+      </div>
+      <div class="card">
+        <h2>Cómo se verán las normas</h2>
+        <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+          Así quedan con los horarios de ahora, tal cual las lee el huésped.
+        </p>
+        <div id="cfgPreview"></div>
       </div>
     </section>
 
@@ -617,6 +651,7 @@
       <div class="left">
         <button class="btn gh sm hide" id="rCuenta">Cuenta</button>
         <button class="btn gh sm hide" id="rAcom">Acompañantes</button>
+        <button class="btn gh sm hide" id="rComprobante">Comprobante</button>
         <button class="btn gh sm hide" id="rVerFicha">Ver ficha firmada</button>
         <button class="btn gh sm hide" id="rEnviar">Copiar enlace de la ficha</button>
         <button class="btn gh sm hide" id="rFicha">Firmar aquí</button>
@@ -624,6 +659,25 @@
       </div>
       <button class="btn gh" data-cerrar="mRes">Cerrar</button>
       <button class="btn" id="rGuardar">Guardar</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ==================== COMPROBANTE ==================== -->
+<div class="ov hide" id="mComp">
+  <div class="mo" style="max-width:480px">
+    <header><h3>Comprobante de la reserva</h3><button class="x" data-cerrar="mComp">×</button></header>
+    <div class="body">
+      <p class="muted" style="font-size:13px;margin-bottom:14px">
+        Un PDF con el logo, las fechas, el detalle de las noches y las condiciones
+        de la estadía. Queda guardado en Drive y se abre con el enlace.
+      </p>
+      <div id="compCuerpo"></div>
+      <div class="err hide" id="compErr"></div>
+    </div>
+    <footer>
+      <button class="btn gh" data-cerrar="mComp">Cerrar</button>
+      <button class="btn" id="compGenerar">Generar</button>
     </footer>
   </div>
 </div>
@@ -865,7 +919,17 @@
         </div>
       </div>
       <div class="fld">
-        <label class="chk"><input type="checkbox" id="uPorCama"> Se vende por camas separadas (estilo hostal)</label>
+        <label>Cómo se vende</label>
+        <select id="uModo">
+          <option value="entera">Solo la habitación completa</option>
+          <option value="camas">Solo por cama (estilo hostal)</option>
+          <option value="ambas">Las dos: completa o por cama</option>
+        </select>
+        <div class="muted" style="font-size:11.5px;margin-top:5px">
+          Con <b>las dos</b>, la habitación y sus camas aparecen en el calendario y se
+          bloquean entre sí: si vendes la pieza completa, sus camas quedan sin cupo esa
+          noche, y si vendes una cama, la pieza completa deja de estar disponible.
+        </div>
       </div>
       <div class="g2" id="uPrecios">
         <div class="fld"><label>Precio temporada baja</label><input id="uPb" type="number" min="0" step="1000"></div>
@@ -959,11 +1023,25 @@ var $ = function(id){ return document.getElementById(id); };
 var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 var DIAS = ['dom','lun','mar','mié','jue','vie','sáb'];
 
-/* El logo del encabezado toma la misma imagen que ya cargó la pantalla de
-   acceso: así viaja una sola vez en la página, en vez de dos. */
+/* El logo se pide al servidor, no viene incrustado en la página. Así la
+   página carga liviana y, si el logo falla, falla solo el logo: en su lugar
+   aparece el nombre escrito y la app sigue funcionando igual. */
 (function(){
-  var origen = $('logoImg'), destino = $('marcaImg');
-  if(origen && destino) destino.src = origen.getAttribute('src');
+  google.script.run
+    .withSuccessHandler(function(src){
+      if(!src || String(src).indexOf('data:image/') !== 0){ sinLogo(); return; }
+      ['logoImg','marcaImg'].forEach(function(id){
+        var el=$(id); if(!el) return;
+        el.src=src; el.classList.remove('hide');
+      });
+    })
+    .withFailureHandler(sinLogo)
+    .logoImagen();
+
+  function sinLogo(){
+    $('logoTxt').style.display='block';
+    $('marcaTxt').style.display='block';
+  }
 })();
 
 /* ---------- Fechas: siempre texto "YYYY-MM-DD", nunca objetos Date ---------- */
@@ -1085,6 +1163,12 @@ $('lDiag').addEventListener('click', function(){
       out.textContent =
         (d.ok?'✓ ':'✗ ')+d.mensaje+
         (faltan.length?'\nHojas que faltan: '+faltan.join(', '):'')+
+        // Si el logo no aparece arriba, acá se ve si el problema es que el
+        // código quedó pegado a medias.
+        '\nLogo: '+(d.logoOk
+          ? 'cargado ('+Math.round((d.logoLargo||0)/1024)+' KB)'
+          : 'NO llegó completo ('+(d.logoLargo||0)+' caracteres). Vuelve a copiar '+
+            'Code.gs entero: la línea del logo es muy larga y se corta fácil.')+
         (d.planilla?'\nPlanilla: '+d.planilla:'');
     })
     .withFailureHandler(function(e){
@@ -1117,6 +1201,7 @@ var TABS=[
   {id:'cierre', t:'Cierre',    roles:['admin','recepcion']},
   {id:'inf',  t:'Informes',    roles:['admin']},
   {id:'inv',  t:'Alojamiento', roles:['admin']},
+  {id:'cfg',  t:'Configuración', roles:['admin']},
   {id:'eq',   t:'Equipo',      roles:['admin']}
 ];
 
@@ -1146,6 +1231,7 @@ function ver(id){
   if(id==='cierre') prepararCierre();
   if(id==='inf')  prepararInformes();
   if(id==='inv')  cargarInventario();
+  if(id==='cfg')  cargarConfiguracion();
   if(id==='eq')   cargarEquipo();
 }
 
@@ -1276,11 +1362,22 @@ document.addEventListener('visibilitychange', function(){
   if(!$('v-aseo').classList.contains('hide')) cargarAseo();
 });
 
-/* Mapa "recurso|fecha" -> reserva, para saber al instante si un día está ocupado. */
+/* Mapa "recurso|fecha" -> reserva, para saber al instante si un día está
+   ocupado. En las habitaciones que se venden completas Y por cama, una
+   reserva ocupa también los recursos que se pisan con ella: si alguien tomó
+   la pieza entera, sus camas no se pueden vender esa noche. */
 function ocupacion(){
+  var bloqueos={};
+  CAL.recursos.forEach(function(r){ bloqueos[r.id]=r.bloquea||[]; });
   var m={};
   CAL.reservas.forEach(function(r){
-    for(var f=r.checkIn; f<r.checkOut; f=mas(f,1)) m[r.recurso+'|'+f]=r;
+    for(var f=r.checkIn; f<r.checkOut; f=mas(f,1)){
+      m[r.recurso+'|'+f]=r;
+      (bloqueos[r.recurso]||[]).forEach(function(id){
+        // La marca indirecta no pisa a una reserva propia de ese recurso.
+        if(!m[id+'|'+f]) m[id+'|'+f]={ indirecta:true, huesped:r.huesped, id:r.id };
+      });
+    }
   });
   return m;
 }
@@ -1366,7 +1463,9 @@ function pintarCal(animar){
 
     dias.forEach(function(fecha, i){
       var c=document.createElement('div');
-      c.className=claseDia[i]+(mapa[f.r.id+'|'+fecha]?' busy':'');
+      var ocupa=mapa[f.r.id+'|'+fecha];
+      c.className=claseDia[i]+(ocupa?' busy':'')+(ocupa&&ocupa.indirecta?' tomada':'');
+      if(ocupa && ocupa.indirecta) c.title='Sin cupo: '+ocupa.huesped+' tomó el mismo espacio';
       c.style.gridArea=fila+' / '+(i+2);
       c.dataset.rec=f.r.id; c.dataset.f=fecha;
       frag.appendChild(c);
@@ -1684,7 +1783,7 @@ function nuevaReserva(rec, entrada, salida){
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
   $('rEnviar').classList.add('hide'); $('rVerFicha').classList.add('hide');
   $('rCuenta').classList.add('hide'); $('rAcom').classList.add('hide');
-  $('rVerNoches').classList.add('hide');
+  $('rComprobante').classList.add('hide'); $('rVerNoches').classList.add('hide');
   $('rAnt').readOnly=false; $('rAntNota').classList.add('hide');
   TOTAL_TOCADO=false;
   $('rPaso').classList.add('hide'); $('rGrupoTodo').classList.add('hide');
@@ -1706,6 +1805,7 @@ function abrirReserva(r){
   $('rVerNoches').classList.remove('hide');
   $('rTotNota').textContent='Suma de '+noches(r.checkIn,r.checkOut)+' noche(s)';
   $('rAcom').classList.remove('hide');
+  $('rComprobante').classList.remove('hide');
   $('rPax').value=r.pax||1; ajustarPax();
   $('rNot').value=r.notas||'';
   $('rAddon').checked=!!r.addon;
@@ -2002,6 +2102,59 @@ $('nchRepartir').onclick=function(){
     })
     .catch(function(e){ $('nchErr').textContent=e.message||String(e);
                         $('nchErr').classList.remove('hide'); });
+};
+
+/* ==================================================================
+   Comprobante de la reserva
+   ================================================================== */
+$('rComprobante').onclick=function(){
+  if(!RES) return;
+  $('compErr').classList.add('hide');
+  $('compCuerpo').innerHTML='<div class="empty">Aprieta <b>Generar</b> para armar el PDF.</div>';
+  abrir('mComp');
+};
+
+$('compGenerar').onclick=function(){
+  if(!RES) return;
+  $('compErr').classList.add('hide');
+  $('compCuerpo').innerHTML='<div class="esqueleto"></div>';
+  ocupado('compGenerar', srv('comprobante')(RES.id)).then(function(d){
+    $('compCuerpo').innerHTML =
+      '<div class="ctaCaja"><div class="ctaTit">El PDF</div>'+
+        '<a href="'+d.url+'" target="_blank" style="color:var(--ac);text-decoration:underline">'+
+        'Abrir el comprobante</a></div>'+
+      '<div class="ctaCaja"><div class="ctaTit">Mandarlo</div>'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        (d.whatsapp && d.whatsapp.indexOf('wa.me/?') === -1
+          ? '<a class="btn sm" style="text-decoration:none" target="_blank" href="'+d.whatsapp+'">Por WhatsApp</a>'
+          : '<span class="muted" style="font-size:12.5px">Sin teléfono en la reserva</span>')+
+        (d.correo
+          ? '<button class="btn gh sm" id="compMail">Por correo a '+d.correo+'</button>'
+          : '<span class="muted" style="font-size:12.5px">Sin correo en la reserva</span>')+
+        '</div></div>'+
+      '<div class="ctaCaja"><div class="ctaTit">O copiar el texto</div>'+
+        '<textarea id="compTxt" rows="4" style="font:inherit;width:100%;padding:10px;'+
+        'border:1px solid var(--line);border-radius:8px;resize:vertical">'+d.texto+'</textarea>'+
+        '<button class="btn gh sm" id="compCopiar" style="margin-top:8px">Copiar</button></div>';
+
+    var bm=$('compMail');
+    if(bm) bm.onclick=function(){
+      ocupado('compMail', srv('enviarComprobante')(RES.id, '')).then(function(e){
+        toast('Comprobante enviado a '+e.enviado);
+      }).catch(function(e){
+        $('compErr').textContent=e.message||String(e); $('compErr').classList.remove('hide');
+      });
+    };
+    $('compCopiar').onclick=function(){
+      var t=$('compTxt'); t.select();
+      try{ document.execCommand('copy'); toast('Texto copiado'); }
+      catch(_){ toast('Cópialo a mano desde el cuadro', true); }
+    };
+    toast('Comprobante generado');
+  }).catch(function(e){
+    $('compCuerpo').innerHTML='';
+    $('compErr').textContent=e.message||String(e); $('compErr').classList.remove('hide');
+  });
 };
 
 /* ==================================================================
@@ -2501,7 +2654,25 @@ function verCierre(){
 }
 
 $('cieVer').onclick=verCierre;
-$('cieF').onchange=verCierre;
+$('cieF').onchange=function(){ $('cieDoc').classList.add('hide'); verCierre(); };
+
+$('ciePdf').onclick=function(){
+  ocupado('ciePdf', srv('pdfCierre')($('cieF').value)).then(function(d){
+    var c=$('cieDoc'); c.classList.remove('hide');
+    c.innerHTML='PDF listo: <a href="'+d.url+'" target="_blank" '+
+      'style="color:var(--ac);text-decoration:underline">'+d.nombre+'</a>';
+    toast('PDF generado');
+  }).catch(fallo);
+};
+
+$('cieMail').onclick=function(){
+  ocupado('cieMail', srv('enviarCierre')($('cieF').value, '')).then(function(d){
+    toast('Cierre enviado a '+d.enviado);
+    var c=$('cieDoc'); c.classList.remove('hide');
+    c.innerHTML='Enviado a <b>'+d.enviado+'</b> · <a href="'+d.url+'" target="_blank" '+
+      'style="color:var(--ac);text-decoration:underline">ver el PDF</a>';
+  }).catch(fallo);
+};
 $('cieCerrar').onclick=function(){
   ocupado('cieCerrar', srv('cierreDia')($('cieF').value)).then(function(d){
     pintarCierre(d);
@@ -2823,11 +2994,11 @@ function abrirUnidad(u){
   $('uGrupo').value=u?u.grupo:'Lodge';
   $('uBano').value=u?u.bano:'privado';
   $('uCap').value=u?u.capacidad:2;
-  $('uPorCama').checked=u?u.porCama:false;
+  $('uModo').value=u?(u.modo||(u.porCama?'camas':'entera')):'entera';
   $('uCat').value=u?(u.categoria||''):'';
   $('uPb').value=u?u.precioBase:'';
   $('uPa').value=u?u.precioAlta:'';
-  $('uPrecios').classList.toggle('hide', $('uPorCama').checked);
+  $('uPrecios').classList.toggle('hide', $('uModo').value==='camas');
   // Sugerir las categorías que ya existen, para no inventar una nueva por descuido.
   var dl=$('listaCategorias'); dl.innerHTML='';
   categoriasDelInventario().forEach(function(c){
@@ -2836,6 +3007,73 @@ function abrirUnidad(u){
   $('uErr').classList.add('hide');
   abrir('mUni');
 }
+
+/* ==================================================================
+   Configuración
+   ================================================================== */
+var CFG = null;
+
+function cargarConfiguracion(){
+  esqueleto('cfgCampos',5);
+  srv('configuracion')().then(function(d){ CFG=d; pintarConfiguracion(); }).catch(fallo);
+}
+
+function pintarConfiguracion(){
+  if(!CFG) return;
+  $('cfgErr').classList.add('hide');
+  var h='';
+  CFG.campos.forEach(function(c){
+    var val=(c.valor||'').replace(/"/g,'&quot;');
+    if(c.tipo==='lineas'){
+      h+='<div class="fld"><label>'+c.rotulo+'</label>'+
+         '<textarea data-c="'+c.clave+'" rows="10" '+
+         'style="font:inherit;width:100%;padding:11px 12px;border:1px solid var(--line);'+
+         'border-radius:8px;background:var(--surface);resize:vertical">'+
+         (c.valor||'')+'</textarea>'+
+         '<div class="muted" style="font-size:11.5px;margin-top:4px">Una norma por línea. '+
+         'Si lo dejas vacío se usan las normas de fábrica.</div></div>';
+    } else {
+      h+='<div class="fld"><label>'+c.rotulo+'</label>'+
+         '<input data-c="'+c.clave+'" value="'+val+'"'+
+         (c.tipo==='numero'?' type="number" step="1"':'')+
+         (c.tipo==='hora'?' placeholder="15:00"':'')+'></div>';
+    }
+  });
+  $('cfgCampos').innerHTML=h;
+  pintarVistaPrevia(CFG.vistaPrevia);
+}
+
+function pintarVistaPrevia(g){
+  if(!g){ $('cfgPreview').innerHTML=''; return; }
+  var lista=function(t, arr){
+    return '<div class="ctaTit" style="margin-top:10px">'+t+'</div><ul style="padding-left:18px">'+
+      (arr||[]).map(function(r){ return '<li style="font-size:13px;margin-bottom:5px">'+r+'</li>'; })
+      .join('')+'</ul>';
+  };
+  $('cfgPreview').innerHTML = lista('Español', g.es) + lista('Inglés', g.en);
+}
+
+$('cfgGuardar').onclick=function(){
+  var cambios={};
+  Array.prototype.forEach.call($('cfgCampos').querySelectorAll('[data-c]'), function(el){
+    cambios[el.dataset.c]=el.value;
+  });
+  ocupado('cfgGuardar', srv('guardarConfiguracion')(cambios)).then(function(d){
+    CFG=d; pintarConfiguracion(); toast('Configuración guardada');
+  }).catch(function(e){
+    $('cfgErr').textContent=e.message||String(e); $('cfgErr').classList.remove('hide');
+  });
+};
+
+$('cfgDefault').onclick=function(){
+  if(!CFG) return;
+  if(!confirm('¿Volver a las normas de fábrica? Se pierde lo que hayas escrito.')) return;
+  var es=$('cfgCampos').querySelector('[data-c="reglasEs"]');
+  var en=$('cfgCampos').querySelector('[data-c="reglasEn"]');
+  if(es) es.value=CFG.reglasPorDefecto.es;
+  if(en) en.value=CFG.reglasPorDefecto.en;
+  toast('Normas de fábrica cargadas · aprieta Guardar para dejarlas');
+};
 
 function pintarCategorias(){
   var cats=categoriasDelInventario();
@@ -2867,15 +3105,16 @@ function categoriasDelInventario(){
     .sort(function(a,b){ return b.unidades-a.unidades || a.categoria.localeCompare(b.categoria); });
 }
 $('invNueva').onclick=function(){ abrirUnidad(null); };
-$('uPorCama').addEventListener('change', function(){
-  $('uPrecios').classList.toggle('hide', this.checked);
+$('uModo').addEventListener('change', function(){
+  // El precio de la pieza completa solo hace falta si se vende completa.
+  $('uPrecios').classList.toggle('hide', this.value==='camas');
 });
 
 $('uGuardar').onclick=function(){
   $('uErr').classList.add('hide');
   ocupado('uGuardar', srv('guardarUnidad')({
     id: UNI?UNI.id:'', nombre:$('uNom').value.trim(), grupo:$('uGrupo').value,
-    bano:$('uBano').value, capacidad:+$('uCap').value||1, porCama:$('uPorCama').checked,
+    bano:$('uBano').value, capacidad:+$('uCap').value||1, modo:$('uModo').value,
     categoria:$('uCat').value.trim(),
     precioBase:+$('uPb').value||0, precioAlta:+$('uPa').value||0
   })).then(function(){
