@@ -103,7 +103,9 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
 
 - **Crear**: haz clic en un día libre, o mantén apretado y arrastra sobre
   varios días para elegir el rango de una vez. La selección se detiene sola
-  al topar con una reserva existente.
+  al topar con una reserva existente. Si prefieres no buscar el día en la
+  grilla, el botón **+ Nueva reserva** abre el mismo formulario con hoy, una
+  noche y el primer alojamiento libre, y de ahí lo ajustas.
 - **Abrir o editar**: clic sobre la barra de color de una reserva.
 - **Mover**: arrastra la barra a otro día u otra habitación. El día donde la
   sueltas pasa a ser el nuevo check-in y se mantiene la cantidad de noches.
@@ -129,6 +131,31 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
   punto verde (limpia), rojo (sucia) o gris (fuera de servicio), y las sucias
   quedan con un tinte distinto. Sirve para decidir al vuelo dónde meter a
   alguien que llega sin reserva.
+
+## Huéspedes: buscador e historial
+
+Pestaña **Huéspedes**. Están todos los que se han alojado o vienen a alojarse,
+y se busca por **nombre, teléfono, correo, documento o por la habitación donde
+estuvo**. Filtra mientras escribes, sin tildes y sin importar mayúsculas: buscar
+*munoz* encuentra a *Muñoz*.
+
+Lo importante es que **junta las visitas de la misma persona**, aunque el nombre
+venga escrito distinto cada vez. Se agrupa por teléfono, y si no hay, por correo
+o por el documento de la ficha; recién al final por el nombre. De cada persona
+queda:
+
+- Cuántas estadías y cuántas noches lleva, y si es **repetida**.
+- Cuánto ha consumido, cuánto pagó y si quedó **debiendo**.
+- Su primera visita, la última salida y, si tiene, **cuándo vuelve**.
+- Sus datos, tomados de la visita donde los dejó más completos.
+
+Al tocar a una persona se abre su historial: cada estadía con su alojamiento,
+sus fechas, sus acompañantes, **el detalle de su cuenta movimiento por
+movimiento** y un enlace para ver la ficha que firmó. Desde ahí se salta a la
+reserva en el calendario.
+
+Las reservas canceladas y los no-show quedan en el historial —para saber que
+existieron— pero no suman noches ni estadías.
 
 ## Reserva de grupo
 
@@ -473,7 +500,8 @@ como filas nuevas del calendario.
   se le agregan las camas, cada una con su precio; cada cama pasa a ser una
   fila propia del calendario.
 - Las unidades no se borran, se **archivan**: dejan de aparecer en el
-  calendario pero se conserva su historial de reservas.
+  calendario pero se conserva su historial de reservas. Las camas también, una
+  por una, y al poner una habitación en modo cama sus camas se activan solas.
 
 ### La distribución de la casa
 
@@ -526,15 +554,10 @@ reserva**, cada reserva sigue tomando una pieza concreta y se asigna a mano
 como siempre. Si la dejas en blanco, se arma sola con la capacidad y el tipo
 de baño.
 
-Sirve para dos cosas:
-
-1. **Responder rápido.** Cuando llega el mensaje "¿tienes algo matrimonial con
-   baño privado del 12 al 15?", el sistema contesta por categoría y muestra
-   cuáles quedan libres.
-2. **Saber cómo publicar.** En Booking o Airbnb no se publica pieza por pieza
-   sino por categoría, diciendo cuántas unidades tiene cada una. Abajo de la
-   pestaña *Alojamiento* está la tabla **Cómo publicarlo en un canal**, ya
-   armada: la categoría, cuántas unidades, desde qué precio y cuáles son.
+**Saber cómo publicar.** En Booking o Airbnb no se publica pieza por pieza sino por
+categoría, diciendo cuántas unidades tiene cada una. Abajo de la pestaña
+*Alojamiento* está la tabla **Cómo publicarlo en un canal**, ya armada: la
+categoría, cuántas unidades, desde qué precio y cuáles son.
 
 Con casi una sola unidad por variante, esa tabla también deja ver dónde está
 el riesgo real de sobreventa: las categorías con **una** unidad.

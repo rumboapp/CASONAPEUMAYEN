@@ -768,13 +768,6 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
   };
 }
 
-function tarifaNoche(token, recursoId, fecha) {
-  sesion_(token);
-  var r = recursos_().filter(function (x) { return x.id === recursoId; })[0];
-  if (!r) return 0;
-  return esAlta_(ymd_(fecha)) ? r.precioAlta : r.precioBase;
-}
-
 /* ===================== RESERVAS ===================== */
 
 /* Calza el plan de noches con las fechas y, si desde el formulario vino un
@@ -937,30 +930,6 @@ function disponibles(token, checkIn, checkOut, ignorarGrupo) {
       precio: (alta ? rec.precioAlta : rec.precioBase) * noches
     };
   });
-}
-
-/* La misma disponibilidad, pero agrupada por categoría. Es la respuesta a la
-   pregunta que llega por WhatsApp: "¿tienes algo matrimonial con baño
-   privado del 12 al 15?". Y de paso muestra con cuántas unidades se publica
-   cada categoría en un canal como Booking. */
-function disponiblesPorCategoria(token, checkIn, checkOut) {
-  var lista = disponibles(token, checkIn, checkOut);
-  var cats = {};
-  lista.forEach(function (r) {
-    var c = r.categoria || 'Sin categoría';
-    if (!cats[c]) cats[c] = { categoria: c, total: 0, libres: 0, desde: 0, unidades: [] };
-    cats[c].total++;
-    if (r.libre) {
-      cats[c].libres++;
-      if (!cats[c].desde || r.precio < cats[c].desde) cats[c].desde = r.precio;
-    }
-    cats[c].unidades.push({
-      id: r.id, nombre: r.unidad + (r.cama ? ' — ' + r.cama : ''),
-      libre: r.libre, ocupadaPor: r.ocupadaPor, precio: r.precio
-    });
-  });
-  return Object.keys(cats).map(function (k) { return cats[k]; })
-    .sort(function (a, b) { return b.libres - a.libres || a.categoria.localeCompare(b.categoria); });
 }
 
 function guardarReservaGrupo(token, datos) {
@@ -2637,8 +2606,14 @@ function guardarUnidad(token, d) {
 
   if (d.id) {
     actualizar_('Unidades', 'id', d.id, campos);
+    // Si la pieza pasa a venderse por cama, sus camas se activan solas: si no,
+    // quedaría una habitación en modo cama sin ninguna cama que mostrar.
+    if (modo !== 'entera') {
+      leer_('Camas').filter(function (c) { return c.idUnidad === d.id && !c.activa; })
+        .forEach(function (c) { actualizar_('Camas', 'id', c.id, { activa: true }); });
+    }
     olvidarRecursos_();
-  logCambio_(u.nombre, 'unidad_editada', d.id);
+    logCambio_(u.nombre, 'unidad_editada', d.id + ' · ' + modo);
     return { id: d.id };
   }
   var existentes = leer_('Unidades');
@@ -2898,6 +2873,156 @@ function informes(token, desde, hasta) {
       return porMes[k];
     })
   };
+}
+
+/* ===================== HUÉSPEDES =====================
+   La misma persona vuelve, cambia de habitación y a veces escribe su nombre
+   distinto. Acá se juntan sus estadías para poder buscarla y ver de un golpe
+   qué reservó, qué consumió y si firmó.
+
+   Se agrupa por teléfono, correo o documento cuando existen, y si no por el
+   nombre: es lo que de verdad identifica a alguien en un lugar chico. */
+
+function normalizar_(s) {
+  return String(s == null ? '' : s).toLowerCase()
+    .replace(/[áàä]/g, 'a').replace(/[éèë]/g, 'e').replace(/[íìï]/g, 'i')
+    .replace(/[óòö]/g, 'o').replace(/[úùü]/g, 'u').replace(/ñ/g, 'n')
+    .replace(/\s+/g, ' ').trim();
+}
+
+function soloDigitos_(s) { return String(s == null ? '' : s).replace(/[^\d]/g, ''); }
+
+/* La llave con la que dos reservas son "la misma persona". */
+function llaveHuesped_(r, ficha) {
+  var tel = soloDigitos_(r.telefono);
+  if (tel.length >= 8) return 'tel:' + tel.slice(-8);
+  var mail = normalizar_(r.email);
+  if (mail.indexOf('@') > 0) return 'mail:' + mail;
+  var doc = ficha ? normalizar_(ficha.documento).replace(/[.\-]/g, '') : '';
+  if (doc) return 'doc:' + doc;
+  return 'nom:' + normalizar_(r.huesped);
+}
+
+function huespedes(token, texto) {
+  sesion_(token);
+  var busca = normalizar_(texto);
+  var digitos = soloDigitos_(texto);
+
+  var fichasPorReserva = {};
+  leer_('Fichas').forEach(function (f) { fichasPorReserva[f.idReserva] = f; });
+
+  var recs = {};
+  recursos_().forEach(function (x) {
+    recs[x.id] = x.unidad + (x.nombre ? ' — ' + x.nombre : '');
+  });
+
+  var hoy = hoy_();
+  var gente = {};
+
+  leer_('Reservas').forEach(function (r) {
+    var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
+    if (!ci || !co) return;
+    var ficha = fichasPorReserva[r.id];
+    var llave = llaveHuesped_(r, ficha);
+
+    if (!gente[llave]) {
+      gente[llave] = {
+        llave: llave, nombre: String(r.huesped || ''),
+        telefono: String(r.telefono || ''), email: String(r.email || ''),
+        documento: ficha ? String(ficha.documento || '') : '',
+        nacionalidad: ficha ? String(ficha.nacionalidad || '') : '',
+        estadias: 0, noches: 0, gastado: 0, pagado: 0, porCobrar: 0,
+        conFicha: 0, primera: '', ultima: '', proxima: '',
+        canales: {}, reservas: []
+      };
+    }
+    var g = gente[llave];
+    // Se queda con los datos más completos que haya dejado en cualquier visita.
+    if (String(r.huesped || '').length > g.nombre.length) g.nombre = String(r.huesped);
+    if (!g.telefono && r.telefono) g.telefono = String(r.telefono);
+    if (!g.email && r.email) g.email = String(r.email);
+    if (!g.documento && ficha && ficha.documento) g.documento = String(ficha.documento);
+    if (!g.nacionalidad && ficha && ficha.nacionalidad) g.nacionalidad = String(ficha.nacionalidad);
+
+    var movs = movimientosDe_(r.id);
+    var cargos = 0, pagos = 0;
+    movs.forEach(function (m) {
+      var t = Math.round(Number(m.total) || 0);
+      if (m.clase === 'pago') pagos += t; else cargos += t;
+    });
+
+    var cancelada = (r.estado === 'cancelada' || r.estado === 'no_show');
+    if (!cancelada) {
+      g.estadias++;
+      g.noches += noches_(ci, co);
+      g.gastado += cargos;
+      g.pagado += pagos;
+      var pend = cargos - pagos + alojamientoPendiente_(r, movs);
+      if (pend > 0) g.porCobrar += pend;
+      if (ficha) g.conFicha++;
+      if (!g.primera || ci < g.primera) g.primera = ci;
+      if (co <= hoy && (!g.ultima || co > g.ultima)) g.ultima = co;
+      if (ci >= hoy && (!g.proxima || ci < g.proxima)) g.proxima = ci;
+      var canal = String(r.canal || 'sin canal');
+      g.canales[canal] = (g.canales[canal] || 0) + 1;
+    }
+
+    g.reservas.push({
+      id: r.id, alojamiento: recs[r.recurso] || String(r.recurso),
+      checkIn: ci, checkOut: co, noches: noches_(ci, co),
+      estado: r.estado, canal: String(r.canal || ''), pax: Number(r.pax) || 1,
+      total: Math.round(Number(r.total) || 0),
+      cargos: cargos, pagos: pagos,
+      firmada: !!ficha, grupo: String(r.grupo || ''),
+      notas: String(r.notas || '')
+    });
+  });
+
+  var lista = Object.keys(gente).map(function (k) {
+    var g = gente[k];
+    g.reservas.sort(function (a, b) { return a.checkIn < b.checkIn ? 1 : -1; });
+    g.canal = Object.keys(g.canales).sort(function (a, b) {
+      return g.canales[b] - g.canales[a];
+    })[0] || '';
+    delete g.canales;
+    g.repetido = g.estadias > 1;
+    return g;
+  });
+
+  if (busca) {
+    lista = lista.filter(function (g) {
+      if (normalizar_(g.nombre).indexOf(busca) > -1) return true;
+      if (normalizar_(g.email).indexOf(busca) > -1) return true;
+      if (normalizar_(g.documento).indexOf(busca) > -1) return true;
+      if (digitos.length >= 3 && soloDigitos_(g.telefono).indexOf(digitos) > -1) return true;
+      // También se busca por el alojamiento donde estuvo.
+      return g.reservas.some(function (x) {
+        return normalizar_(x.alojamiento).indexOf(busca) > -1;
+      });
+    });
+  }
+
+  // Primero los que vienen; después, los más recientes.
+  lista.sort(function (a, b) {
+    if (!!a.proxima !== !!b.proxima) return a.proxima ? -1 : 1;
+    if (a.proxima && b.proxima) return a.proxima < b.proxima ? -1 : 1;
+    return (b.ultima || '') < (a.ultima || '') ? -1 : 1;
+  });
+
+  return { total: lista.length, huespedes: lista.slice(0, 200), hoy: hoy };
+}
+
+/* Todo lo de una persona: sus estadías, su ficha y el detalle de su cuenta. */
+function huesped(token, llave) {
+  sesion_(token);
+  var g = huespedes(token, '').huespedes.filter(function (x) { return x.llave === llave; })[0];
+  if (!g) throw new Error('No se encontró a esa persona.');
+  g.reservas.forEach(function (x) {
+    x.cuenta = cuentaDe(token, x.id);
+    x.ficha = fichaDe(token, x.id);
+    x.acompanantes = acompanantesDe_(x.id);
+  });
+  return g;
 }
 
 /* ===================== EQUIPO ===================== */

@@ -158,14 +158,20 @@
   /* ---------- Modal ---------- */
   .ov{position:fixed;inset:0;background:rgba(17,20,24,.45);display:grid;place-items:center;
     z-index:100;padding:16px}
+  /* El encabezado y el pie quedan fijos y solo se desplaza el contenido: con
+     formularios largos, si no, los botones de abajo quedaban fuera de la
+     pantalla y no se podían apretar. */
   .mo{background:var(--surface);border-radius:12px;width:100%;max-width:520px;
-    max-height:90vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.22)}
-  .mo header{border-bottom:1px solid var(--line);padding:0 18px;height:50px}
+    max-height:90vh;display:flex;flex-direction:column;
+    box-shadow:0 12px 40px rgba(0,0,0,.22)}
+  .mo header,.mo footer{flex:none}
+  .mo header{border-bottom:1px solid var(--line);padding:0 18px;height:50px;
+    display:flex;align-items:center;justify-content:space-between}
   .mo header h3{font-size:15px;font-weight:600}
-  .mo .body{padding:18px}
+  .mo .body{padding:18px;overflow:auto;flex:1 1 auto}
   .mo footer{display:flex;gap:8px;justify-content:flex-end;padding:14px 18px;
     border-top:1px solid var(--line);flex-wrap:wrap}
-  .mo footer .left{margin-right:auto;display:flex;gap:8px}
+  .mo footer .left{margin-right:auto;display:flex;gap:8px;flex-wrap:wrap}
   .mo.ancho{max-width:660px}
   .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .x{width:30px;height:30px;border-radius:6px;color:var(--tx2);font-size:20px;line-height:1}
@@ -394,7 +400,8 @@
         <button class="nav-ico" id="cPrev">‹</button>
         <button class="nav-ico" id="cNext">›</button>
         <button class="btn gh sm" id="cHoy">Hoy</button>
-        <button class="btn sm" id="cGrupo">+ Reserva de grupo</button>
+        <button class="btn sm" id="cNueva">+ Nueva reserva</button>
+        <button class="btn gh sm" id="cGrupo">+ Reserva de grupo</button>
         <div class="rng" id="cRng"></div>
         <select id="cDias" style="width:auto">
           <option value="14">14 días</option>
@@ -466,6 +473,23 @@
         </div>
       </div>
       <div id="infCuerpo"></div>
+    </section>
+
+    <!-- ---------- Huéspedes ---------- -->
+    <section id="v-gente" class="hide">
+      <div class="card">
+        <h2>Huéspedes</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Todos los que se han alojado o vienen a alojarse. Busca por nombre, teléfono,
+          correo, documento o por la habitación donde estuvo.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="genQ" placeholder="Buscar…" style="flex:1 1 240px">
+          <button class="btn sm" id="genBuscar">Buscar</button>
+          <span class="muted" id="genCuenta" style="font-size:12.5px"></span>
+        </div>
+      </div>
+      <div id="genLista"></div>
     </section>
 
     <!-- ---------- Cierre de día ---------- -->
@@ -668,10 +692,20 @@
         <button class="btn gh sm hide" id="rEnviar">Copiar enlace de la ficha</button>
         <button class="btn gh sm hide" id="rFicha">Firmar aquí</button>
         <button class="btn gh sm hide" id="rCancelar">Cancelar reserva</button>
+        <button class="btn gh sm hide" id="rBorrar">Eliminar</button>
       </div>
       <button class="btn gh" data-cerrar="mRes">Cerrar</button>
       <button class="btn" id="rGuardar">Guardar</button>
     </footer>
+  </div>
+</div>
+
+<!-- ==================== HISTORIAL DE UN HUÉSPED ==================== -->
+<div class="ov hide" id="mHue">
+  <div class="mo ancho">
+    <header><h3 id="hueTit">Huésped</h3><button class="x" data-cerrar="mHue">×</button></header>
+    <div class="body"><div id="hueCuerpo"></div></div>
+    <footer><button class="btn gh" data-cerrar="mHue">Cerrar</button></footer>
   </div>
 </div>
 
@@ -1102,16 +1136,6 @@ function srv(fn){
     });
   };
 }
-/* Igual que srv() pero sin token, para la página pública de firma. */
-function srvPub(fn){
-  return function(){
-    var args=[].slice.call(arguments);
-    return new Promise(function(res,rej){
-      var runner=google.script.run.withSuccessHandler(res).withFailureHandler(rej);
-      runner[fn].apply(runner, args);
-    });
-  };
-}
 function fallo(e){ toast(e && e.message ? e.message : String(e), true); }
 
 /* Marca un botón como ocupado mientras corre la promesa, para que se note
@@ -1214,6 +1238,7 @@ var TABS=[
   {id:'hoy',  t:'Hoy',         roles:['admin','recepcion']},
   {id:'aseo', t:'Aseo',        roles:['admin','recepcion','aseo']},
   {id:'cierre', t:'Cierre',    roles:['admin','recepcion']},
+  {id:'gente', t:'Huéspedes',  roles:['admin','recepcion']},
   {id:'inf',  t:'Informes',    roles:['admin']},
   {id:'inv',  t:'Alojamiento', roles:['admin']},
   {id:'cfg',  t:'Configuración', roles:['admin']},
@@ -1244,6 +1269,7 @@ function ver(id){
   if(id==='hoy')  cargarHoy();
   if(id==='aseo') cargarAseo();
   if(id==='cierre') prepararCierre();
+  if(id==='gente')  cargarHuespedes();
   if(id==='inf')  prepararInformes();
   if(id==='inv')  cargarInventario();
   if(id==='cfg')  cargarConfiguracion();
@@ -1796,6 +1822,7 @@ function nuevaReserva(rec, entrada, salida){
   $('rAddon').checked=false; $('rAddonF').value=''; $('rAddonF').classList.add('hide');
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
+  $('rBorrar').classList.add('hide');
   $('rEnviar').classList.add('hide'); $('rVerFicha').classList.add('hide');
   $('rCuenta').classList.add('hide'); $('rAcom').classList.add('hide');
   $('rComprobante').classList.add('hide'); $('rVerNoches').classList.add('hide');
@@ -1830,6 +1857,7 @@ function abrirReserva(r){
   $('rAddonBox').classList.toggle('hide', !(rec && rec.grupo==='Glamping'));
   $('rErr').classList.add('hide');
   $('rCancelar').classList.remove('hide');
+  $('rBorrar').classList.toggle('hide', S.rol!=='admin');
   // El abonado es el espejo de los pagos de la cuenta: se edita allá.
   var conPagos = (Number(r.anticipo)||0) > 0;
   $('rAnt').readOnly = conPagos;
@@ -2330,12 +2358,36 @@ $('rCancelar').onclick=function(){
   }).catch(fallo);
 };
 
+/* Cancelar deja la reserva en el historial; eliminar la borra de verdad, con
+   su cuenta, sus noches y sus acompañantes. Es para las de prueba y los
+   errores de carga, así que solo administración y con doble confirmación. */
+$('rBorrar').onclick=function(){
+  if(!RES) return;
+  if(!confirm('¿Eliminar definitivamente la reserva de '+RES.huesped+'?\n\n'+
+              'Se borra también su cuenta, sus noches y sus acompañantes. '+
+              'Si solo quieres liberar las fechas, usa Cancelar reserva.')) return;
+  if(!confirm('Esto no se puede deshacer. ¿Seguro?')) return;
+  ocupado('rBorrar', srv('eliminarReserva')(RES.id)).then(function(){
+    cerrar('mRes'); toast('Reserva eliminada'); recargarCal();
+  }).catch(fallo);
+};
+
 $('rFicha').onclick=function(){ if(RES) abrirFicha(RES); };
 
 /* ==================================================================
    Reserva de grupo: una familia en varios alojamientos, datos una sola vez
    ================================================================== */
 var GRUPO = { in:null, out:null, elegidos:{} };
+
+/* Crear una reserva sin tener que buscar el día en la grilla: parte con hoy,
+   una noche y el primer alojamiento libre, y de ahí se ajusta en el mismo
+   formulario de siempre. */
+$('cNueva').onclick=function(){
+  var hoy=fmtHoy(), manana=mas(hoy,1);
+  var mapa=ocupacion();
+  var libre=CAL.recursos.filter(function(r){ return !mapa[r.id+'|'+hoy]; })[0];
+  nuevaReserva(libre ? libre.id : (CAL.recursos[0]||{}).id, hoy, manana);
+};
 
 $('cGrupo').onclick=function(){
   var hoy=fmtHoy();
@@ -2679,6 +2731,140 @@ $('aseoLink').onclick=function(){
 };
 
 /* ==================================================================
+   Huéspedes: buscador e historial
+   ================================================================== */
+var GENTE = null, GENTE_RELOJ = null;
+
+function cargarHuespedes(){
+  esqueleto('genLista',4);
+  srv('huespedes')($('genQ').value.trim()).then(function(d){
+    GENTE=d; pintarHuespedes();
+  }).catch(fallo);
+}
+
+$('genBuscar').onclick=cargarHuespedes;
+$('genQ').addEventListener('input', function(){
+  // Se busca solo mientras escribe, sin disparar una llamada por tecla.
+  clearTimeout(GENTE_RELOJ);
+  GENTE_RELOJ=setTimeout(cargarHuespedes, 350);
+});
+$('genQ').addEventListener('keydown', function(e){
+  if(e.key==='Enter'){ clearTimeout(GENTE_RELOJ); cargarHuespedes(); }
+});
+
+function pintarHuespedes(){
+  if(!GENTE) return;
+  $('genCuenta').textContent = GENTE.total
+    ? GENTE.total+' persona(s)'+(GENTE.total>GENTE.huespedes.length
+        ? ' · se muestran las primeras '+GENTE.huespedes.length : '')
+    : '';
+  var c=$('genLista'); c.innerHTML='';
+  if(!GENTE.huespedes.length){
+    c.innerHTML='<div class="card"><div class="empty">Nadie con esos datos.</div></div>';
+    return;
+  }
+  GENTE.huespedes.forEach(function(g){
+    var d=document.createElement('div');
+    d.className='card';
+    d.style.cssText='cursor:pointer';
+    var contacto=[g.telefono, g.email, g.documento].filter(Boolean).join(' · ');
+    d.innerHTML=
+      '<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'+
+        '<b style="font-size:15px">'+g.nombre+'</b>'+
+        (g.repetido?'<span class="tag en_casa">'+g.estadias+' estadías</span>':'')+
+        (g.proxima?'<span class="tag confirmada">vuelve el '+corto(g.proxima)+'</span>':'')+
+        (g.porCobrar>0?'<span class="tag tentativa">debe '+plata(g.porCobrar)+'</span>':'')+
+        (g.conFicha?'':'<span class="tag no_show">sin ficha</span>')+
+      '</div>'+
+      (contacto?'<div class="muted" style="font-size:12.5px;margin-top:3px">'+contacto+'</div>':'')+
+      '<div class="muted" style="font-size:12.5px;margin-top:6px">'+
+        g.noches+' noche(s) · '+plata(g.gastado)+' consumido'+
+        (g.ultima?' · última salida '+corto(g.ultima):'')+
+        (g.canal?' · llega por '+g.canal:'')+
+      '</div>';
+    d.onclick=function(){ abrirHuesped(g.llave, g.nombre); };
+    c.appendChild(d);
+  });
+}
+
+function abrirHuesped(llave, nombre){
+  $('hueTit').textContent = nombre || 'Huésped';
+  $('hueCuerpo').innerHTML='<div class="esqueleto"></div>';
+  abrir('mHue');
+  srv('huesped')(llave).then(pintarHuesped).catch(function(e){
+    $('hueCuerpo').innerHTML='<div class="empty">'+(e.message||e)+'</div>';
+  });
+}
+
+function pintarHuesped(g){
+  var h='<div class="ctaResumen">'+
+    caja('Estadías', g.estadias)+
+    caja('Noches', g.noches)+
+    caja('Consumido', plata(g.gastado))+
+    caja('Pagado', plata(g.pagado), 'pagado')+
+    (g.porCobrar>0?caja('Por cobrar', plata(g.porCobrar), 'debe'):'')+
+  '</div>';
+
+  var datos=[['Teléfono',g.telefono],['Correo',g.email],
+             ['Documento',g.documento],['Nacionalidad',g.nacionalidad],
+             ['Primera visita',g.primera?largo(g.primera):''],
+             ['Última salida',g.ultima?largo(g.ultima):''],
+             ['Próxima llegada',g.proxima?largo(g.proxima):'']]
+            .filter(function(x){ return x[1]; });
+  if(datos.length){
+    h+='<div class="ctaCaja"><div class="ctaTit">Sus datos</div><table class="ctaMov"><tbody>'+
+      datos.map(function(x){
+        return '<tr><td class="muted" style="width:38%">'+x[0]+'</td><td>'+x[1]+'</td></tr>';
+      }).join('')+'</tbody></table></div>';
+  }
+
+  g.reservas.forEach(function(r){
+    var cta=r.cuenta||{};
+    h+='<div class="ctaCaja">'+
+      '<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'+
+        '<b>'+largo(r.checkIn)+' → '+largo(r.checkOut)+'</b>'+
+        '<span class="tag '+r.estado+'">'+etq(r.estado)+'</span>'+
+        (r.firmada?'<span class="tag en_casa">ficha firmada</span>'
+                  :'<span class="tag tentativa">sin firmar</span>')+
+      '</div>'+
+      '<div class="muted" style="font-size:12.5px;margin:4px 0 8px">'+
+        r.alojamiento+' · '+r.noches+' noche(s) · '+r.pax+' pax'+
+        (r.canal?' · '+r.canal:'')+
+      '</div>'+
+      (r.notas?'<div class="muted" style="font-size:12.5px;margin-bottom:8px">'+
+               'Notas: '+r.notas+'</div>':'')+
+      ((r.acompanantes||[]).length
+        ? '<div class="muted" style="font-size:12.5px;margin-bottom:8px">Con: '+
+          r.acompanantes.map(function(a){ return a.nombre; }).join(', ')+'</div>' : '')+
+      (cta.movimientos && cta.movimientos.length
+        ? '<table class="ctaMov"><tbody>'+cta.movimientos.map(function(m){
+            return '<tr class="'+m.clase+'"><td class="muted">'+corto(m.fecha)+'</td>'+
+              '<td>'+m.descripcion+(m.centro?'<span class="cen '+m.centro+'">'+m.centro+'</span>':'')+'</td>'+
+              '<td class="n">'+(m.clase==='pago'?'− ':'')+plata(m.total)+'</td></tr>';
+          }).join('')+'</tbody></table>'
+        : '<div class="muted" style="font-size:12.5px">Sin movimientos en la cuenta.</div>')+
+      '<div style="display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;align-items:center">'+
+        '<span class="muted" style="font-size:12.5px">Saldo '+plata(cta.saldoProyectado||0)+'</span>'+
+        '<button class="btn gh sm" data-ir="'+r.id+'" style="margin-left:auto">Ver la reserva</button>'+
+        (r.ficha && r.ficha.firmaUrl
+          ? '<a class="btn gh sm" style="text-decoration:none" target="_blank" href="'+
+            r.ficha.firmaUrl+'">Ver la firma</a>' : '')+
+      '</div>'+
+    '</div>';
+  });
+
+  $('hueCuerpo').innerHTML=h;
+  Array.prototype.forEach.call($('hueCuerpo').querySelectorAll('[data-ir]'), function(b){
+    b.onclick=function(){
+      var r=CAL.reservas.filter(function(x){ return x.id===b.dataset.ir; })[0];
+      cerrar('mHue');
+      if(r){ ver('cal'); setTimeout(function(){ abrirReserva(r); }, 200); }
+      else abrirCuenta(b.dataset.ir, g.nombre);   // fuera de la ventana cargada
+    };
+  });
+}
+
+/* ==================================================================
    Cierre de día
    ================================================================== */
 function prepararCierre(){
@@ -3000,10 +3186,22 @@ function cargarInventario(){
           f.style.cssText='font-size:12.5px;padding:3px 0;display:flex;gap:8px;align-items:center'+
                           (cm.activa?'':';opacity:.5');
           f.innerHTML='<span>'+cm.nombre+'</span><span class="muted">'+plata(cm.precioBase)+' / '+plata(cm.precioAlta)+'</span>';
+          if(!cm.activa) f.innerHTML+='<span class="cen">archivada</span>';
           var e=document.createElement('button');
           e.className='btn gh sm'; e.textContent='Editar'; e.style.marginLeft='auto';
           e.onclick=function(){ abrirCama(u, cm); };
           f.appendChild(e);
+          // Sin esto no había forma de volver a poner en venta una cama
+          // archivada, y una pieza en modo cama se quedaba sin camas.
+          var a=document.createElement('button');
+          a.className='btn gh sm'; a.textContent=cm.activa?'Archivar':'Activar';
+          a.onclick=function(){
+            srv('archivarCama')(cm.id, !cm.activa).then(function(){
+              toast(cm.activa?'Cama archivada':'Cama activada');
+              cargarInventario(); recargarCal();
+            }).catch(fallo);
+          };
+          f.appendChild(a);
           ul.appendChild(f);
         });
         d.appendChild(ul);
