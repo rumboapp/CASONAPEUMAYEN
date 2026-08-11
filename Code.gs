@@ -472,43 +472,45 @@ function setup() {
   }
 
   if (!leer_('Unidades').length) {
-    // La categoría es solo una etiqueta: no cambia cómo se reserva (cada
-    // reserva sigue tomando una pieza concreta), pero permite preguntar
-    // "¿tengo algo matrimonial con baño privado?" y saber cómo agrupar la
-    // oferta al publicarla en un canal como Booking.
-    [
-      ['U1', 'Habitación 1 · Matrimonial', 'Lodge', 2, 'privado', false, 55000, 70000, 'Matrimonial con baño privado'],
-      ['U2', 'Habitación 2 · Matrimonial', 'Lodge', 2, 'privado', false, 55000, 70000, 'Matrimonial con baño privado'],
-      ['U3', 'Habitación 3 · Twin', 'Lodge', 2, 'privado', false, 55000, 70000, 'Twin con baño privado'],
-      ['U4', 'Habitación 4 · Matrimonial + individual', 'Lodge', 3, 'privado', false, 70000, 90000, 'Familiar con baño privado'],
-      ['U5', 'Habitación 5 · Matrimonial + litera', 'Lodge', 3, 'compartido', true, '', '', 'Compartida con baño compartido'],
-      ['U6', 'Habitación 6 · Individual + litera', 'Lodge', 3, 'compartido', true, '', '', 'Compartida con baño compartido'],
-      ['U7', 'Habitación 7 · Individual', 'Lodge', 1, 'compartido', true, '', '', 'Individual con baño compartido'],
-      ['U8', 'Habitación 8 · Individual', 'Lodge', 1, 'compartido', true, '', '', 'Individual con baño compartido'],
-      ['G1', 'Carpa A', 'Glamping', 2, 'compartido', false, 65000, 83000, 'Carpa glamping'],
-      ['G2', 'Carpa B', 'Glamping', 2, 'compartido', false, 65000, 83000, 'Carpa glamping'],
-      ['G3', 'Carpa C', 'Glamping', 2, 'compartido', false, 65000, 83000, 'Carpa glamping']
-    ].forEach(function (u, i) {
+    // La distribución real de la casa. Todas se venden como habitación
+    // completa; la categoría es solo una etiqueta, para buscar por tipo y
+    // para saber cómo agrupar la oferta al publicarla en un canal.
+    var unidadesIniciales = DISTRIBUCION.map(function (d) {
+      return { id: d.id, nombre: d.nombre, grupo: 'Lodge', capacidad: d.capacidad,
+               bano: d.bano, precioBase: d.precioBase, precioAlta: d.precioAlta,
+               categoria: d.categoria };
+    }).concat([
+      { id: 'G1', nombre: 'Carpa A', grupo: 'Glamping', capacidad: 2, bano: 'compartido',
+        precioBase: 65000, precioAlta: 83000, categoria: 'Carpa glamping' },
+      { id: 'G2', nombre: 'Carpa B', grupo: 'Glamping', capacidad: 2, bano: 'compartido',
+        precioBase: 65000, precioAlta: 83000, categoria: 'Carpa glamping' },
+      { id: 'G3', nombre: 'Carpa C', grupo: 'Glamping', capacidad: 2, bano: 'compartido',
+        precioBase: 65000, precioAlta: 83000, categoria: 'Carpa glamping' }
+    ]);
+
+    unidadesIniciales.forEach(function (u, i) {
       insertar_('Unidades', {
-        id: u[0], nombre: u[1], grupo: u[2], capacidad: u[3], bano: u[4],
-        porCama: u[5], precioBase: u[6], precioAlta: u[7], orden: i + 1, activa: true,
-        categoria: u[8]
+        id: u.id, nombre: u.nombre, grupo: u.grupo, capacidad: u.capacidad, bano: u.bano,
+        modo: 'entera', porCama: false,
+        precioBase: u.precioBase, precioAlta: u.precioAlta,
+        orden: i + 1, activa: true, categoria: u.categoria
       });
     });
 
+    // Las camas de las dos piezas que las tienen quedan cargadas pero
+    // ARCHIVADAS: si algún día se vuelve a vender por cama, están listas y
+    // basta cambiar el modo de la habitación.
     [
-      ['B51', 'U5', 'Cama matrimonial', 28000, 36000],
-      ['B52', 'U5', 'Litera superior', 25000, 32000],
-      ['B53', 'U5', 'Litera inferior', 25000, 32000],
-      ['B61', 'U6', 'Cama individual', 25000, 32000],
-      ['B62', 'U6', 'Litera superior', 25000, 32000],
-      ['B63', 'U6', 'Litera inferior', 25000, 32000],
-      ['B71', 'U7', 'Cama individual', 33000, 42000],
-      ['B81', 'U8', 'Cama individual', 33000, 42000]
+      ['B71', 'U7', 'Cama matrimonial', 28000, 36000],
+      ['B72', 'U7', 'Litera superior', 25000, 32000],
+      ['B73', 'U7', 'Litera inferior', 25000, 32000],
+      ['B81', 'U8', 'Cama individual', 25000, 32000],
+      ['B82', 'U8', 'Litera superior', 25000, 32000],
+      ['B83', 'U8', 'Litera inferior', 25000, 32000]
     ].forEach(function (b, i) {
       insertar_('Camas', {
         id: b[0], idUnidad: b[1], nombre: b[2], precioBase: b[3], precioAlta: b[4],
-        orden: i + 1, activa: true
+        orden: i + 1, activa: false
       });
     });
   }
@@ -1810,16 +1812,91 @@ function carpetaDocs_() {
   return it.hasNext() ? it.next() : DriveApp.createFolder(nombre);
 }
 
+/* Convierte el HTML en PDF y lo deja en Drive. La conversión de Google a
+   veces se atraganta con el logo incrustado, así que si falla se reintenta
+   sin él; y si igual no se puede, se guarda el documento como página web
+   para no dejar a nadie sin su comprobante. El motivo del fallo se devuelve,
+   en vez de quedar en silencio. */
 function pdfDesdeHtml_(html, nombreArchivo, publico) {
-  var blob = Utilities.newBlob(html, 'text/html', nombreArchivo + '.html')
-    .getAs('application/pdf').setName(nombreArchivo + '.pdf');
-  var archivo = carpetaDocs_().createFile(blob);
+  var carpeta = carpetaDocs_();
+  var archivo = null, tipo = 'pdf', aviso = '';
+
+  try {
+    archivo = carpeta.createFile(
+      Utilities.newBlob(html, 'text/html', nombreArchivo + '.html')
+        .getAs('application/pdf').setName(nombreArchivo + '.pdf'));
+  } catch (e1) {
+    aviso = String(e1.message || e1);
+    try {
+      // Segundo intento sin la imagen: es lo que más pesa del documento.
+      var sinLogo = html.replace(/<img class="logo"[^>]*>/, '<h1>Casona Peumayén</h1>');
+      archivo = carpeta.createFile(
+        Utilities.newBlob(sinLogo, 'text/html', nombreArchivo + '.html')
+          .getAs('application/pdf').setName(nombreArchivo + '.pdf'));
+      aviso = 'El PDF se generó sin el logo: la conversión de Google no lo aceptó (' + aviso + ').';
+    } catch (e2) {
+      // Último recurso: queda como página web, que se abre y se imprime igual.
+      archivo = carpeta.createFile(
+        Utilities.newBlob(html, 'text/html', nombreArchivo + '.html'));
+      tipo = 'html';
+      aviso = 'No se pudo convertir a PDF (' + String(e2.message || e2) +
+        '). Quedó como página web: se abre en el navegador y desde ahí se ' +
+        'puede imprimir o guardar como PDF.';
+    }
+  }
+
   if (publico) {
     // El enlace es largo y no se adivina; se comparte solo con quien lo recibe.
     try { archivo.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); }
     catch (e) { /* si el dominio no lo permite, queda privado */ }
   }
-  return { url: archivo.getUrl(), id: archivo.getId(), nombre: archivo.getName() };
+  return { url: archivo.getUrl(), id: archivo.getId(), nombre: archivo.getName(),
+           tipo: tipo, aviso: aviso };
+}
+
+/* Prueba corta para saber si este proyecto puede generar PDFs, con el error
+   textual si no puede. Se llama desde Configuración. */
+function probarDocumentos(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var pasos = [];
+  var anotar = function (paso, ok, detalle) { pasos.push({ paso: paso, ok: ok, detalle: detalle || '' }); };
+
+  try { carpetaDocs_(); anotar('Acceso a Drive', true, 'La carpeta de documentos está disponible.'); }
+  catch (e) {
+    anotar('Acceso a Drive', false, String(e.message || e));
+    return { ok: false, pasos: pasos,
+      mensaje: 'Google todavía no dio permiso para usar Drive. Genera un documento una vez ' +
+        'y acepta el permiso que pide, o ejecuta setup() desde el editor.' };
+  }
+
+  try {
+    Utilities.newBlob('<html><body><p>prueba</p></body></html>', 'text/html', 'prueba.html')
+      .getAs('application/pdf');
+    anotar('Convertir a PDF', true, 'La conversión funciona.');
+  } catch (e) {
+    anotar('Convertir a PDF', false, String(e.message || e));
+    return { ok: false, pasos: pasos,
+      mensaje: 'Este proyecto no puede convertir a PDF. Los documentos se van a guardar ' +
+        'como página web, que se abre en el navegador y se imprime o se guarda como PDF ' +
+        'desde ahí. Error exacto: ' + String(e.message || e) };
+  }
+
+  try {
+    Utilities.newBlob(hojaHtml_('Prueba', '<p>prueba</p>'), 'text/html', 'prueba.html')
+      .getAs('application/pdf');
+    anotar('Convertir con el logo', true, 'El logo no da problemas.');
+  } catch (e) {
+    anotar('Convertir con el logo', false, String(e.message || e));
+    return { ok: false, pasos: pasos,
+      mensaje: 'La conversión funciona, pero se cae con el logo incrustado. Los documentos ' +
+        'se van a generar sin logo. Error exacto: ' + String(e.message || e) };
+  }
+
+  try { MailApp.getRemainingDailyQuota(); anotar('Enviar correo', true, 'Se puede enviar correo.'); }
+  catch (e) { anotar('Enviar correo', false, String(e.message || e)); }
+
+  return { ok: true, pasos: pasos, mensaje: 'Todo listo: los documentos se generan en PDF.' };
 }
 
 function plata_(n) {
@@ -1858,8 +1935,35 @@ function hojaHtml_(titulo, cuerpo) {
 }
 
 /* ---------- Comprobante de la reserva, para mandarle al huésped ---------- */
+
+/* Devuelve el documento como página, sin pasar por Drive. Sirve para abrirlo
+   en el navegador e imprimirlo o guardarlo como PDF desde ahí: es el camino
+   que funciona siempre, sin permisos ni conversiones. */
+function comprobanteHtml(token, idReserva) {
+  sesion_(token);
+  return armarComprobante_(idReserva).html;
+}
+
+function cierreHtml(token, fecha) {
+  sesion_(token);
+  return armarCierre_(ymd_(fecha) || hoy_());
+}
+
 function comprobante(token, idReserva) {
   var u = sesion_(token);
+  var d = armarComprobante_(idReserva);
+  var doc = pdfDesdeHtml_(d.html, 'Reserva ' + d.huesped + ' ' + d.checkIn, true);
+  logCambio_(u.nombre, 'comprobante', idReserva);
+  return {
+    url: doc.url, tipo: doc.tipo, aviso: doc.aviso,
+    texto: d.texto.replace('{url}', doc.url),
+    whatsapp: 'https://wa.me/' + d.telefono +
+              '?text=' + encodeURIComponent(d.texto.replace('{url}', doc.url)),
+    correo: d.correo
+  };
+}
+
+function armarComprobante_(idReserva) {
   var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
   if (!r) throw new Error('No se encontró la reserva.');
 
@@ -1910,18 +2014,13 @@ function comprobante(token, idReserva) {
     reglas.map(function (x) { return '<li>' + escapar_(x) + '</li>'; }).join('') +
     '</ul>';
 
-  var doc = pdfDesdeHtml_(hojaHtml_('Confirmación', cuerpo),
-    'Reserva ' + r.huesped + ' ' + ymd_(r.checkIn), true);
-
-  var texto = 'Hola ' + r.huesped + ', te confirmamos tu reserva en Casona Peumayén del ' +
-    ymd_(r.checkIn) + ' al ' + ymd_(r.checkOut) + '. Acá va el comprobante: ' + doc.url;
-  logCambio_(u.nombre, 'comprobante', idReserva);
   return {
-    url: doc.url,
-    texto: texto,
-    whatsapp: 'https://wa.me/' + String(r.telefono || '').replace(/[^\d]/g, '') +
-              '?text=' + encodeURIComponent(texto),
-    correo: String(r.email || '')
+    html: hojaHtml_('Confirmación', cuerpo),
+    huesped: r.huesped, checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
+    telefono: String(r.telefono || '').replace(/[^\d]/g, ''),
+    correo: String(r.email || ''),
+    texto: 'Hola ' + r.huesped + ', te confirmamos tu reserva en Casona Peumayén del ' +
+      ymd_(r.checkIn) + ' al ' + ymd_(r.checkOut) + '. Acá va el comprobante: {url}'
   };
 }
 
@@ -1932,19 +2031,22 @@ function enviarComprobante(token, idReserva, correo) {
   var para = String(correo || r.email || '').trim();
   if (!para) throw new Error('Esa reserva no tiene correo. Escríbelo en la reserva o pásalo por WhatsApp.');
 
-  var doc = comprobante(token, idReserva);
+  var d = armarComprobante_(idReserva);
+  var doc = pdfDesdeHtml_(d.html, 'Reserva ' + d.huesped + ' ' + d.checkIn, true);
   MailApp.sendEmail({
     to: para,
     subject: 'Casona Peumayén · confirmación de tu reserva',
-    body: doc.texto,
+    body: d.texto.replace('{url}', doc.url),
     htmlBody: 'Hola ' + escapar_(r.huesped) + ',<br><br>Te confirmamos tu reserva del ' +
       ymd_(r.checkIn) + ' al ' + ymd_(r.checkOut) + '.<br>' +
       'Adjuntamos el comprobante, y también lo puedes ver acá: ' +
       '<a href="' + doc.url + '">' + doc.url + '</a><br><br>Te esperamos.',
-    attachments: [DriveApp.getFileById(doc.url.replace(/.*\/d\/([^\/]+).*/, '$1')).getAs('application/pdf')]
+    // Si la conversión falló, el adjunto va como página web: es preferible
+    // eso a que el huésped no reciba nada.
+    attachments: [DriveApp.getFileById(doc.id).getBlob()]
   });
   logCambio_(u.nombre, 'comprobante_enviado', idReserva + ' → ' + para);
-  return { enviado: para, url: doc.url };
+  return { enviado: para, url: doc.url, tipo: doc.tipo, aviso: doc.aviso };
 }
 
 /* ---------- Resumen de la noche, para el dueño ---------- */
@@ -1954,6 +2056,10 @@ function pdfCierre(token, fecha) {
 }
 
 function pdfCierre_(dia) {
+  return pdfDesdeHtml_(armarCierre_(dia), 'Cierre ' + dia, false);
+}
+
+function armarCierre_(dia) {
   var d = resumenDia_(dia);
   var rotulo = {
     sin_llegar: 'No se registró la llegada', sin_salir: 'No se marcó el check-out',
@@ -1993,7 +2099,7 @@ function pdfCierre_(dia) {
         }).join('') + '</table>'
       : '<p style="color:#0e8a5f">Todo en orden: nada pendiente de esta noche.</p>');
 
-  return pdfDesdeHtml_(hojaHtml_('Cierre ' + dia, cuerpo), 'Cierre ' + dia, false);
+  return hojaHtml_('Cierre ' + dia, cuerpo);
 }
 
 function enviarCierre(token, fecha, correo) {
@@ -2024,10 +2130,11 @@ function enviarCierre_(dia, para) {
       '<li>Lodge ' + plata_((d.porCentro || {}).lodge || 0) +
       ' · restaurante ' + plata_((d.porCentro || {}).restaurante || 0) + '</li>' +
       '<li>' + d.avisos.length + ' punto(s) por revisar</li></ul>' +
-      '<p>El detalle va adjunto en PDF.</p>',
-    attachments: [DriveApp.getFileById(doc.id).getAs('application/pdf')]
+      '<p>El detalle va adjunto.</p>',
+    attachments: [DriveApp.getFileById(doc.id).getBlob()]
   });
-  return { enviado: para, url: doc.url, avisos: d.avisos.length };
+  return { enviado: para, url: doc.url, avisos: d.avisos.length,
+           tipo: doc.tipo, aviso: doc.aviso };
 }
 
 /* ===================== DÍA DE HOY ===================== */
@@ -2583,6 +2690,111 @@ function archivarUnidad(token, id, activa) {
   olvidarRecursos_();
   logCambio_(u.nombre, 'unidad_archivada', id + ' activa=' + !!activa);
   return true;
+}
+
+/* ===================== DISTRIBUCIÓN DE LAS HABITACIONES =====================
+   La distribución real de la casa, tal como quedó definida. Todas se venden
+   como habitación completa; las camas quedan archivadas, no borradas, por si
+   algún día se vuelve a vender por cama.
+
+   Esto NO corre solo: se aplica desde Configuración, con vista previa, porque
+   cambiar el inventario mueve lo que se ve en el calendario. */
+var DISTRIBUCION = [
+  { id: 'U1', nombre: 'Habitación 1 · Matrimonial', capacidad: 2, bano: 'privado',
+    precioBase: 55000, precioAlta: 70000, categoria: 'Matrimonial con baño privado' },
+  { id: 'U2', nombre: 'Habitación 2 · Twin', capacidad: 2, bano: 'privado',
+    precioBase: 55000, precioAlta: 70000, categoria: 'Twin con baño privado' },
+  { id: 'U3', nombre: 'Habitación 3 · Matrimonial + cama adicional', capacidad: 3, bano: 'privado',
+    precioBase: 70000, precioAlta: 90000, categoria: 'Matrimonial con cama adicional, baño privado' },
+  { id: 'U4', nombre: 'Habitación 4 · Matrimonial', capacidad: 2, bano: 'privado',
+    precioBase: 55000, precioAlta: 70000, categoria: 'Matrimonial con baño privado' },
+  { id: 'U5', nombre: 'Habitación 5 · Single', capacidad: 1, bano: 'compartido',
+    precioBase: 33000, precioAlta: 42000, categoria: 'Single con baño compartido' },
+  { id: 'U6', nombre: 'Habitación 6 · Single', capacidad: 1, bano: 'compartido',
+    precioBase: 33000, precioAlta: 42000, categoria: 'Single con baño compartido' },
+  { id: 'U7', nombre: 'Habitación 7 · Matrimonial + litera', capacidad: 4, bano: 'compartido',
+    precioBase: 78000, precioAlta: 96000, categoria: 'Matrimonial + litera, baño compartido' },
+  { id: 'U8', nombre: 'Habitación 8 · Single + litera', capacidad: 3, bano: 'compartido',
+    precioBase: 70000, precioAlta: 88000, categoria: 'Single + litera, baño compartido' }
+];
+
+/* Sin argumentos solo cuenta lo que haría; con aplicar=true lo hace. */
+function reorganizarHabitaciones(token, aplicar) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+
+  var unidades = leer_('Unidades');
+  var porId = {};
+  unidades.forEach(function (x) { porId[x.id] = x; });
+
+  var cambios = [], faltan = [];
+  DISTRIBUCION.forEach(function (d, i) {
+    var actual = porId[d.id];
+    if (!actual) { faltan.push(d.id); return; }
+    var antes = actual.nombre + ' · ' + (Number(actual.capacidad) || 0) + ' pax · baño ' +
+      (actual.bano || '') + ' · ' + (modoDe_(actual) === 'camas' ? 'por cama' : 'completa');
+    var despues = d.nombre + ' · ' + d.capacidad + ' pax · baño ' + d.bano + ' · completa';
+    if (antes !== despues) cambios.push({ id: d.id, antes: antes, despues: despues });
+  });
+
+  // Reservas cargadas sobre camas: si las camas dejan de venderse, esas
+  // reservas se quedarían sin fila en el calendario. Hay que verlas antes.
+  var camasDe = {};
+  leer_('Camas').forEach(function (c) { camasDe[c.id] = c.idUnidad; });
+  var enCamas = leer_('Reservas').filter(function (r) {
+    return camasDe[r.recurso] && r.estado !== 'cancelada' && r.estado !== 'checkout';
+  }).map(function (r) {
+    return { id: r.id, huesped: r.huesped, cama: r.recurso, unidad: camasDe[r.recurso],
+             checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut) };
+  });
+
+  if (!aplicar) {
+    return { aplicado: false, cambios: cambios, faltan: faltan, enCamas: enCamas,
+      mensaje: cambios.length
+        ? cambios.length + ' habitación(es) cambian, y todas pasan a venderse completas.'
+        : 'La distribución ya está como corresponde.' };
+  }
+
+  var movidas = [], sinMover = [];
+  // Cada reserva que estaba en una cama se pasa a su habitación, si está libre.
+  enCamas.forEach(function (r) {
+    try {
+      verificarLibre_(r.unidad, r.checkIn, r.checkOut, r.id);
+      actualizar_('Reservas', 'id', r.id, { recurso: r.unidad, idUnidad: r.unidad });
+      movidas.push(r);
+    } catch (e) { sinMover.push(r); }
+  });
+
+  DISTRIBUCION.forEach(function (d, i) {
+    if (!porId[d.id]) return;
+    actualizar_('Unidades', 'id', d.id, {
+      nombre: d.nombre, grupo: 'Lodge', capacidad: d.capacidad, bano: d.bano,
+      modo: 'entera', porCama: false,
+      precioBase: d.precioBase, precioAlta: d.precioAlta,
+      categoria: d.categoria, orden: i + 1, activa: true
+    });
+  });
+
+  // Las camas se archivan, no se borran: si alguna quedó con una reserva que
+  // no se pudo mover, esa se deja activa para no esconderla del calendario.
+  var conservar = {};
+  sinMover.forEach(function (r) { conservar[r.cama] = true; });
+  leer_('Camas').forEach(function (c) {
+    if (!conservar[c.id] && c.activa) actualizar_('Camas', 'id', c.id, { activa: false });
+  });
+
+  olvidarRecursos_();
+  logCambio_(u.nombre, 'reorganizar', cambios.length + ' habitaciones · ' +
+    movidas.length + ' reservas movidas · ' + sinMover.length + ' sin mover');
+
+  return {
+    aplicado: true, cambios: cambios, faltan: faltan,
+    movidas: movidas, sinMover: sinMover,
+    mensaje: 'Listo. ' + cambios.length + ' habitación(es) actualizadas' +
+      (movidas.length ? ', ' + movidas.length + ' reserva(s) pasadas de la cama a su habitación' : '') +
+      (sinMover.length ? '. OJO: ' + sinMover.length + ' reserva(s) no se pudieron mover porque ' +
+        'la habitación estaba ocupada; sus camas quedaron visibles para que las revises.' : '.')
+  };
 }
 
 function archivarCama(token, id, activa) {

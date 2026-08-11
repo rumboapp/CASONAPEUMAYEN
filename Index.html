@@ -483,6 +483,7 @@
           <button class="btn gh sm" id="cieVer">Ver el día</button>
           <button class="btn sm" id="cieCerrar">Cerrar el día</button>
           <span style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
+            <button class="btn gh sm" id="cieImprimir">Abrir para imprimir</button>
             <button class="btn gh sm" id="ciePdf">Generar PDF</button>
             <button class="btn gh sm" id="cieMail">Enviar al dueño</button>
           </span>
@@ -531,6 +532,29 @@
           <button class="btn gh sm" id="cfgDefault">Volver a las normas de fábrica</button>
         </div>
         <div class="err hide" id="cfgErr"></div>
+      </div>
+      <div class="card">
+        <h2>Distribución de las habitaciones</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Deja las 8 habitaciones con la distribución real de la casa y todas vendidas
+          como <b>habitación completa</b>. Las camas no se borran: quedan archivadas, y
+          el día que quieras volver a vender por cama basta cambiarle el modo a esa
+          habitación. Primero muestra qué va a cambiar y no toca nada hasta que confirmes.
+        </p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn gh sm" id="reoVer">Ver qué cambiaría</button>
+          <button class="btn sm hide" id="reoAplicar">Aplicar los cambios</button>
+        </div>
+        <div id="reoCuerpo" style="margin-top:12px"></div>
+      </div>
+      <div class="card">
+        <h2>Revisar los documentos</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Si el comprobante o el cierre no se generan, esto dice exactamente en qué paso
+          falla: el permiso de Drive, la conversión a PDF, el logo o el correo.
+        </p>
+        <button class="btn gh sm" id="docProbar">Probar la generación de documentos</button>
+        <div id="docCuerpo" style="margin-top:12px"></div>
       </div>
       <div class="card">
         <h2>Cómo se verán las normas</h2>
@@ -676,8 +700,11 @@
       <div class="err hide" id="compErr"></div>
     </div>
     <footer>
+      <div class="left">
+        <button class="btn gh sm" id="compImprimir">Abrir para imprimir</button>
+      </div>
       <button class="btn gh" data-cerrar="mComp">Cerrar</button>
-      <button class="btn" id="compGenerar">Generar</button>
+      <button class="btn" id="compGenerar">Generar PDF</button>
     </footer>
   </div>
 </div>
@@ -2110,8 +2137,31 @@ $('nchRepartir').onclick=function(){
 $('rComprobante').onclick=function(){
   if(!RES) return;
   $('compErr').classList.add('hide');
-  $('compCuerpo').innerHTML='<div class="empty">Aprieta <b>Generar</b> para armar el PDF.</div>';
+  $('compCuerpo').innerHTML='<div class="empty">Con <b>Abrir para imprimir</b> lo ves al tiro '+
+    'en el navegador y desde ahí lo guardas como PDF. Con <b>Generar PDF</b> queda guardado '+
+    'en Drive y se puede mandar por correo.</div>';
   abrir('mComp');
+};
+
+/* Abrir el documento en una pestaña e imprimirlo desde el navegador. Es el
+   camino que funciona siempre: no pasa por Drive ni por la conversión de
+   Google, así que no depende de permisos ni de que la conversión ande. */
+function abrirParaImprimir(html, titulo){
+  var v = window.open('', '_blank');
+  if(!v){ toast('El navegador bloqueó la ventana. Permite las ventanas emergentes.', true); return; }
+  v.document.open();
+  v.document.write(html);
+  v.document.close();
+  v.document.title = titulo || 'Documento';
+  setTimeout(function(){ try{ v.focus(); v.print(); }catch(_){} }, 400);
+}
+
+$('compImprimir').onclick=function(){
+  if(!RES) return;
+  ocupado('compImprimir', srv('comprobanteHtml')(RES.id))
+    .then(function(html){ abrirParaImprimir(html, 'Comprobante · '+RES.huesped); })
+    .catch(function(e){ $('compErr').textContent=e.message||String(e);
+                        $('compErr').classList.remove('hide'); });
 };
 
 $('compGenerar').onclick=function(){
@@ -2120,7 +2170,10 @@ $('compGenerar').onclick=function(){
   $('compCuerpo').innerHTML='<div class="esqueleto"></div>';
   ocupado('compGenerar', srv('comprobante')(RES.id)).then(function(d){
     $('compCuerpo').innerHTML =
-      '<div class="ctaCaja"><div class="ctaTit">El PDF</div>'+
+      (d.aviso ? '<div class="aviso" style="background:#fff7e6;border:1px solid #f0d9a8;'+
+        'border-radius:8px;padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+d.aviso+'</div>' : '')+
+      '<div class="ctaCaja"><div class="ctaTit">'+
+        (d.tipo==='pdf'?'El PDF':'El documento (como página web)')+'</div>'+
         '<a href="'+d.url+'" target="_blank" style="color:var(--ac);text-decoration:underline">'+
         'Abrir el comprobante</a></div>'+
       '<div class="ctaCaja"><div class="ctaTit">Mandarlo</div>'+
@@ -2656,12 +2709,20 @@ function verCierre(){
 $('cieVer').onclick=verCierre;
 $('cieF').onchange=function(){ $('cieDoc').classList.add('hide'); verCierre(); };
 
+$('cieImprimir').onclick=function(){
+  ocupado('cieImprimir', srv('cierreHtml')($('cieF').value))
+    .then(function(html){ abrirParaImprimir(html, 'Cierre '+$('cieF').value); })
+    .catch(fallo);
+};
+
 $('ciePdf').onclick=function(){
   ocupado('ciePdf', srv('pdfCierre')($('cieF').value)).then(function(d){
     var c=$('cieDoc'); c.classList.remove('hide');
-    c.innerHTML='PDF listo: <a href="'+d.url+'" target="_blank" '+
-      'style="color:var(--ac);text-decoration:underline">'+d.nombre+'</a>';
-    toast('PDF generado');
+    c.innerHTML=(d.tipo==='pdf'?'PDF listo: ':'Documento listo (como página web): ')+
+      '<a href="'+d.url+'" target="_blank" '+
+      'style="color:var(--ac);text-decoration:underline">'+d.nombre+'</a>'+
+      (d.aviso?'<div style="margin-top:6px;color:var(--warn)">'+d.aviso+'</div>':'');
+    toast(d.tipo==='pdf'?'PDF generado':'Documento generado');
   }).catch(fallo);
 };
 
@@ -3063,6 +3124,59 @@ $('cfgGuardar').onclick=function(){
   }).catch(function(e){
     $('cfgErr').textContent=e.message||String(e); $('cfgErr').classList.remove('hide');
   });
+};
+
+/* ---------- Reorganizar la distribución ---------- */
+$('reoVer').onclick=function(){
+  ocupado('reoVer', srv('reorganizarHabitaciones')(false)).then(pintarReorganizar).catch(fallo);
+};
+
+$('reoAplicar').onclick=function(){
+  if(!confirm('¿Aplicar la distribución nueva? Las 8 habitaciones pasan a venderse '+
+              'completas y las camas quedan archivadas.')) return;
+  ocupado('reoAplicar', srv('reorganizarHabitaciones')(true)).then(function(d){
+    pintarReorganizar(d);
+    toast(d.mensaje);
+    recargarCal();
+  }).catch(fallo);
+};
+
+function pintarReorganizar(d){
+  var h='<p style="font-size:13px;margin-bottom:10px">'+d.mensaje+'</p>';
+  if(d.cambios.length){
+    h+='<table><thead><tr><th>Ahora</th><th>Queda</th></tr></thead><tbody>'+
+      d.cambios.map(function(c){
+        return '<tr><td class="muted">'+c.antes+'</td><td><b>'+c.despues+'</b></td></tr>';
+      }).join('')+'</tbody></table>';
+  }
+  if((d.enCamas||[]).length){
+    h+='<div class="ctaTit" style="margin-top:12px">Reservas que hoy están en una cama</div>'+
+       '<p class="muted" style="font-size:12.5px;margin-bottom:8px">Se pasan a su habitación '+
+       'si está libre, para que no desaparezcan del calendario.</p><ul style="padding-left:18px">'+
+       d.enCamas.map(function(r){
+         return '<li style="font-size:13px">'+r.huesped+' · '+r.cama+' → '+r.unidad+
+                ' · '+r.checkIn+' al '+r.checkOut+'</li>';
+       }).join('')+'</ul>';
+  }
+  if((d.sinMover||[]).length){
+    h+='<div class="err" style="margin-top:10px">'+d.sinMover.length+' reserva(s) no se '+
+       'pudieron mover porque la habitación estaba ocupada. Sus camas quedaron visibles '+
+       'en el calendario para que las revises a mano.</div>';
+  }
+  $('reoCuerpo').innerHTML=h;
+  $('reoAplicar').classList.toggle('hide', d.aplicado || !d.cambios.length);
+}
+
+/* ---------- Probar los documentos ---------- */
+$('docProbar').onclick=function(){
+  ocupado('docProbar', srv('probarDocumentos')()).then(function(d){
+    $('docCuerpo').innerHTML =
+      '<p style="font-size:13px;margin-bottom:10px">'+(d.ok?'✓ ':'✗ ')+d.mensaje+'</p>'+
+      '<table><tbody>'+d.pasos.map(function(p){
+        return '<tr><td>'+(p.ok?'✓':'✗')+' '+p.paso+'</td>'+
+               '<td class="muted" style="font-size:12px">'+p.detalle+'</td></tr>';
+      }).join('')+'</tbody></table>';
+  }).catch(fallo);
 };
 
 $('cfgDefault').onclick=function(){

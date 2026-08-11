@@ -422,6 +422,24 @@ de esa noche y *Enviar al dueño* se lo manda al correo configurado, con el PDF
 adjunto. Si además dejaste el cierre automático de madrugada, **el correo sale
 solo cada noche** apenas se cierra el día.
 
+### Si el PDF no se genera
+
+La conversión a PDF la hace Google y a veces no está disponible, o se atraganta
+con el logo incrustado. El sistema no se queda callado:
+
+1. Si falla con el logo, **lo genera igual sin el logo** y lo dice.
+2. Si no puede convertir de ninguna forma, **guarda el documento como página
+   web**, que se abre en el navegador y se imprime o se guarda como PDF desde
+   ahí. También lo dice.
+3. En *Configuración → Revisar los documentos* hay una prueba que dice en qué
+   paso se cae: el permiso de Drive, la conversión, el logo o el correo, con el
+   error textual de Google.
+
+Y en los dos documentos hay un botón **Abrir para imprimir** que no pasa por
+Drive ni por la conversión: abre el documento en una pestaña y lanza la
+impresión del navegador, desde donde se guarda como PDF. Ese camino funciona
+siempre, aunque Drive esté con problemas.
+
 ## Informes
 
 La pestaña *Informes* (solo administración) calcula sobre las reservas ya
@@ -456,6 +474,32 @@ como filas nuevas del calendario.
   fila propia del calendario.
 - Las unidades no se borran, se **archivan**: dejan de aparecer en el
   calendario pero se conserva su historial de reservas.
+
+### La distribución de la casa
+
+| Hab. | Qué tiene | Pax | Baño |
+|---|---|---|---|
+| 1 | Matrimonial | 2 | Privado |
+| 2 | Twin | 2 | Privado |
+| 3 | Matrimonial + cama adicional | 3 | Privado |
+| 4 | Matrimonial | 2 | Privado |
+| 5 | Single | 1 | Compartido |
+| 6 | Single | 1 | Compartido |
+| 7 | Matrimonial + litera | 4 | Compartido |
+| 8 | Single + litera | 3 | Compartido |
+
+Más las 3 carpas de glamping. **Todas se venden como habitación completa.**
+
+Las camas de la 7 y la 8 están cargadas pero **archivadas**: si algún día se
+vuelve a vender por cama, se activan y se le cambia el modo a esa habitación,
+sin tener que crear nada.
+
+**Si tu instalación viene de antes**, en *Configuración → Distribución de las
+habitaciones* hay un botón que la deja así. Primero muestra qué va a cambiar y
+no toca nada hasta que confirmes. Si hay reservas cargadas sobre camas, las
+pasa a su habitación; y si alguna no cabe —porque dos personas dormían en dos
+camas distintas de la misma pieza— **deja esa cama visible en el calendario y
+te lo dice**, en vez de esconder la reserva.
 
 ### Cómo se vende cada pieza
 
