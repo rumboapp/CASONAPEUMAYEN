@@ -518,34 +518,22 @@
     <!-- ---------- Configuración ---------- -->
     <section id="v-cfg" class="hide">
       <div class="card">
-        <h2>Configuración</h2>
+        <h2>Normas de convivencia</h2>
         <p class="muted" style="font-size:13px;margin-bottom:12px">
-          Lo que cambia con el tiempo se edita acá, sin tocar el código. Las normas
-          de convivencia van una por línea y son las mismas que ve el huésped al
-          firmar. Puedes escribir <b>{entrada}</b> y <b>{salida}</b> dentro de una
-          norma: se reemplazan solos por las horas de check-in y check-out, así que
-          si cambias el horario no hay que reescribirlas.
+          Es el texto que el huésped lee y acepta al firmar su ficha, y el que sale en
+          el comprobante. Se escribe tal como se va a leer: <b>una norma por línea</b>.
+          Si cambias el horario de check-in, cámbialo también en el texto.
         </p>
         <div id="cfgCampos"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;align-items:center">
           <button class="btn sm" id="cfgGuardar">Guardar</button>
-          <button class="btn gh sm" id="cfgDefault">Volver a las normas de fábrica</button>
+          <button class="btn gh sm" id="cfgDefault">Volver al texto original</button>
+          <button id="cfgAvanzado" style="margin-left:auto;font-size:12.5px;color:var(--tx3);
+            text-decoration:underline">Ajustes que casi nunca se tocan</button>
         </div>
+        <div id="cfgAvanzados" class="hide" style="margin-top:16px;padding-top:14px;
+             border-top:1px solid var(--line)"></div>
         <div class="err hide" id="cfgErr"></div>
-      </div>
-      <div class="card">
-        <h2>Distribución de las habitaciones</h2>
-        <p class="muted" style="font-size:13px;margin-bottom:12px">
-          Deja las 8 habitaciones con la distribución real de la casa y todas vendidas
-          como <b>habitación completa</b>. Las camas no se borran: quedan archivadas, y
-          el día que quieras volver a vender por cama basta cambiarle el modo a esa
-          habitación. Primero muestra qué va a cambiar y no toca nada hasta que confirmes.
-        </p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn gh sm" id="reoVer">Ver qué cambiaría</button>
-          <button class="btn sm hide" id="reoAplicar">Aplicar los cambios</button>
-        </div>
-        <div id="reoCuerpo" style="margin-top:12px"></div>
       </div>
       <div class="card">
         <h2>Revisar los documentos</h2>
@@ -3082,27 +3070,42 @@ function cargarConfiguracion(){
 function pintarConfiguracion(){
   if(!CFG) return;
   $('cfgErr').classList.add('hide');
-  var h='';
-  CFG.campos.forEach(function(c){
+
+  var campo=function(c){
     var val=(c.valor||'').replace(/"/g,'&quot;');
-    if(c.tipo==='lineas'){
-      h+='<div class="fld"><label>'+c.rotulo+'</label>'+
-         '<textarea data-c="'+c.clave+'" rows="10" '+
-         'style="font:inherit;width:100%;padding:11px 12px;border:1px solid var(--line);'+
-         'border-radius:8px;background:var(--surface);resize:vertical">'+
-         (c.valor||'')+'</textarea>'+
-         '<div class="muted" style="font-size:11.5px;margin-top:4px">Una norma por línea. '+
-         'Si lo dejas vacío se usan las normas de fábrica.</div></div>';
-    } else {
-      h+='<div class="fld"><label>'+c.rotulo+'</label>'+
-         '<input data-c="'+c.clave+'" value="'+val+'"'+
-         (c.tipo==='numero'?' type="number" step="1"':'')+
-         (c.tipo==='hora'?' placeholder="15:00"':'')+'></div>';
+    if(c.tipo==='texto_largo'){
+      // Las normas son un texto y nada más: se escribe como se va a leer.
+      return '<div class="fld"><label>'+c.rotulo+'</label>'+
+        '<textarea data-c="'+c.clave+'" rows="12" '+
+        'style="font:inherit;line-height:1.55;width:100%;padding:12px 13px;'+
+        'border:1px solid var(--line);border-radius:8px;background:var(--surface);'+
+        'resize:vertical">'+(c.valor||'')+'</textarea></div>';
     }
-  });
-  $('cfgCampos').innerHTML=h;
+    return '<div class="fld"><label>'+c.rotulo+'</label>'+
+      '<input data-c="'+c.clave+'" value="'+val+'"'+
+      (c.tipo==='numero'?' type="number" step="1"':'')+
+      (c.tipo==='hora'?' placeholder="15:00"':'')+'></div>';
+  };
+
+  $('cfgCampos').innerHTML =
+    CFG.campos.filter(function(c){ return c.grupo!=='avanzado'; }).map(campo).join('');
+
+  var avanzados=CFG.campos.filter(function(c){ return c.grupo==='avanzado'; });
+  $('cfgAvanzados').innerHTML =
+    '<p class="muted" style="font-size:12.5px;margin-bottom:12px">Estos no cambian el '+
+    'texto de las normas: son datos que el sistema usa por dentro. El horario aparece '+
+    'en la pantalla de aseo y en el comprobante; el correo es al que llega el cierre '+
+    'de cada noche.</p>' + avanzados.map(campo).join('');
+
   pintarVistaPrevia(CFG.vistaPrevia);
 }
+
+$('cfgAvanzado').onclick=function(){
+  var c=$('cfgAvanzados');
+  c.classList.toggle('hide');
+  this.textContent = c.classList.contains('hide')
+    ? 'Ajustes que casi nunca se tocan' : 'Ocultar esos ajustes';
+};
 
 function pintarVistaPrevia(g){
   if(!g){ $('cfgPreview').innerHTML=''; return; }
@@ -3116,56 +3119,16 @@ function pintarVistaPrevia(g){
 
 $('cfgGuardar').onclick=function(){
   var cambios={};
-  Array.prototype.forEach.call($('cfgCampos').querySelectorAll('[data-c]'), function(el){
-    cambios[el.dataset.c]=el.value;
-  });
+  Array.prototype.forEach.call(
+    document.querySelectorAll('#cfgCampos [data-c], #cfgAvanzados [data-c]'), function(el){
+      cambios[el.dataset.c]=el.value;
+    });
   ocupado('cfgGuardar', srv('guardarConfiguracion')(cambios)).then(function(d){
     CFG=d; pintarConfiguracion(); toast('Configuración guardada');
   }).catch(function(e){
     $('cfgErr').textContent=e.message||String(e); $('cfgErr').classList.remove('hide');
   });
 };
-
-/* ---------- Reorganizar la distribución ---------- */
-$('reoVer').onclick=function(){
-  ocupado('reoVer', srv('reorganizarHabitaciones')(false)).then(pintarReorganizar).catch(fallo);
-};
-
-$('reoAplicar').onclick=function(){
-  if(!confirm('¿Aplicar la distribución nueva? Las 8 habitaciones pasan a venderse '+
-              'completas y las camas quedan archivadas.')) return;
-  ocupado('reoAplicar', srv('reorganizarHabitaciones')(true)).then(function(d){
-    pintarReorganizar(d);
-    toast(d.mensaje);
-    recargarCal();
-  }).catch(fallo);
-};
-
-function pintarReorganizar(d){
-  var h='<p style="font-size:13px;margin-bottom:10px">'+d.mensaje+'</p>';
-  if(d.cambios.length){
-    h+='<table><thead><tr><th>Ahora</th><th>Queda</th></tr></thead><tbody>'+
-      d.cambios.map(function(c){
-        return '<tr><td class="muted">'+c.antes+'</td><td><b>'+c.despues+'</b></td></tr>';
-      }).join('')+'</tbody></table>';
-  }
-  if((d.enCamas||[]).length){
-    h+='<div class="ctaTit" style="margin-top:12px">Reservas que hoy están en una cama</div>'+
-       '<p class="muted" style="font-size:12.5px;margin-bottom:8px">Se pasan a su habitación '+
-       'si está libre, para que no desaparezcan del calendario.</p><ul style="padding-left:18px">'+
-       d.enCamas.map(function(r){
-         return '<li style="font-size:13px">'+r.huesped+' · '+r.cama+' → '+r.unidad+
-                ' · '+r.checkIn+' al '+r.checkOut+'</li>';
-       }).join('')+'</ul>';
-  }
-  if((d.sinMover||[]).length){
-    h+='<div class="err" style="margin-top:10px">'+d.sinMover.length+' reserva(s) no se '+
-       'pudieron mover porque la habitación estaba ocupada. Sus camas quedaron visibles '+
-       'en el calendario para que las revises a mano.</div>';
-  }
-  $('reoCuerpo').innerHTML=h;
-  $('reoAplicar').classList.toggle('hide', d.aplicado || !d.cambios.length);
-}
 
 /* ---------- Probar los documentos ---------- */
 $('docProbar').onclick=function(){
@@ -3181,12 +3144,12 @@ $('docProbar').onclick=function(){
 
 $('cfgDefault').onclick=function(){
   if(!CFG) return;
-  if(!confirm('¿Volver a las normas de fábrica? Se pierde lo que hayas escrito.')) return;
+  if(!confirm('¿Volver al texto original? Se pierde lo que hayas escrito.')) return;
   var es=$('cfgCampos').querySelector('[data-c="reglasEs"]');
   var en=$('cfgCampos').querySelector('[data-c="reglasEn"]');
   if(es) es.value=CFG.reglasPorDefecto.es;
   if(en) en.value=CFG.reglasPorDefecto.en;
-  toast('Normas de fábrica cargadas · aprieta Guardar para dejarlas');
+  toast('Texto original cargado · aprieta Guardar para dejarlo');
 };
 
 function pintarCategorias(){

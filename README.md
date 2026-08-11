@@ -33,8 +33,8 @@ Son **cinco**, y se copian tal cual:
    archivos de la izquierda y reemplaza su contenido.
 5. En el desplegable de funciones elige **setup** y presiona ▶️ **Ejecutar**.
    La primera vez pedirá autorizar el acceso a Sheets y Drive: acéptalo.
-   Esto crea la planilla con el inventario ya cargado (8 habitaciones,
-   8 camas vendibles por separado y 3 carpas) y el usuario inicial.
+   Esto crea la planilla con el inventario ya cargado (las 8 habitaciones y
+   las 3 carpas) y el usuario inicial.
 6. **Implementar → Nueva implementación → Aplicación web**:
    - *Ejecutar como*: *Yo*
    - *Quién tiene acceso*: *Cualquier usuario*
@@ -43,8 +43,8 @@ Son **cinco**, y se copian tal cual:
 **Usuario inicial: `admin`, PIN `1234`.** Cámbialo apenas entres, desde la
 pestaña *Equipo* (escribe `admin` con el PIN nuevo y guarda).
 
-El logo va incrustado dentro de `Code.gs`, así que las tres pantallas lo
-muestran sin depender de ningún archivo externo ni de permisos de Drive.
+El logo va dentro de `Code.gs` y las tres pantallas se lo piden al servidor al
+abrirse, sin depender de ningún archivo externo ni de permisos de Drive.
 
 > La planilla de datos debe quedar **privada**. La app funciona igual porque
 > se ejecuta con tu cuenta, y ahí se guardan documentos y firmas de huéspedes.
@@ -384,24 +384,24 @@ reintenta solo hasta tres veces y, si aun así falla, aparece un botón
 
 ## Configuración
 
-Pestaña **Configuración** (solo administración). Acá se edita lo que cambia con
-el tiempo, sin tocar el código:
+Pestaña **Configuración** (solo administración). Lo principal es un **cuadro de
+texto con las normas de convivencia**: es lo que el huésped lee y acepta al
+firmar su ficha, y lo que sale en el comprobante. Se escribe tal como se va a
+leer, **una norma por línea**, y se edita a mano.
 
-- Horas de **check-in** y **check-out**.
-- Fechas de **temporada alta**.
-- Precio del **programa tinaja + sushi** y qué porcentaje va al restaurante.
-- **IVA**.
-- **Correo del dueño**, al que llega el cierre de cada noche.
-- **Las normas de convivencia**, en español y en inglés.
+Viene lleno con las normas que rigen hoy, así que se corrige encima en vez de
+escribirlo de cero. Hay un botón para volver al texto original, y abajo una
+vista previa de cómo lo verá el huésped. El cuadro de al lado es el mismo texto
+en inglés.
 
-Las normas van **una por línea** y son exactamente las que ve el huésped al
-firmar. Dentro de una norma puedes escribir `{entrada}` y `{salida}`: se
-reemplazan solos por las horas de check-in y check-out, así que si mañana
-cambian el horario **no hay que reescribir la norma**, se actualiza sola. Abajo
-hay una vista previa de cómo quedan.
+Ojo con una cosa: **el texto manda**. Si cambias el horario de check-in, hay que
+cambiarlo también en el texto de las normas; no se actualiza solo.
 
-Si dejas las normas en blanco vuelven las de fábrica, y hay un botón para
-recuperarlas sin tener que escribirlas de nuevo.
+Detrás de *Ajustes que casi nunca se tocan* quedan los datos que el sistema usa
+por dentro y que casi nunca hay que mover: el correo al que llega el cierre de
+cada noche, las horas de check-in y check-out (aparecen en la pantalla de aseo y
+en el comprobante), las fechas de temporada alta, el precio del programa tinaja
++ sushi, el porcentaje que va al restaurante y el IVA.
 
 ## Documentos en PDF
 
@@ -494,12 +494,8 @@ Las camas de la 7 y la 8 están cargadas pero **archivadas**: si algún día se
 vuelve a vender por cama, se activan y se le cambia el modo a esa habitación,
 sin tener que crear nada.
 
-**Si tu instalación viene de antes**, en *Configuración → Distribución de las
-habitaciones* hay un botón que la deja así. Primero muestra qué va a cambiar y
-no toca nada hasta que confirmes. Si hay reservas cargadas sobre camas, las
-pasa a su habitación; y si alguna no cabe —porque dos personas dormían en dos
-camas distintas de la misma pieza— **deja esa cama visible en el calendario y
-te lo dice**, en vez de esconder la reserva.
+Si algún día cambia la casa, las habitaciones se editan una por una desde
+*Alojamiento*, sin tocar el código.
 
 ### Cómo se vende cada pieza
 

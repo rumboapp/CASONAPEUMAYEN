@@ -2416,26 +2416,14 @@ function guardarAcompanantes(token, idReserva, lista) {
    Fuente única de las normas: las usan la ficha de recepción y la página
    que firma el huésped, así nunca se desincronizan. Para cambiar una regla
    se edita solo acá. */
+/* Las normas son texto libre: se escriben tal cual, una por línea, desde la
+   pestaña Configuración. Si nadie las ha tocado, valen las de siempre. */
 function reglamento() {
-  var entrada = hora_(config_('checkIn'), '15:00');
-  var salida = hora_(config_('checkOut'), '11:00');
-  var propias = {
-    es: reglasGuardadas_('reglasEs'),
-    en: reglasGuardadas_('reglasEn')
-  };
-  // {entrada} y {salida} se reemplazan por las horas de la configuración, así
-  // que cambiar el horario de check-in actualiza las normas sin reescribirlas.
-  var poner = function (r) {
-    return String(r).replace(/\{entrada\}/g, entrada).replace(/\{salida\}/g, salida);
-  };
-  if (propias.es.length || propias.en.length) {
-    var base = reglamentoPorDefecto_(entrada, salida);
-    return {
-      es: (propias.es.length ? propias.es : base.es).map(poner),
-      en: (propias.en.length ? propias.en : base.en).map(poner)
-    };
-  }
-  return reglamentoPorDefecto_(entrada, salida);
+  var base = reglamentoPorDefecto_(hora_(config_('checkIn'), '15:00'),
+                                   hora_(config_('checkOut'), '11:00'));
+  var es = reglasGuardadas_('reglasEs');
+  var en = reglasGuardadas_('reglasEn');
+  return { es: es.length ? es : base.es, en: en.length ? en : base.en };
 }
 
 function reglasGuardadas_(clave) {
@@ -2482,18 +2470,21 @@ function reglamentoPorDefecto_(entrada, salida) {
    Lo que cambia con el tiempo se edita desde la app y no desde el código:
    horarios, normas, temporada, precios del programa y el correo del dueño. */
 
+/* Lo que se edita a diario son las normas, y son un texto y nada más: se
+   escriben tal como se van a leer. El resto casi nunca se toca, así que va
+   guardado detrás de "ajustes que casi nunca se tocan". */
 var CONFIG_EDITABLE = [
-  { clave: 'checkIn', rotulo: 'Hora de check-in', tipo: 'hora' },
-  { clave: 'checkOut', rotulo: 'Hora de check-out', tipo: 'hora' },
-  { clave: 'temporadaAltaInicio', rotulo: 'Temporada alta desde (MM-DD)', tipo: 'texto' },
-  { clave: 'temporadaAltaFin', rotulo: 'Temporada alta hasta (MM-DD)', tipo: 'texto' },
-  { clave: 'addonBase', rotulo: 'Programa tinaja + sushi (baja)', tipo: 'numero' },
-  { clave: 'addonAlta', rotulo: 'Programa tinaja + sushi (alta)', tipo: 'numero' },
-  { clave: 'addonParteRestaurante', rotulo: '% del programa que va al restaurante', tipo: 'numero' },
-  { clave: 'iva', rotulo: 'IVA (%)', tipo: 'numero' },
-  { clave: 'correoDueno', rotulo: 'Correo para el cierre de cada noche', tipo: 'texto' },
-  { clave: 'reglasEs', rotulo: 'Normas de convivencia (español)', tipo: 'lineas' },
-  { clave: 'reglasEn', rotulo: 'Normas de convivencia (inglés)', tipo: 'lineas' }
+  { clave: 'reglasEs', rotulo: 'Normas de convivencia', tipo: 'texto_largo', grupo: 'normas' },
+  { clave: 'reglasEn', rotulo: 'House rules (las mismas, en inglés)', tipo: 'texto_largo', grupo: 'normas' },
+  { clave: 'correoDueno', rotulo: 'Correo para el cierre de cada noche', tipo: 'texto', grupo: 'avanzado' },
+  { clave: 'checkIn', rotulo: 'Hora de check-in', tipo: 'hora', grupo: 'avanzado' },
+  { clave: 'checkOut', rotulo: 'Hora de check-out', tipo: 'hora', grupo: 'avanzado' },
+  { clave: 'temporadaAltaInicio', rotulo: 'Temporada alta desde (MM-DD)', tipo: 'texto', grupo: 'avanzado' },
+  { clave: 'temporadaAltaFin', rotulo: 'Temporada alta hasta (MM-DD)', tipo: 'texto', grupo: 'avanzado' },
+  { clave: 'addonBase', rotulo: 'Programa tinaja + sushi (baja)', tipo: 'numero', grupo: 'avanzado' },
+  { clave: 'addonAlta', rotulo: 'Programa tinaja + sushi (alta)', tipo: 'numero', grupo: 'avanzado' },
+  { clave: 'addonParteRestaurante', rotulo: '% del programa que va al restaurante', tipo: 'numero', grupo: 'avanzado' },
+  { clave: 'iva', rotulo: 'IVA (%)', tipo: 'numero', grupo: 'avanzado' }
 ];
 
 function configuracion(token) {
@@ -2502,16 +2493,20 @@ function configuracion(token) {
   var actual = configTodo_();
   var base = reglamentoPorDefecto_(hora_(config_('checkIn'), '15:00'),
                                    hora_(config_('checkOut'), '11:00'));
+  var porDefecto = { reglasEs: base.es.join('\n'), reglasEn: base.en.join('\n') };
+
   return {
     campos: CONFIG_EDITABLE.map(function (c) {
       var v = actual[c.clave];
       if (c.tipo === 'hora') v = hora_(v, '');
+      var valor = (v === undefined || v === null) ? '' : String(v);
+      // El cuadro de las normas nunca sale vacío: si nadie las ha escrito,
+      // trae las que están rigiendo hoy, para editarlas encima.
+      if (!valor && porDefecto[c.clave]) valor = porDefecto[c.clave];
       return { clave: c.clave, rotulo: c.rotulo, tipo: c.tipo,
-               valor: (v === undefined || v === null) ? '' : String(v) };
+               grupo: c.grupo, valor: valor };
     }),
-    // Para poder volver a las normas de fábrica de un botón.
-    reglasPorDefecto: { es: base.es.join('\n'), en: base.en.join('\n') },
-    // Se muestran para que se vea cómo quedan con los horarios de verdad.
+    reglasPorDefecto: porDefecto,
     vistaPrevia: reglamento()
   };
 }
@@ -2692,13 +2687,8 @@ function archivarUnidad(token, id, activa) {
   return true;
 }
 
-/* ===================== DISTRIBUCIÓN DE LAS HABITACIONES =====================
-   La distribución real de la casa, tal como quedó definida. Todas se venden
-   como habitación completa; las camas quedan archivadas, no borradas, por si
-   algún día se vuelve a vender por cama.
-
-   Esto NO corre solo: se aplica desde Configuración, con vista previa, porque
-   cambiar el inventario mueve lo que se ve en el calendario. */
+/* La distribución de la casa. La usa setup() para dejar el inventario
+   armado en una instalación nueva. */
 var DISTRIBUCION = [
   { id: 'U1', nombre: 'Habitación 1 · Matrimonial', capacidad: 2, bano: 'privado',
     precioBase: 55000, precioAlta: 70000, categoria: 'Matrimonial con baño privado' },
@@ -2717,85 +2707,6 @@ var DISTRIBUCION = [
   { id: 'U8', nombre: 'Habitación 8 · Single + litera', capacidad: 3, bano: 'compartido',
     precioBase: 70000, precioAlta: 88000, categoria: 'Single + litera, baño compartido' }
 ];
-
-/* Sin argumentos solo cuenta lo que haría; con aplicar=true lo hace. */
-function reorganizarHabitaciones(token, aplicar) {
-  var u = sesion_(token);
-  exigirAdmin_(u);
-
-  var unidades = leer_('Unidades');
-  var porId = {};
-  unidades.forEach(function (x) { porId[x.id] = x; });
-
-  var cambios = [], faltan = [];
-  DISTRIBUCION.forEach(function (d, i) {
-    var actual = porId[d.id];
-    if (!actual) { faltan.push(d.id); return; }
-    var antes = actual.nombre + ' · ' + (Number(actual.capacidad) || 0) + ' pax · baño ' +
-      (actual.bano || '') + ' · ' + (modoDe_(actual) === 'camas' ? 'por cama' : 'completa');
-    var despues = d.nombre + ' · ' + d.capacidad + ' pax · baño ' + d.bano + ' · completa';
-    if (antes !== despues) cambios.push({ id: d.id, antes: antes, despues: despues });
-  });
-
-  // Reservas cargadas sobre camas: si las camas dejan de venderse, esas
-  // reservas se quedarían sin fila en el calendario. Hay que verlas antes.
-  var camasDe = {};
-  leer_('Camas').forEach(function (c) { camasDe[c.id] = c.idUnidad; });
-  var enCamas = leer_('Reservas').filter(function (r) {
-    return camasDe[r.recurso] && r.estado !== 'cancelada' && r.estado !== 'checkout';
-  }).map(function (r) {
-    return { id: r.id, huesped: r.huesped, cama: r.recurso, unidad: camasDe[r.recurso],
-             checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut) };
-  });
-
-  if (!aplicar) {
-    return { aplicado: false, cambios: cambios, faltan: faltan, enCamas: enCamas,
-      mensaje: cambios.length
-        ? cambios.length + ' habitación(es) cambian, y todas pasan a venderse completas.'
-        : 'La distribución ya está como corresponde.' };
-  }
-
-  var movidas = [], sinMover = [];
-  // Cada reserva que estaba en una cama se pasa a su habitación, si está libre.
-  enCamas.forEach(function (r) {
-    try {
-      verificarLibre_(r.unidad, r.checkIn, r.checkOut, r.id);
-      actualizar_('Reservas', 'id', r.id, { recurso: r.unidad, idUnidad: r.unidad });
-      movidas.push(r);
-    } catch (e) { sinMover.push(r); }
-  });
-
-  DISTRIBUCION.forEach(function (d, i) {
-    if (!porId[d.id]) return;
-    actualizar_('Unidades', 'id', d.id, {
-      nombre: d.nombre, grupo: 'Lodge', capacidad: d.capacidad, bano: d.bano,
-      modo: 'entera', porCama: false,
-      precioBase: d.precioBase, precioAlta: d.precioAlta,
-      categoria: d.categoria, orden: i + 1, activa: true
-    });
-  });
-
-  // Las camas se archivan, no se borran: si alguna quedó con una reserva que
-  // no se pudo mover, esa se deja activa para no esconderla del calendario.
-  var conservar = {};
-  sinMover.forEach(function (r) { conservar[r.cama] = true; });
-  leer_('Camas').forEach(function (c) {
-    if (!conservar[c.id] && c.activa) actualizar_('Camas', 'id', c.id, { activa: false });
-  });
-
-  olvidarRecursos_();
-  logCambio_(u.nombre, 'reorganizar', cambios.length + ' habitaciones · ' +
-    movidas.length + ' reservas movidas · ' + sinMover.length + ' sin mover');
-
-  return {
-    aplicado: true, cambios: cambios, faltan: faltan,
-    movidas: movidas, sinMover: sinMover,
-    mensaje: 'Listo. ' + cambios.length + ' habitación(es) actualizadas' +
-      (movidas.length ? ', ' + movidas.length + ' reserva(s) pasadas de la cama a su habitación' : '') +
-      (sinMover.length ? '. OJO: ' + sinMover.length + ' reserva(s) no se pudieron mover porque ' +
-        'la habitación estaba ocupada; sus camas quedaron visibles para que las revises.' : '.')
-  };
-}
 
 function archivarCama(token, id, activa) {
   var u = sesion_(token);
