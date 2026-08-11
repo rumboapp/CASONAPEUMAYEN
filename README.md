@@ -53,8 +53,18 @@ abrirse, sin depender de ningún archivo externo ni de permisos de Drive.
 
 Editar los archivos **no** actualiza la app publicada: la implementación sigue
 sirviendo la versión anterior. Cada vez que cambies algo:
-**Implementar → Administrar implementaciones → ✏️ Editar → Versión: *Nueva* →
-Implementar**. La URL no cambia.
+
+1. Copia **los archivos completos** que cambiaron, no un pedazo.
+2. **Implementar → Administrar implementaciones → ✏️ Editar → Versión: *Nueva*
+   → Implementar**. La URL no cambia.
+
+`Code.gs` e `Index.html` llevan la misma marca de versión (`VERSION` y
+`VERSION_ESPERADA`, arriba de cada archivo). **Si no calzan, la app avisa con
+una franja roja arriba** apenas entras, en vez de fallar de a pedazos: es lo
+que pasa cuando se copia un archivo y no el otro, o cuando la implementación
+quedó en una versión antigua. Y si algo llama a una función que el servidor
+publicado todavía no tiene, el mensaje lo dice con nombre y apellido en vez de
+soltar un error de JavaScript.
 
 Si no puedes entrar, la pantalla de acceso tiene un enlace
 *"¿No puedes entrar? Revisar la instalación"* que dice exactamente qué falta.

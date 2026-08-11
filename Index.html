@@ -392,6 +392,9 @@
     </div>
   </header>
   <nav id="tabs"></nav>
+  <div id="avisoVersion" class="hide"
+    style="background:#fdeceb;border-bottom:1px solid #f0c4c1;color:#8f2b25;
+           padding:11px 16px;font-size:13px"></div>
   <main>
 
     <!-- ---------- Calendario ---------- -->
@@ -1061,6 +1064,11 @@
 /* ==================================================================
    Estado
    ================================================================== */
+/* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
+   un archivo y no el otro, o que la implementación quedó en una versión
+   anterior: la app lo avisa arriba en vez de fallar de a poco. */
+var VERSION_ESPERADA = '2026-08-09';
+
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{} };
 var RES = null;               // reserva abierta en el modal
@@ -1132,6 +1140,16 @@ function srv(fn){
     var args=[].slice.call(arguments);
     return new Promise(function(res,rej){
       var runner=google.script.run.withSuccessHandler(res).withFailureHandler(rej);
+      // Si el servidor publicado no tiene esa función, hay que decirlo con
+      // todas sus letras: es siempre el mismo problema, y el error crudo
+      // ("runner[fn] is undefined") no ayuda a nadie a resolverlo.
+      if(typeof runner[fn] !== 'function'){
+        rej(new Error('El código publicado no tiene la función "'+fn+'". '+
+          'Vuelve a copiar Code.gs completo en Apps Script y crea una VERSIÓN '+
+          'NUEVA de la implementación (Implementar → Administrar implementaciones '+
+          '→ ✏️ → Versión: Nueva).'));
+        return;
+      }
       runner[fn].apply(runner, [S.token].concat(args));
     });
   };
@@ -1247,6 +1265,7 @@ var TABS=[
 
 function iniciar(){
   cerrar('login'); abrir('app');
+  revisarVersion();
   $('who').textContent = S.user+' · '+({admin:'Administración',recepcion:'Recepción',aseo:'Aseo'}[S.rol]||S.rol);
   var nav=$('tabs'); nav.innerHTML='';
   var mias=TABS.filter(function(t){ return t.roles.indexOf(S.rol)>-1; });
@@ -1385,6 +1404,33 @@ function refrescarSilencioso(){
     aplicarTablero(d);
     if(!igual) pintarCal(true);
   }).catch(function(){ refrescando=false; });
+}
+
+/* Compara la versión del servidor con la de esta página. Cuando no calzan,
+   las funciones nuevas no existen todavía y la app empieza a fallar de a
+   pedazos; es mejor decirlo de entrada y una sola vez. */
+function revisarVersion(){
+  var av=$('avisoVersion');
+  var corte=function(msg){ av.textContent=msg; av.classList.remove('hide'); };
+  var viejo = function(){
+    corte('El código publicado es anterior a esta pantalla: ni siquiera tiene la '+
+      'marca de versión. Vuelve a copiar Code.gs completo en Apps Script y crea '+
+      'una VERSIÓN NUEVA de la implementación.');
+  };
+  var runner=google.script.run
+    .withSuccessHandler(function(v){
+      if(v === VERSION_ESPERADA){ av.classList.add('hide'); return; }
+      corte('El código publicado es de otra versión ('+(v||'desconocida')+
+        ') que esta pantalla ('+VERSION_ESPERADA+'). Vuelve a copiar Code.gs e '+
+        'Index.html completos y crea una VERSIÓN NUEVA de la implementación; '+
+        'mientras tanto, lo más nuevo puede no funcionar.');
+    })
+    .withFailureHandler(viejo);
+  // Si el servidor es tan antiguo que ni siquiera tiene version(), llamarla
+  // reventaría acá mismo y se llevaría la app entera: por eso se comprueba
+  // antes y se avisa igual.
+  if(typeof runner.version !== 'function'){ viejo(); return; }
+  try { runner.version(); } catch(_){ viejo(); }
 }
 
 var relojCal=null;

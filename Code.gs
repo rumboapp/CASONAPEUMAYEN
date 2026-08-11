@@ -11,6 +11,15 @@
 
 var TZ = 'America/Santiago';
 
+/* Versión del servidor. La pantalla trae la misma escrita y las compara: si
+   no calzan es que se copió un archivo y no el otro, o que la implementación
+   quedó publicando una versión anterior. Ese descalce daba errores raros
+   ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
+   Al cambiar el código, subir la fecha en LOS DOS archivos. */
+var VERSION = '2026-08-09';
+
+function version() { return VERSION; }
+
 var HOJAS = {
   // 'modo' dice cómo se vende cada pieza: entera, por camas, o las dos cosas.
   // Se agrega al final y convive con el 'porCama' antiguo, que sigue sirviendo
@@ -2700,7 +2709,7 @@ function logCambio_(quien, accion, detalle) {
    Se llama desde la pantalla de acceso para saber si el proyecto quedó
    bien instalado, en vez de quedarse adivinando por qué no entra. */
 function diagnostico() {
-  var out = { ok: true, hojas: {}, usuarios: 0, unidades: 0, mensaje: '' };
+  var out = { ok: true, hojas: {}, usuarios: 0, unidades: 0, mensaje: '', version: VERSION };
   // Si el logo no se ve, lo primero es saber si llegó completo: cuando se
   // copia el código a medias, esta línea queda cortada y la imagen no carga.
   out.logoLargo = (typeof LOGO === 'string') ? LOGO.length : 0;
