@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-18';
+var VERSION = '2026-08-19';
 
 function version() { return VERSION; }
 
@@ -36,7 +36,7 @@ var HOJAS = {
   // número no hay forma de saberlo —$45.000 puede ser con o sin impuesto—,
   // y sin ese dato la pantalla mentía: le decía "sin IVA" a un precio que
   // todavía lo llevaba, y descontarlo dos veces habría sido cosa de un clic.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva'],
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc'],
   // Lo que se cobra por CADA noche de una reserva. El total de la reserva es
   // la suma de estas filas, así que alargarla o acortarla recalcula el precio
   // solo, y una noche de promoción se baja sin tocar las demás.
@@ -94,7 +94,18 @@ function doGet(e) {
   if (p.f) {
     pagina = HtmlService.createTemplateFromFile('Ficha');
     pagina.token = String(p.f);
+    pagina.codigoDoc = '';
     titulo = 'Casona Peumayén — Registro';
+  } else if (p.d) {
+    // La página de recepción. Es la MISMA plantilla, en modo "solo
+    // documentos": no muestra la ficha, ni el reglamento, ni la firma, ni
+    // ningún dato del huésped que no haga falta para sacar la foto. Se abre
+    // escaneando el código QR que recepción tiene en pantalla, y la usa
+    // recepción con su propio teléfono. El huésped no la ve nunca.
+    pagina = HtmlService.createTemplateFromFile('Ficha');
+    pagina.token = '';
+    pagina.codigoDoc = String(p.d);
+    titulo = 'Casona Peumayén — Documentos';
   } else if (p.aseo) {
     pagina = HtmlService.createTemplateFromFile('Aseo');
     pagina.clave = String(p.aseo);
@@ -547,6 +558,15 @@ function aUsd_(pesos, cambio) {
   return Math.round((Number(pesos) || 0) / c * 100) / 100;
 }
 
+/* El mismo número, ya escrito para leerse: "US$1,234.56". Los dólares llevan
+   coma de miles y punto decimal, al revés que el peso. */
+function usd_(pesos, cambio) {
+  var v = aUsd_(pesos, cambio);
+  var partes = Math.abs(v).toFixed(2).split('.');
+  return (v < 0 ? '-' : '') + 'US$' +
+    partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + partes[1];
+}
+
 /* ===================== SETUP ===================== */
 
 function setup() {
@@ -862,6 +882,13 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
   sesion_(token);
   var d = ymd_(desde), h = ymd_(hasta);
   var firmadas = firmadas_();
+  // Los documentos escaneados, indexados de una sola lectura: recepción
+  // necesita ver de un vistazo a quién le falta el pasaporte o la PDI.
+  // Si la hoja todavía no existe —código nuevo con setup() sin ejecutar— se
+  // sigue sin los avisos: quedarse sin calendario por eso sería mucho peor,
+  // y el letrero de arriba ya está diciendo que hay que ejecutar setup().
+  var docsPorReserva = {};
+  try { docsPorReserva = agrupar_('Documentos', 'idReserva'); } catch (e) {}
 
   // Una sola pasada por las reservas: las del rango pedido y, de paso, la
   // cuenta de las que quedaron con la fecha ilegible.
@@ -883,7 +910,8 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
       extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
       // Si al total ya se le descontó el IVA. La pantalla no puede
       // deducirlo del número: $45.000 puede ser con o sin impuesto.
-      sinIva: !!r.sinIva
+      sinIva: !!r.sinIva,
+      docs: estadoDocs_(docsPorReserva[String(r.id)], !!r.extranjero)
     });
   });
 
@@ -989,13 +1017,16 @@ function guardarReserva(token, datos) {
     var pax = Math.min(Math.max(Number(datos.pax) || 1, 1), tope);
     var ninos = Math.max(Number(datos.ninos) || 0, 0);
 
+    var antes = datos.id
+      ? leer_('Reservas').filter(function (x) { return x.id === datos.id; })[0]
+      : null;
+
     var campos = {
       pax: pax, ninos: ninos,
       recurso: datos.recurso, idUnidad: unidad ? unidad.idUnidad : '',
       huesped: datos.huesped, telefono: datos.telefono || '', email: datos.email || '',
       canal: datos.canal || 'whatsapp',
       checkIn: f.checkIn, checkOut: f.checkOut, estado: datos.estado || 'confirmada',
-      total: Number(datos.total) || 0, anticipo: Number(datos.anticipo) || 0,
       addon: !!datos.addon, addonFecha: datos.addonFecha || '', notas: datos.notas || ''
     };
     if (datos.grupo !== undefined) campos.grupo = datos.grupo || '';
@@ -1014,21 +1045,37 @@ function guardarReserva(token, datos) {
     // así que acá NO se escribe la marca: se anota que cambió y se le pasa
     // el encargo. Si se escribiera antes, marcarExentoIva() vería la marca
     // ya puesta, creería que no cambió nada y no convertiría el precio.
-    var cambiaExento = false, antes = null;
+    var esExtranjero = (datos.extranjero !== undefined)
+      ? !!datos.extranjero : !!(antes && antes.extranjero);
+    var cambio = Number(antes && antes.dolar) || dolarHoy_().valor;
+    var cambiaExento = false;
     if (datos.extranjero !== undefined) {
-      if (datos.id) {
-        antes = leer_('Reservas').filter(function (x) { return x.id === datos.id; })[0];
-        cambiaExento = !!antes && (!!antes.exentoIva !== !!datos.extranjero);
-      }
+      cambiaExento = !!antes && (!!antes.exentoIva !== !!datos.extranjero);
       if (!cambiaExento) {
-        campos.extranjero = !!datos.extranjero;
-        campos.exentoIva = !!datos.extranjero;
+        campos.extranjero = esExtranjero;
+        campos.exentoIva = esExtranjero;
       }
-      if (datos.extranjero && !datos.id) campos.dolar = dolarHoy_().valor;
+      // El cambio se guarda en cuanto la reserva es de un extranjero y todavía
+      // no tiene uno propio. Si no quedara escrito, cada vez que se abriera se
+      // convertiría con el dólar de ESE día y el precio se movería solo.
+      if (esExtranjero && !Number(antes && antes.dolar)) campos.dolar = cambio;
     }
 
+    // Al extranjero se le cotiza en dólares, así que la cifra que llega del
+    // formulario puede venir en US$. Lo dice 'moneda' y NO se adivina: fue
+    // justamente adivinarlo lo que hacía que la misma reserva valiera
+    // US$49 al crearla y otra cosa distinta al volver a abrirla. Un precio
+    // en dólares ya viene sin impuesto: es lo que el huésped paga y punto.
+    var enUsd = String(datos.moneda || '') === 'USD';
+    var aPesos = function (n) {
+      var v = Number(n) || 0;
+      return enUsd ? Math.round(v * cambio) : Math.round(v);
+    };
+    campos.total = aPesos(datos.total);
+    campos.anticipo = aPesos(datos.anticipo);
+
     var pedido = (datos.total === undefined || datos.total === null || datos.total === '')
-      ? null : Math.round(Number(datos.total) || 0);
+      ? null : aPesos(datos.total);
 
     if (datos.id) {
       // Si la cuenta ya tiene pagos anotados, ella manda: el abonado de la
@@ -1038,12 +1085,18 @@ function guardarReserva(token, datos) {
       delete campos.total;                     // el total lo fija el plan de noches
       actualizar_('Reservas', 'id', datos.id, campos);
       campos.id = datos.id;
-      var totalNuevo = ajustarPlan_(campos, pedido, u.nombre);
+      // Primero la marca de exento —que convierte el plan que YA existía— y
+      // recién después el total que pide el formulario. Al revés, el reparto
+      // se hacía sobre el precio viejo y después se le descontaba el IVA a
+      // una cifra que ya venía sin él.
       if (cambiaExento) {
         marcarExentoIva(token, datos.id, !!datos.extranjero,
                         antes ? String(antes.docTurismo || '') : '');
+        olvidar_('Noches');
       }
-      return { id: datos.id, total: totalNuevo };
+      var totalNuevo = ajustarPlan_(campos, pedido, u.nombre);
+      return { id: datos.id, total: totalNuevo,
+               moneda: esExtranjero ? 'USD' : 'CLP', usd: aUsd_(totalNuevo, cambio) };
     }
 
     var id = uid_('R');
@@ -1057,11 +1110,17 @@ function guardarReserva(token, datos) {
     campos.total = plan.total;
     insertar_('Reservas', campos);
     insertarVarias_('Noches', plan.noches);
-    // Recién creada y ya marcada como extranjera: el plan se armó con las
-    // tarifas de lista, que llevan IVA, así que se le descuenta.
+    // Recién creada y ya marcada como extranjera. Si el precio vino en
+    // dólares, ya viene sin impuesto y solo hay que dejar constancia de que
+    // a este plan no se le descuenta nada más; si vino de las tarifas de la
+    // casa, que llevan IVA incluido, se le descuenta.
     if (campos.exentoIva) {
       olvidar_('Noches');
-      campos.total = convertirAlojamiento_(id, true);
+      if (enUsd && pedido !== null) {
+        actualizar_('Reservas', 'id', id, { sinIva: true });
+      } else {
+        campos.total = convertirAlojamiento_(id, true);
+      }
       plan.total = campos.total;
     }
     // El abono que se escribe al crear la reserva entra a la cuenta como un
@@ -1073,7 +1132,8 @@ function guardarReserva(token, datos) {
         medio: datos.medioAnticipo || 'otro', fecha: hoy_()
       }, u.nombre);
     }
-    return { id: id, total: plan.total };
+    return { id: id, total: plan.total,
+             moneda: esExtranjero ? 'USD' : 'CLP', usd: aUsd_(plan.total, cambio) };
   } finally {
     lock.releaseLock();
   }
@@ -1469,7 +1529,11 @@ function nochesDe(token, idReserva) {
   var total = plan.reduce(function (a, n) { return a + n.valor; }, 0);
   return {
     idReserva: idReserva, noches: plan, total: Math.round(total),
-    checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut)
+    checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
+    // El detalle noche a noche de un extranjero se muestra en dólares, igual
+    // que su reserva y su cuenta: en pantalla no aparece un peso.
+    extranjero: !!r.extranjero, dolar: Number(r.dolar) || dolarHoy_().valor,
+    iva: ivaPct_()
   };
 }
 
@@ -1675,13 +1739,15 @@ function cuentaDe(token, idReserva) {
   // El aviso que importa: la exención de IVA a turistas extranjeros solo vale
   // si el pago entró en moneda extranjera. Si se marcó exento y se le cobró
   // en pesos, hay que decirlo mientras el huésped todavía está en la casa.
+  // El peso no aparece en la cifra: esta cuenta se lleva en dólares. Lo que
+  // se avisa es el problema —que entró plata en pesos—, no cuánta.
   var avisoExencion = '';
   if (r.exentoIva && pagadoEnPesos > 0) {
-    avisoExencion = 'Está marcado como turista exento de IVA, pero hay ' +
-      plataTxt_(pagadoEnPesos) + ' cobrados en pesos. La exención exige que el ' +
-      'pago sea en moneda extranjera: o se cobra en dólares, o corresponde IVA.';
+    avisoExencion = 'Hay pagos anotados en pesos. Esta cuenta va exenta de IVA por ' +
+      'tratarse de un turista extranjero, y la exención exige que el pago entre en ' +
+      'moneda extranjera: hay que cobrarlo en dólares.';
   } else if (r.exentoIva && pagos === 0) {
-    avisoExencion = 'Está marcado como turista exento de IVA. Para que la ' +
+    avisoExencion = 'Cuenta exenta de IVA por turista extranjero. Para que la ' +
       'exención valga, el pago tiene que entrar en dólares.';
   }
 
@@ -1689,7 +1755,12 @@ function cuentaDe(token, idReserva) {
     idReserva: idReserva, huesped: r.huesped,
     noches: noches_(ymd_(r.checkIn), ymd_(r.checkOut)),
     exentoIva: !!r.exentoIva, docTurismo: String(r.docTurismo || ''),
+    // La cuenta de un turista extranjero se lleva en dólares de punta a
+    // punta: él no cotiza en pesos, no paga en pesos y no tiene por qué ver
+    // una cifra en pesos que después no le calza con lo que le cobraron.
     extranjero: !!r.extranjero, dolar: cambio,
+    moneda: r.extranjero ? 'USD' : 'CLP',
+    docs: estadoDocs_(docsDeReserva_(idReserva), !!r.extranjero),
     pagadoEnPesos: pagadoEnPesos, pagadoEnDolares: pagadoEnDolares,
     avisoExencion: avisoExencion,
     ivaPct: ivaPct_(),
@@ -1744,7 +1815,15 @@ function agregarCargo(token, idReserva, d) {
 
   var tipo = TIPOS_CARGO[d.tipo] ? d.tipo : 'otro';
   var cantidad = Math.max(Number(d.cantidad) || 1, 1);
-  var unitario = Math.round(Number(d.unitario) || 0);
+  // La cuenta de un turista extranjero se lleva en dólares, así que el monto
+  // puede llegar en US$. La planilla se guarda siempre en pesos: es la moneda
+  // en la que se declara y en la que se leen los informes de la casa.
+  var unitario;
+  if (String(d.moneda || '') === 'USD') {
+    unitario = Math.round((Number(d.unitario) || 0) * (Number(r.dolar) || dolarHoy_().valor));
+  } else {
+    unitario = Math.round(Number(d.unitario) || 0);
+  }
   if (unitario <= 0) throw new Error('El monto tiene que ser mayor que cero.');
 
   var id = anotar_(idReserva, {
@@ -1794,10 +1873,12 @@ function agregarPago(token, idReserva, d) {
     usd = aUsd_(monto, cambio);
   }
 
+  // La descripción no lleva el tipo de cambio escrito: en la cuenta de un
+  // extranjero no puede aparecer una cifra en pesos, y la columna de al lado
+  // ya dice cuántos dólares entraron. El cambio queda en la bitácora.
   var id = anotar_(idReserva, {
     clase: 'pago', tipo: 'pago', centro: '',
-    descripcion: String(d.descripcion || 'Pago') +
-      (moneda === 'USD' ? ' · US$' + usd.toFixed(2) + ' a $' + cambio : ''),
+    descripcion: String(d.descripcion || 'Pago'),
     cantidad: 1, unitario: monto, total: monto, medio: medio,
     moneda: moneda, usd: usd,
     fecha: ymd_(d.fecha) || hoy_()
@@ -2455,27 +2536,23 @@ function armarComprobante_(idReserva) {
         '</table>'
       : '') +
     '<h2>Valor</h2>' +
-    // A un turista extranjero el precio en pesos no le dice nada: el dólar
-    // manda y los pesos van de referencia, no al revés.
+    // Al turista extranjero se le cotiza en dólares y nada más: el peso
+    // chileno no aparece en su comprobante, porque no es la moneda en que
+    // reservó ni en la que va a pagar, y ponerlo al lado solo confunde.
     (r.extranjero
-      ? '<table><tr><th>Noche</th><th class="n">USD</th><th class="n">CLP</th></tr>' +
+      ? '<table><tr><th>Noche</th><th class="n">USD</th></tr>' +
         plan.map(function (n) {
           return '<tr><td>' + escapar_(n.fecha) + (n.nota ? ' · ' + escapar_(n.nota) : '') +
-                 '</td><td class="n">US$' + aUsd_(n.valor, cambioR).toFixed(2) +
-                 '</td><td class="n">' + plata_(n.valor) + '</td></tr>';
+                 '</td><td class="n">' + usd_(n.valor, cambioR) + '</td></tr>';
         }).join('') +
-        '<tr class="tot"><td>Total</td><td class="n">US$' + aUsd_(total, cambioR).toFixed(2) +
-        '</td><td class="n">' + plata_(total) + '</td></tr>' +
-        (pagado ? '<tr><td>Abonado</td><td class="n">US$' + aUsd_(pagado, cambioR).toFixed(2) +
-                  '</td><td class="n">' + plata_(pagado) + '</td></tr>' +
-                  '<tr><td><b>Saldo al llegar</b></td><td class="n"><b>US$' +
-                  aUsd_(total - pagado, cambioR).toFixed(2) + '</b></td><td class="n"><b>' +
-                  plata_(total - pagado) + '</b></td></tr>' : '') +
+        '<tr class="tot"><td>Total</td><td class="n">' + usd_(total, cambioR) + '</td></tr>' +
+        (pagado ? '<tr><td>Abonado</td><td class="n">' + usd_(pagado, cambioR) + '</td></tr>' +
+                  '<tr><td><b>Saldo al llegar</b></td><td class="n"><b>' +
+                  usd_(total - pagado, cambioR) + '</b></td></tr>' : '') +
         '</table>' +
-        '<p style="color:#6b7280;font-size:12.5px">Valores <b>exentos de IVA</b> por ' +
-        'tratarse de un turista extranjero sin domicilio en Chile (DL 825, art. 12 E N°17), ' +
-        'al cambio de $' + cambioR + ' por dólar fijado al reservar. ' +
-        'La exención requiere que el pago se haga en moneda extranjera.</p>'
+        '<p style="color:#6b7280;font-size:12.5px">Precios en dólares, <b>sin impuestos</b>: ' +
+        'los servicios prestados a turistas extranjeros sin domicilio en Chile están exentos ' +
+        'de IVA (DL 825, art. 12 E N°17). El pago debe hacerse en moneda extranjera.</p>'
       : '<table><tr><th>Noche</th><th class="n">Valor</th></tr>' + filas +
         '<tr class="tot"><td>Total</td><td class="n">' + plata_(total) + '</td></tr>' +
         (pagado ? '<tr><td>Abonado</td><td class="n">' + plata_(pagado) + '</td></tr>' +
@@ -2946,6 +3023,34 @@ function limpiarNombre_(t) {
   return String(t || 'huesped').replace(/[^\wáéíóúñÁÉÍÓÚÑ ]+/g, '').trim().slice(0, 40) || 'huesped';
 }
 
+/* En qué está el escaneo de los documentos de una reserva, resumido para que
+   la pantalla lo muestre de un vistazo. A un turista extranjero exento hay
+   que pedirle los DOS papeles —pasaporte y tarjeta PDI— antes de que se vaya:
+   sin ellos la exención de IVA no se sostiene ante el SII. Al huésped chileno
+   no se le pide nada, así que su reserva no muestra ninguna advertencia. */
+/* Las filas de Documentos de UNA reserva. Si la hoja todavía no existe
+   —código nuevo con setup() sin ejecutar— devuelve vacío en vez de tirar
+   abajo la pantalla que la estaba pidiendo. */
+function docsDeReserva_(idReserva) {
+  try { return agrupar_('Documentos', 'idReserva')[String(idReserva)] || []; }
+  catch (e) { return []; }
+}
+
+function estadoDocs_(filas, extranjero) {
+  var tiene = {};
+  (filas || []).forEach(function (d) { tiene[String(d.tipo)] = true; });
+  var n = (filas || []).length;
+  return {
+    total: n,
+    pasaporte: !!tiene.pasaporte,
+    pdi: !!tiene.pdi,
+    // 'exige' es lo que decide si vale la pena avisar; 'completo' es si ya
+    // está todo lo que se exige.
+    exige: !!extranjero,
+    completo: extranjero ? (!!tiene.pasaporte && !!tiene.pdi) : n > 0
+  };
+}
+
 function documentosDe_(idReserva) {
   return (agrupar_('Documentos', 'idReserva')[String(idReserva)] || [])
     .map(function (d) {
@@ -2986,6 +3091,80 @@ function borrarDocumento(token, id) {
 function fichaPublicaSubir(t, d) {
   var r = porTokenFicha_(t);
   var fila = guardarDocumento_(r.id, d, 'el huésped');
+  return { id: fila.id, rotulo: TIPOS_DOC[fila.tipo] };
+}
+
+/* ===================== EL QR DE RECEPCIÓN =====================
+   Recepción no tiene escáner. Cuando llega un huésped que no subió sus
+   documentos —o llega sin reserva—, hay que dejar registrada la foto del
+   pasaporte y de la tarjeta PDI, y la única cámara que hay a mano es la del
+   teléfono del recepcionista.
+
+   El QR resuelve solo eso: se muestra en la pantalla del mostrador, el
+   recepcionista lo escanea con SU teléfono y se le abre una página que no
+   hace nada más que sacar las dos fotos. El huésped no ve este código en
+   ningún momento y no es para él: su camino es el enlace de su ficha, que es
+   otro y llega por WhatsApp.
+
+   Por eso el código es corto y propio: mientras menos letras lleve el
+   enlace, menos cuadritos tiene el QR, más grande queda cada uno y mejor lo
+   agarra la cámara. Con el token de 32 letras de la ficha el código salía
+   tan denso que costaba leerlo. */
+function codigoDocDe_(idReserva) {
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  var c = String(r.codigoDoc || '');
+  if (!c) {
+    c = codigoCorto_();
+    actualizar_('Reservas', 'id', idReserva, { codigoDoc: c });
+  }
+  return c;
+}
+
+/* Diez caracteres al azar de un alfabeto sin letras que se confundan: son
+   36^10 combinaciones (más de tres mil billones), de sobra para que nadie
+   dé con uno probando, y bastante más corto que un UUID. */
+function codigoCorto_() {
+  var abc = 'abcdefghijkmnpqrstuvwxyz23456789';
+  var c = '';
+  for (var i = 0; i < 10; i++) c += abc.charAt(Math.floor(Math.random() * abc.length));
+  return c;
+}
+
+function linkDocumentos(token, idReserva) {
+  sesion_(token);
+  var c = codigoDocDe_(idReserva);
+  return { url: ScriptApp.getService().getUrl() + '?d=' + c, codigo: c };
+}
+
+function porCodigoDoc_(c) {
+  var r = leer_('Reservas').filter(function (x) {
+    return String(x.codigoDoc) === String(c) && String(c) !== '';
+  })[0];
+  if (!r) throw new Error('Este código ya no sirve. Pídele a recepción que lo muestre de nuevo.');
+  return r;
+}
+
+/* Lo único que necesita saber la página de recepción: de quién son los
+   documentos y cuáles ya están. Nada de la ficha, ni datos personales, ni
+   la cuenta: es una pantalla para sacar dos fotos. */
+function docsCargar(c) {
+  var r = porCodigoDoc_(c);
+  var rec = recursos_().filter(function (x) { return x.id === r.recurso; })[0];
+  return {
+    huesped: String(r.huesped || ''),
+    unidad: rec ? (rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '')) : '',
+    checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut),
+    extranjero: !!r.extranjero,
+    documentos: documentosDe_(r.id).map(function (d) {
+      return { id: d.id, tipo: d.tipo, rotulo: d.rotulo, creado: d.creado };
+    })
+  };
+}
+
+function docsSubir(c, d) {
+  var r = porCodigoDoc_(c);
+  var fila = guardarDocumento_(r.id, d, 'recepción');
   return { id: fila.id, rotulo: TIPOS_DOC[fila.tipo] };
 }
 

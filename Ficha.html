@@ -73,6 +73,17 @@
   .subir.listo .estado{color:var(--ok);font-weight:600}
   .subir.malo{border-color:var(--dan)}
   .subir.malo .estado{color:var(--dan)}
+  /* En la pantalla de recepción los botones son lo único que hay, así que
+     se hacen grandes: se aprietan con una mano, de pie y con el huésped
+     esperando al otro lado del mostrador. */
+  body.solodocs .subir{padding:30px 14px;font-size:16px}
+  body.solodocs .subir b{font-size:15px}
+  /* De quién son los documentos. Va arriba y en grande porque el error que
+     hay que evitar es guardarle el pasaporte a la reserva equivocada. */
+  .recQuien{background:var(--bg);border:1px solid var(--line);border-radius:9px;
+    padding:11px 13px;margin:0 0 14px}
+  .recQuien b{display:block;font-size:15px}
+  .recQuien span{font-size:12.5px;color:var(--tx3)}
   .menorChk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx2);
     margin-top:2px}
   .menorChk input{width:18px;height:18px}
@@ -173,6 +184,14 @@
 
 <script>
 var TOKEN = '<?= token ?>';
+/* Cuando la página se abre con el código del QR, entra en modo "solo
+   documentos": no es la ficha del huésped, es la pantalla que usa el
+   RECEPCIONISTA con su propio teléfono para fotografiar el pasaporte y la
+   tarjeta PDI de quien está parado en el mostrador. No muestra la ficha, ni
+   el reglamento, ni la firma, ni ningún dato personal: solo dos botones que
+   abren la cámara. El huésped no la ve nunca. */
+var CODIGO_DOC = '<?= codigoDoc ?>';
+var SOLO_DOCS = !!CODIGO_DOC;
 
 var T = {
   es:{
@@ -210,6 +229,12 @@ var T = {
     faltaFirma:'Falta tu firma.',
     faltaNombre:'Escribe tu nombre completo y tu documento.',
     enviando:'Enviando…',
+    // Estos son de la pantalla de recepción, no del huésped: los lee quien
+    // está atendiendo, así que hablan de "el huésped" y no de "ti".
+    recTit:'Documentos del huésped',
+    recAyuda:'Apunta con la cámara y saca una foto de cada documento. Se guarda al '+
+             'tiro en la reserva; el huésped no tiene que hacer nada.',
+    recListo:'Listo. Ya están los dos documentos guardados en la reserva.',
   },
   en:{
     cargando:'Loading…', tuReserva:'Your booking', aNombre:'Name', aUnidad:'Accommodation',
@@ -246,6 +271,10 @@ var T = {
     faltaFirma:'Your signature is missing.',
     faltaNombre:'Please enter your full name and ID number.',
     enviando:'Sending…',
+    recTit:'Guest documents',
+    recAyuda:'Point the camera and take a photo of each document. It is saved straight '+
+             'into the booking; the guest does not have to do anything.',
+    recListo:'Done. Both documents are saved in the booking.',
   }
 };
 
@@ -313,12 +342,53 @@ llamar('logoImagen', [], function(src){
 
 aplicarIdioma();
 
-llamar('reglamento', [], function(g){
+/* El reglamento solo hace falta en la ficha del huésped. La pantalla de
+   recepción no lo muestra, así que ni se pide: es una llamada menos entre
+   escanear el código y poder sacar la foto. */
+if (!SOLO_DOCS) llamar('reglamento', [], function(g){
   REGLAS = g || { es:[], en:[] };
   aplicarIdioma();
 }, function(){ /* si falla, la página igual funciona */ });
 
-llamar('fichaPublicaCargar', [TOKEN], function(d){
+/* ---------- La pantalla de recepción ----------
+   Dos botones que abren la cámara y nada más. Se llega acá escaneando el QR
+   que está en la pantalla del mostrador. */
+if (SOLO_DOCS) {
+  // La usa el personal de la casa, así que va en español y sin el botón de
+  // idioma: no es una página para el huésped.
+  IDIOMA = 'es';
+  document.body.classList.add('solodocs');
+  document.querySelector('.lang').classList.add('hide');
+  llamar('docsCargar', [CODIGO_DOC], function(d){
+    DATOS = d;
+    $('cargando').classList.add('hide');
+    // La tarjeta de documentos vive dentro del formulario de la ficha, que
+    // acá no se muestra: se la saca de ahí y se deja sola en la página.
+    var caja = $('cardDoc');
+    document.querySelector('.wrap').appendChild(caja);
+    caja.classList.remove('hide');
+    caja.querySelector('h2').setAttribute('data-t','recTit');
+    caja.querySelector('p').setAttribute('data-t','recAyuda');
+    // De quién son los documentos, para no equivocarse de reserva cuando hay
+    // dos personas esperando en el mostrador.
+    var quien = document.createElement('div');
+    quien.className = 'recQuien';
+    quien.innerHTML = '<b></b><span></span>';
+    quien.querySelector('b').textContent = d.huesped || '';
+    quien.querySelector('span').textContent =
+      (d.unidad ? d.unidad + ' · ' : '') + fecha(d.checkIn) + ' → ' + fecha(d.checkOut);
+    caja.insertBefore(quien, caja.querySelector('h2').nextSibling);
+    pintarDocumentos();
+    aplicarIdioma();
+  }, function(e){
+    $('cargando').classList.add('hide');
+    $('aviso').classList.remove('hide');
+    $('aviso').textContent = e.message || String(e);
+  });
+}
+
+/* ---------- La ficha del huésped ---------- */
+if (!SOLO_DOCS) llamar('fichaPublicaCargar', [TOKEN], function(d){
   DATOS = d;
   $('cargando').classList.add('hide');
   // Aunque la ficha ya esté firmada hay que poder subir los documentos: el
@@ -474,7 +544,12 @@ function subirDoc(tipo, archivo, caja){
   estado.removeAttribute('data-t');
   estado.textContent = T[IDIOMA].docSubiendo;
   achicarFoto(archivo).then(function(datos){
-    llamar('fichaPublicaSubir', [TOKEN, { tipo: tipo, datos: datos }], function(){
+    // La misma foto, por dos puertas distintas: la del huésped con el token
+    // de su ficha, la de recepción con el código del QR. Cada una queda
+    // anotada con quién la subió.
+    var fn = SOLO_DOCS ? 'docsSubir' : 'fichaPublicaSubir';
+    var llave = SOLO_DOCS ? CODIGO_DOC : TOKEN;
+    llamar(fn, [llave, { tipo: tipo, datos: datos }], function(){
       caja.classList.add('listo');
       estado.setAttribute('data-t','docListo');
       estado.textContent = T[IDIOMA].docListo;

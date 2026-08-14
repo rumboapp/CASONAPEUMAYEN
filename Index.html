@@ -237,6 +237,23 @@
     border:1px solid var(--line);border-radius:8px;margin-bottom:7px}
   .docFila .quien{color:var(--tx3);font-size:11.5px}
 
+  /* El QR a pantalla completa. Fondo blanco liso y nada alrededor: cualquier
+     cosa cerca del código le quita contraste a la cámara. */
+  .qrGrande{position:fixed;inset:0;z-index:200;background:#fff;display:flex;
+    align-items:center;justify-content:center;text-align:center;cursor:pointer}
+  .qrGrande .pie{margin-top:16px;font-size:14px;color:#3d444d}
+  .qrGrande .pie span{font-size:12px;color:#8b939c}
+
+  /* La franja de "documentos escaneados" que va arriba de la reserva. Verde
+     cuando están los dos papeles, ámbar cuando falta alguno: se lee sin
+     tener que leerla. */
+  .docEstado{display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+    padding:10px 12px;margin-bottom:14px;font-size:13px;border-radius:8px;
+    border:1px solid var(--line);background:var(--bg);cursor:pointer}
+  .docEstado:hover{border-color:var(--tx3)}
+  .docEstado.falta{border-color:#e0a35a;background:#fdf6ec;color:#8a5a12}
+  .docEstado.listo{border-color:#8fc79a;background:#f0f8f1;color:#2e6b3a}
+
   .ctaCaja{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:14px}
   .ctaTit{font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:9px}
   .ctaForm{display:flex;gap:7px;flex-wrap:wrap}
@@ -781,6 +798,17 @@
           </label>
         </span>
       </div>
+
+      <!-- Si el pasaporte y la tarjeta PDI ya están escaneados. A un turista
+           extranjero exento hay que tenerlos ANTES de que se vaya: sin ellos
+           la exención de IVA no se sostiene, y una vez que se subió al auto
+           ya no hay a quién pedírselos. Por eso el aviso va arriba del todo y
+           no escondido en un menú. -->
+      <button type="button" id="rDocEstado" class="hide docEstado">
+        <span id="rDocEstadoTxt"></span>
+        <span class="muted" style="margin-left:auto;font-size:12px">Abrir ›</span>
+      </button>
+
       <!-- Lo que se llena SIEMPRE. Con esto ya se guarda una reserva. -->
       <div class="fld">
         <label>Fechas</label>
@@ -804,9 +832,14 @@
           <input id="rNinos" type="number" min="0" value="0">
         </div>
       </div>
+      <!-- Al turista extranjero se le cotiza en dólares, y entonces ESTAS dos
+           casillas son dólares: el rótulo cambia junto con el número. Antes
+           la casilla siempre decía pesos y el dólar se calculaba abajo; esa
+           cifra en pesos podía ser con o sin IVA y no había forma de saberlo
+           mirándola, así que al volver a guardar se colaba el impuesto. -->
       <div class="g2">
         <div class="fld">
-          <label>Total ($)</label>
+          <label>Total <span id="rTotMon">($)</span></label>
           <input id="rTot" type="number" min="0" step="1000">
           <div style="font-size:11.5px;margin-top:5px">
             <span class="muted" id="rTotNota">Suma de las noches</span>
@@ -815,7 +848,7 @@
           </div>
         </div>
         <div class="fld">
-          <label>Abonado ($)</label>
+          <label>Abonado <span id="rAntMon">($)</span></label>
           <input id="rAnt" type="number" min="0" step="1000" value="0">
           <div class="muted hide" id="rAntNota" style="font-size:11.5px;margin-top:5px">
             Los pagos se llevan en la <b>Cuenta</b>; acá solo se muestra el total pagado.
@@ -929,22 +962,35 @@
 </div>
 
 <!-- ==================== DOCUMENTOS DEL HUÉSPED ====================
-     Pasaporte y tarjeta PDI. Los sube el huésped desde su celular, o
-     recepción en un walk-in: escanea el QR y sigue en su propio teléfono. -->
+     Pasaporte y tarjeta PDI. Hay tres caminos y ninguno estorba al otro:
+     el huésped los sube solo desde el enlace de su ficha, recepción arrastra
+     el archivo acá si lo tiene en el computador, o —cuando el huésped está
+     parado en el mostrador y no subió nada— el recepcionista escanea el QR
+     con SU teléfono y le saca la foto ahí mismo. Ese QR es una herramienta
+     de recepción: el huésped no lo ve nunca. -->
 <div class="ov hide" id="mDoc">
   <div class="mo" style="max-width:520px">
     <header><h3 id="docTit">Pasaporte y tarjeta PDI</h3><button class="x" data-cerrar="mDoc">×</button></header>
     <div class="body">
       <p class="muted" style="font-size:12.5px;margin-bottom:12px">
         Son los dos papeles que acreditan la exención de IVA a turistas extranjeros.
-        Se pueden subir acá, o el huésped los sube solo desde su celular con el
-        enlace de su ficha.
       </p>
 
       <div id="docLista" style="margin-bottom:14px"></div>
 
       <div class="ctaCaja" style="margin-top:0">
-        <div class="ctaTit">Subir desde este equipo</div>
+        <div class="ctaTit">Sacarle la foto con tu teléfono</div>
+        <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+          Para cuando el huésped está en el mostrador y no subió nada. Escanea este
+          código <b>con tu propio teléfono</b>: se abre una pantalla que solo saca las
+          dos fotos y las guarda en esta reserva. No se lo muestres al huésped, no es
+          para él.
+        </p>
+        <div id="docQr" style="text-align:center"></div>
+      </div>
+
+      <div class="ctaCaja">
+        <div class="ctaTit">O subirlo desde este equipo</div>
         <div class="ctaForm">
           <select id="docTipo">
             <option value="pasaporte">Pasaporte</option>
@@ -955,15 +1001,6 @@
         </div>
         <input type="file" id="docArchivo" accept="image/*,application/pdf" class="hide">
         <div id="docZona" class="zonaSoltar">o arrastra el archivo hasta acá</div>
-      </div>
-
-      <div class="ctaCaja">
-        <div class="ctaTit">Que lo haga con su celular</div>
-        <p class="muted" style="font-size:12.5px;margin-bottom:10px">
-          El huésped escanea este código con la cámara, se le abre su ficha y desde
-          ahí saca la foto. Sirve igual para un walk-in: lo escaneas tú.
-        </p>
-        <div id="docQr" style="text-align:center"></div>
       </div>
 
       <div class="err hide" id="docErr"></div>
@@ -1315,7 +1352,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-18';
+var VERSION_ESPERADA = '2026-08-19';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
@@ -1429,6 +1466,30 @@ function plural(n, uno, varios){ return n+' '+(Number(n)===1 ? uno : varios); }
 function plataSimple(n){ return (Number(n)||0).toLocaleString('es-CL'); }
 function dolares(n){ return 'US$'+(Number(n)||0).toLocaleString('en-US',
   { minimumFractionDigits:2, maximumFractionDigits:2 }); }
+
+/* ---------- La plata de UNA reserva ----------
+   Al turista extranjero se le cotiza, se le cobra y se le rinde la cuenta en
+   dólares, sin impuesto. Su reserva y su folio no muestran pesos en ninguna
+   parte: no es la moneda en la que reservó ni en la que va a pagar, y verla
+   al lado solo lo confunde. Por dentro la planilla sigue en pesos —los
+   informes de la casa, el cierre de la noche y el SII van en pesos—, así
+   que la conversión se hace acá, al momento de escribir el número.
+
+   'r' es la reserva (o la cuenta) que se está mostrando: de ahí sale el
+   cambio que se le fijó al reservar, que es el que manda aunque el dólar se
+   haya movido después. */
+function enDolares(r){ return !!(r && (r.extranjero || r.moneda==='USD')); }
+function dolarDelDia(){ return Number(CAL && CAL.dolar && CAL.dolar.valor) || 0; }
+function cambioDe(r){ return Number(r && r.dolar) || dolarDelDia(); }
+function aUsd(clp, cambio){
+  var c=Number(cambio)||0;
+  return c>0 ? Math.round((Number(clp)||0)/c*100)/100 : 0;
+}
+/* La función que se usa en pantalla: da la cifra ya escrita, en la moneda
+   que le corresponde a esa reserva. */
+function plataDe(r, clp){
+  return enDolares(r) ? dolares(aUsd(clp, cambioDe(r))) : plata(clp);
+}
 function finde(s){ var g=aDate(s).getDay(); return g===0||g===6; }
 
 function esAlta(f){
@@ -1926,7 +1987,10 @@ function pintarCal(animar){
     b.className='bar '+r.estado+(r._guardando?' guardando':'');
     b.style.gridArea = fila+' / '+col+' / '+(fila+1)+' / '+(col+span);
     b.title = r.huesped+'  ·  '+largo(r.checkIn)+' → '+largo(r.checkOut)+
-              '  ·  '+(r.pax||1)+' pax  ·  '+plata(r.total);
+              '  ·  '+(r.pax||1)+' pax  ·  '+plataDe(r, r.total)+
+              (r.docs && r.docs.exige
+                 ? '  ·  '+(r.docs.completo ? 'documentos escaneados'
+                                            : 'FALTAN documentos por escanear') : '');
     // Un tilde blanco cuando la ficha está firmada, para no tener que abrir
     // una por una y ver quién falta por registrar.
     b.innerHTML = (r.firmada ? '<span class="ok" title="Ficha firmada">✓</span>'
@@ -2201,7 +2265,7 @@ function recalcularTotal(){
   if(!r) return;
   var t=0, n=0;
   for(var f=RANGO.in; f<RANGO.out; f=mas(f,1)){ t += esAlta(f)? r.precioAlta : r.precioBase; n++; }
-  if(!TOTAL_TOCADO) $('rTot').value=t;
+  if(!TOTAL_TOCADO) $('rTot').value=deLista(t);
   $('rTotNota').textContent = TOTAL_TOCADO
     ? 'Se reparte entre las '+plural(n,'noche','noches')+' al guardar'
     : 'Suma de '+plural(n,'noche','noches');
@@ -2212,42 +2276,70 @@ function recalcularTotal(){
 $('rRec').addEventListener('change', recalcularTotal);
 $('rAddon').addEventListener('change', function(){ $('rAddonF').classList.toggle('hide', !this.checked); });
 
-/* Turista extranjero: el precio se le cotiza en dólares al cambio de hoy y
-   ese cambio se le respeta después. La nota dice las dos cosas que hay que
-   tener claras: cuánto es en dólares, y que la exención de IVA solo vale si
-   efectivamente paga en moneda extranjera. */
-function pintarExtranjero(cambioFijado){
-  var on=$('rExtranjero').checked;
-  $('rExtNota').classList.toggle('hide', !on);
-  if(!on) return;
-  var cambio = Number(cambioFijado) || Number(CAL.dolar && CAL.dolar.valor) || 0;
-  var iva = Number(CAL.cfg && CAL.cfg.iva) || 19;
-  var total = Number($('rTot').value)||0;
+/* ---------- La moneda del formulario ----------
+   Marcar "turista extranjero" no es ponerle una etiqueta a la reserva: le
+   cambia la moneda. A partir de ahí las casillas de Total y Abonado son
+   DÓLARES, sin impuesto, y no vuelve a aparecer un peso.
 
-  // El total del formulario puede venir CON o SIN IVA, y por el número no hay
-  // forma de saberlo: el servidor lo dice en 'sinIva'. Adivinarlo era lo que
-  // hacía que la misma reserva mostrara una cifra al crearla y otra al
-  // abrirla. Se muestran siempre las dos: la tarifa y lo que se le cobra.
-  var yaSinIva = !!(RES && RES.sinIva);
-  var tarifa = yaSinIva ? Math.round(total*(1+iva/100)) : total;
-  var neto   = yaSinIva ? total : Math.round(total/(1+iva/100));
-
-  var txt = '';
-  if(total){
-    txt = 'Tarifa <b>'+plata(tarifa)+'</b> con IVA → se le cobra <b>'+plata(neto)+'</b>'+
-          (cambio ? ', que al cambio '+
-                    (cambioFijado ? 'de $'+plataSimple(cambio)+' fijado al reservar'
-                                  : 'de hoy ($'+plataSimple(cambio)+'), que le queda fijado')+
-                    ' son <b>'+dolares(neto/cambio)+'</b>' : '')+
-          '. ';
-  }
-  $('rExtNota').innerHTML = txt +
-    'El alojamiento sale <b>exento del IVA del '+iva+'%</b>. Ojo: la exención solo vale si '+
-    'paga en dólares — si termina pagando en pesos, corresponde IVA y la Cuenta lo avisa.';
+   Antes la casilla decía siempre pesos y el dólar se calculaba en una nota
+   abajo. El problema es que ese número en pesos podía ser con IVA o sin él
+   —$45.000 se ve igual de las dos maneras— y al volver a guardar la reserva
+   el formulario devolvía la cifra que estuviera mostrando, así que el
+   impuesto se colaba de vuelta. Con la casilla en dólares no hay nada que
+   adivinar: lo que se escribe es lo que el huésped paga. */
+function monedaRes(){ return $('rExtranjero').checked ? 'USD' : 'CLP'; }
+function cambioRes(){ return Number(RES && RES.dolar) || dolarDelDia(); }
+function ivaPct(){ return Number(CAL && CAL.cfg && CAL.cfg.iva) || 0; }
+/* De una TARIFA DE LISTA (pesos, con IVA incluido) a lo que va en la casilla:
+   al extranjero le corresponde el neto, y en dólares. */
+function deLista(clp){
+  if(monedaRes()!=='USD') return Math.round(Number(clp)||0);
+  return aUsd(Math.round((Number(clp)||0)/(1+ivaPct()/100)), cambioRes());
 }
-$('rExtranjero').addEventListener('change', function(){ pintarExtranjero(RES && RES.dolar); });
-$('rTot').addEventListener('input', function(){
-  if($('rExtranjero').checked) pintarExtranjero(RES && RES.dolar);
+/* De lo GUARDADO en la reserva (pesos; ya sin IVA si es extranjera) a la
+   casilla. */
+function deGuardado(clp){
+  return monedaRes()==='USD' ? aUsd(clp, cambioRes()) : Math.round(Number(clp)||0);
+}
+
+function pintarMoneda(){
+  var usd = monedaRes()==='USD';
+  $('rTotMon').textContent = usd ? '(US$)' : '($)';
+  $('rAntMon').textContent = usd ? '(US$)' : '($)';
+  $('rTot').step = usd ? '1' : '1000';
+  $('rAnt').step = usd ? '1' : '1000';
+  $('rExtNota').classList.toggle('hide', !usd);
+  if(!usd) return;
+  var c = cambioRes();
+  $('rExtNota').innerHTML =
+    'Esta reserva se cotiza y se cobra <b>en dólares y sin impuestos</b>: el alojamiento '+
+    'a turistas extranjeros sin domicilio en Chile va exento de IVA. '+
+    (c ? 'Cambio '+(RES && RES.dolar ? 'fijado al reservar' : 'de hoy, que le queda fijado')+
+         ': <b>$'+plataSimple(c)+' por US$1</b>. ' : '')+
+    'Para que la exención valga, el pago tiene que entrar en dólares.';
+}
+
+/* Al marcar o desmarcar la casilla se convierten las cifras que ya estaban
+   escritas, para que el número y su rótulo no se contradigan ni un instante.
+
+   Se convierte lo que hay y NO se vuelve a calcular la tarifa: si la reserva
+   traía un precio conversado, recotizarla a precio de lista por marcar una
+   casilla sería borrarle el trato al huésped sin avisar. Y si nadie había
+   tocado el total, lo que hay es justamente la tarifa de lista, así que
+   convertirla da el mismo resultado. */
+$('rExtranjero').addEventListener('change', function(){
+  var aUsdAhora = this.checked;
+  var c = cambioRes(), iva = ivaPct();
+  if(c>0){
+    ['rTot','rAnt'].forEach(function(id){
+      var v = Number($(id).value)||0;
+      if(!v) return;
+      $(id).value = aUsdAhora
+        ? Math.round(v/(1+iva/100)/c*100)/100    // pesos con IVA → dólares sin IVA
+        : Math.round(v*c*(1+iva/100));           // y de vuelta
+    });
+  }
+  pintarMoneda();
 });
 
 function nuevaReserva(rec, entrada, salida){
@@ -2259,7 +2351,7 @@ function nuevaReserva(rec, entrada, salida){
   $('rEst').value='confirmada'; $('rAnt').value=0; $('rNot').value='';
   $('rPax').value='';   // lo rellena ajustarPax() según lo que quepa
   $('rNinos').value=0;
-  $('rExtranjero').checked=false; pintarExtranjero();
+  $('rExtranjero').checked=false; pintarMoneda();
   $('rAddon').checked=false; $('rAddonF').value=''; $('rAddonF').classList.add('hide');
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
@@ -2267,6 +2359,7 @@ function nuevaReserva(rec, entrada, salida){
   $('rEnviar').classList.add('hide'); $('rVerFicha').classList.add('hide');
   $('rCuenta').classList.add('hide'); $('rAcom').classList.add('hide');
   $('rDocs').classList.add('hide');
+  $('rDocEstado').classList.add('hide');
   $('rComprobante').classList.add('hide'); $('rVerNoches').classList.add('hide');
   $('rMas').classList.add('hide'); $('rMasLista').classList.add('hide');
   $('rAnt').readOnly=false; $('rAntNota').classList.add('hide');
@@ -2308,7 +2401,7 @@ function abrirReserva(r){
   opcionesRecurso(r.recurso);
   $('rNom').value=r.huesped; $('rTel').value=String(r.telefono||'');
   $('rMail').value=r.email||''; $('rCan').value=r.canal||'whatsapp';
-  $('rEst').value=r.estado; $('rTot').value=r.total; $('rAnt').value=r.anticipo;
+  $('rEst').value=r.estado;
   TOTAL_TOCADO=false;
   $('rVerNoches').classList.remove('hide');
   $('rTotNota').textContent='Suma de '+plural(noches(r.checkIn,r.checkOut),'noche','noches');
@@ -2317,7 +2410,11 @@ function abrirReserva(r){
   $('rComprobante').classList.remove('hide');
   $('rPax').value=r.pax||1; ajustarPax();
   $('rNinos').value=r.ninos||0;
-  $('rExtranjero').checked=!!r.extranjero; pintarExtranjero(r.dolar);
+  // La casilla PRIMERO y los montos después: es la casilla la que decide en
+  // qué moneda se escriben.
+  $('rExtranjero').checked=!!r.extranjero; pintarMoneda();
+  $('rTot').value=deGuardado(r.total); $('rAnt').value=deGuardado(r.anticipo);
+  pintarDocsReserva(r);
   $('rNot').value=r.notas||'';
   $('rAddon').checked=!!r.addon;
   $('rAddonF').value=r.addonFecha||'';
@@ -2340,6 +2437,35 @@ function abrirReserva(r){
   pintarFechas();
   abrir('mRes');
 }
+
+/* Si los documentos del huésped ya están escaneados, dicho arriba de la
+   reserva y no escondido en un menú. A un turista extranjero exento hay que
+   tener el pasaporte Y la tarjeta PDI antes de que se vaya: sin los dos, la
+   exención de IVA no se sostiene. Al huésped chileno no se le pide nada, así
+   que su reserva solo muestra la franja si alguien subió algo. */
+function pintarDocsReserva(r){
+  var caja=$('rDocEstado'), d = r && r.docs;
+  caja.classList.remove('falta','listo');
+  if(!d || (!d.exige && !d.total)){ caja.classList.add('hide'); return; }
+  caja.classList.remove('hide');
+  var partes=[];
+  if(d.pasaporte) partes.push('pasaporte');
+  if(d.pdi) partes.push('tarjeta PDI');
+  if(d.exige){
+    caja.classList.add(d.completo ? 'listo' : 'falta');
+    $('rDocEstadoTxt').innerHTML = d.completo
+      ? '<b>Documentos escaneados</b> · pasaporte y tarjeta PDI'
+      : '<b>Faltan documentos por escanear</b> · '+
+        (partes.length ? 'está el '+partes.join(' y el ')+', falta '+
+                         (d.pasaporte?'la tarjeta PDI':'el pasaporte')
+                       : 'no hay ninguno todavía');
+  } else {
+    caja.classList.add('listo');
+    $('rDocEstadoTxt').innerHTML = '<b>'+plural(d.total,'documento escaneado','documentos escaneados')+
+      '</b>'+(partes.length ? ' · '+partes.join(' y ') : '');
+  }
+}
+$('rDocEstado').onclick=function(){ if(RES) abrirDocumentos(RES); };
 
 /* Barra superior del modal: en qué punto va la estadía y si ya firmó,
    con el botón del siguiente paso a un toque. */
@@ -2424,21 +2550,27 @@ function refrescarCuenta(id){
 function pintarCuenta(){
   var c=CTA; if(!c) return;
   var saldo = c.saldoProyectado;
+  // La cuenta de un turista extranjero se lleva ENTERA en dólares y sin
+  // impuesto: ni el resumen ni los movimientos muestran pesos. Es la misma
+  // moneda en la que reservó y en la que va a pagar; poner las dos al lado
+  // era lo que hacía que nadie supiera cuál era la que valía.
+  var usd = enDolares(c);
+  var $$ = function(n){ return plataDe(c, n); };
+
   // Lo primero y más grande es cuánto debe: es a lo que uno abre esta
   // pantalla. El resto queda de apoyo.
   $('ctaResumen').innerHTML =
     caja(saldo>0?'Por cobrar':(saldo<0?'A favor del huésped':'Saldo'),
-         plata(Math.abs(saldo)), saldo>0?'debe':(saldo<0?'pagado':''),
-         (c.exentoIva && c.saldoProyectadoUsd
-            ? '≈ '+dolares(Math.abs(c.saldoProyectadoUsd))+' al cambio de la reserva'
-            : (c.alojamientoPendiente>0
-                 ? 'incluye '+plata(c.alojamientoPendiente)+' de noches por cargar' : ''))) +
-    caja('Cargos', plata(c.cargos)) +
-    caja('Pagado', plata(c.pagos), 'pagado',
-         c.pagadoEnDolares>0 ? plata(c.pagadoEnDolares)+' en dólares' : '') +
-    caja(c.exentoIva?'Exento (alojamiento)':('IVA '+c.ivaPct+'%'),
-         c.exentoIva ? plata(c.exentos) : plata(c.iva),
-         '', c.exentoIva ? 'y '+plata(c.iva)+' de IVA en consumos' : 'neto '+plata(c.neto));
+         $$(Math.abs(saldo)), saldo>0?'debe':(saldo<0?'pagado':''),
+         (c.alojamientoPendiente>0
+            ? 'incluye '+$$(c.alojamientoPendiente)+' de noches por cargar' : '')) +
+    caja('Cargos', $$(c.cargos)) +
+    caja('Pagado', $$(c.pagos), 'pagado',
+         (usd && c.pagadoEnPesos>0) ? 'hay pagos anotados en pesos' : '') +
+    (usd
+      // Sin impuesto y sin desglose: no hay nada que desglosar.
+      ? caja('Impuestos', 'exento', '', 'turista extranjero · DL 825 art. 12 E N°17')
+      : caja('IVA '+c.ivaPct+'%', plata(c.iva), '', 'neto '+plata(c.neto)));
 
   // El aviso que de verdad importa: exento cobrado en pesos.
   var av=$('ctaAviso');
@@ -2449,13 +2581,18 @@ function pintarCuenta(){
   $('ctaDoc').value = c.docTurismo || '';
   $('ctaDocBox').classList.toggle('hide', !c.exentoIva);
 
-  // El monto del pago cambia de significado según la moneda.
+  // A un extranjero se le cobra en dólares y punto: la moneda del pago ya
+  // viene puesta y las casillas de monto dicen US$.
+  $('ctaMonto').placeholder = usd ? 'US$ c/u' : 'Monto c/u';
+  $('ctaMonto').step = usd ? '1' : '500';
+  if(usd) $('ctaMoneda').value='USD';
   var enUsd = $('ctaMoneda').value==='USD';
   $('ctaPago').placeholder = enUsd ? 'Monto en US$' : 'Monto en $';
   $('ctaPago').step = enUsd ? '1' : '1000';
   $('ctaPagoNota').classList.toggle('hide', !enUsd);
-  if(enUsd) $('ctaPagoNota').textContent =
-    'Se convierte a $'+plataSimple(c.dolar)+' por dólar, el cambio fijado a esta reserva.';
+  if(enUsd) $('ctaPagoNota').textContent = usd
+    ? 'Esta cuenta va en dólares. El pago tiene que entrar en dólares para que la exención valga.'
+    : 'Se convierte a $'+plataSimple(c.dolar)+' por dólar, el cambio fijado a esta reserva.';
 
   if(!c.movimientos.length){
     $('ctaMovs').innerHTML='<div class="empty">Todavía no hay movimientos en esta cuenta.</div>';
@@ -2465,12 +2602,16 @@ function pintarCuenta(){
     c.movimientos.forEach(function(m){
       var etiqueta = m.clase==='pago'
         ? (m.descripcion||'Pago')+' <span class="cen">'+m.medio+'</span>'+
-          (m.moneda==='USD' ? '<span class="cen usd-tag">US$'+m.usd+'</span>' : '')
+          // En una cuenta en dólares la etiqueta "US$" sobra —todo lo es—;
+          // lo que hay que marcar es lo que entró en pesos, que es el error.
+          (usd
+            ? (m.moneda!=='USD' ? '<span class="cen debe">entró en pesos</span>' : '')
+            : (m.moneda==='USD' ? '<span class="cen usd-tag">US$'+m.usd+'</span>' : ''))
         : m.descripcion + (m.cantidad>1 ? ' <span class="muted">×'+m.cantidad+'</span>' : '') +
           (m.centro ? '<span class="cen '+m.centro+'">'+m.centro+'</span>' : '') +
-          (m.exento ? '<span class="cen">exento</span>' : '');
+          (m.exento && !usd ? '<span class="cen">exento</span>' : '');
       h+='<tr class="'+m.clase+'"><td class="muted">'+corto(m.fecha)+'</td><td>'+etiqueta+'</td>'+
-         '<td class="n">'+(m.clase==='pago'?'− ':'')+plata(m.total)+'</td>'+
+         '<td class="n">'+(m.clase==='pago'?'− ':'')+$$(m.total)+'</td>'+
          '<td class="n"><button class="quitar" data-mov="'+m.id+'" title="Anular">×</button></td></tr>';
     });
     $('ctaMovs').innerHTML=h+'</tbody></table>';
@@ -2492,9 +2633,9 @@ function pintarCuenta(){
   $('ctaPostear').classList.toggle('hide', !falta);
   if(falta){
     $('ctaPostear').textContent='Cargar las '+
-      (c.noches?'noches':'noche')+' que faltan ('+plata(c.alojamientoPendiente)+')';
+      (c.noches?'noches':'noche')+' que faltan ('+$$(c.alojamientoPendiente)+')';
     $('ctaPendTxt').textContent=
-      'Quedan '+plata(c.alojamientoPendiente)+' de alojamiento sin cargar a la cuenta. '+
+      'Quedan '+$$(c.alojamientoPendiente)+' de alojamiento sin cargar a la cuenta. '+
       'El cierre de cada noche los va cargando solo; esto los carga todos ahora, '+
       'para cuando alguien paga la estadía completa al llegar.';
   }
@@ -2543,7 +2684,9 @@ $('ctaAgregar').onclick=function(){
     tipo: $('ctaTipo').value,
     descripcion: $('ctaDesc').value.trim(),
     cantidad: Number($('ctaCant').value)||1,
-    unitario: monto
+    unitario: monto,
+    // En una cuenta en dólares el consumo también se anota en dólares.
+    moneda: enDolares(CTA) ? 'USD' : 'CLP'
   })).then(function(){
     $('ctaDesc').value=''; $('ctaMonto').value=''; $('ctaCant').value=1;
     return refrescarCuenta(CTA.idReserva);
@@ -2606,34 +2749,51 @@ function refrescarNoches(id){
   return srv('nochesDe')(id).then(function(d){ NCH=d; pintarNoches(); });
 }
 
+/* Este detalle también se muestra en la moneda de la reserva. Lo que se
+   escribe en la casilla vuelve a pesos antes de mandarlo, porque la planilla
+   se lleva en pesos: la conversión es un detalle interno y no se ve. */
+function nchAPantalla(clp){ return enDolares(NCH) ? aUsd(clp, NCH.dolar) : Math.round(clp); }
+function nchAPesos(v){
+  return enDolares(NCH) ? Math.round((Number(v)||0)*(Number(NCH.dolar)||0)) : Math.round(Number(v)||0);
+}
+
 function pintarNoches(){
   if(!NCH) return;
-  $('nchTot').textContent='Total: '+plata(NCH.total);
-  $('nchTotal').value=NCH.total;
+  var usd = enDolares(NCH);
+  $('nchTot').textContent='Total: '+plataDe(NCH, NCH.total);
+  $('nchTotal').value=nchAPantalla(NCH.total);
+  $('nchTotal').step = usd ? '1' : '1000';
   if(!NCH.noches.length){
     $('nchLista').innerHTML='<div class="empty">La reserva no tiene noches.</div>';
     return;
   }
-  var h='<table class="ctaMov"><thead><tr><th>Noche</th><th class="n">Valor</th>'+
-        '<th></th></tr></thead><tbody>';
+  var h='<table class="ctaMov"><thead><tr><th>Noche</th><th class="n">'+
+        (usd?'Valor (US$)':'Valor')+'</th><th></th></tr></thead><tbody>';
   NCH.noches.forEach(function(n){
+    // La tarifa de referencia es la de la casa, que lleva IVA incluido: al
+    // extranjero le corresponde el neto, y por eso se le descuenta antes de
+    // pasarla a dólares.
+    var tarifa = usd
+      ? dolares(aUsd(Math.round(n.tarifa/(1+(Number(NCH.iva)||0)/100)), NCH.dolar))
+      : plata(n.tarifa);
     h+='<tr><td>'+largo(n.fecha)+
        (n.ajustada?'<span class="cen">a mano</span>':'')+
        (n.posteada?'<span class="cen">ya cobrada</span>':'')+
        (n.nota?'<br><span class="muted" style="font-size:11px">'+n.nota+'</span>':'')+'</td>'+
-       '<td class="n"><input type="number" min="0" step="1000" data-noche="'+n.fecha+'" '+
-       'value="'+n.valor+'" style="width:110px;text-align:right"></td>'+
-       '<td class="n muted" style="font-size:11px">tarifa '+plata(n.tarifa)+'</td></tr>';
+       '<td class="n"><input type="number" min="0" step="'+(usd?'1':'1000')+
+       '" data-noche="'+n.fecha+'" '+
+       'value="'+nchAPantalla(n.valor)+'" style="width:110px;text-align:right"></td>'+
+       '<td class="n muted" style="font-size:11px">tarifa '+tarifa+'</td></tr>';
   });
   $('nchLista').innerHTML=h+'</tbody></table>';
 
   Array.prototype.forEach.call($('nchLista').querySelectorAll('[data-noche]'), function(inp){
     inp.onchange=function(){
-      srv('guardarNoche')(NCH.idReserva, inp.dataset.noche, +inp.value||0, '')
+      srv('guardarNoche')(NCH.idReserva, inp.dataset.noche, nchAPesos(inp.value), '')
         .then(function(){ return refrescarNoches(NCH.idReserva); })
         .then(function(){
-          toast('Noche actualizada · total '+plata(NCH.total));
-          if(RES){ RES.total=NCH.total; $('rTot').value=NCH.total; }
+          toast('Noche actualizada · total '+plataDe(NCH, NCH.total));
+          if(RES){ RES.total=NCH.total; $('rTot').value=deGuardado(NCH.total); }
           recargarCal();
         })
         .catch(function(e){ $('nchErr').textContent=e.message||String(e);
@@ -2644,11 +2804,11 @@ function pintarNoches(){
 
 $('nchRepartir').onclick=function(){
   if(!NCH) return;
-  ocupado('nchRepartir', srv('repartirTotal')(NCH.idReserva, +$('nchTotal').value||0))
+  ocupado('nchRepartir', srv('repartirTotal')(NCH.idReserva, nchAPesos($('nchTotal').value)))
     .then(function(){ return refrescarNoches(NCH.idReserva); })
     .then(function(){
       toast('Total repartido entre las noches');
-      if(RES){ RES.total=NCH.total; $('rTot').value=NCH.total; }
+      if(RES){ RES.total=NCH.total; $('rTot').value=deGuardado(NCH.total); }
       recargarCal();
     })
     .catch(function(e){ $('nchErr').textContent=e.message||String(e);
@@ -2801,12 +2961,16 @@ $('rGuardar').onclick=function(){
     // servidor sumando las noches, y así una promoción no se pierde al guardar.
     total: TOTAL_TOCADO ? (+$('rTot').value||0) : null,
     anticipo:+$('rAnt').value||0,
+    // En qué moneda están esas dos cifras. Va dicho y no se adivina: el
+    // servidor no tiene otra forma de saber si un 45.000 son pesos o si un
+    // 49 son dólares, y adivinarlo fue lo que descuadró el IVA.
+    moneda: monedaRes(),
     addon:$('rAddon').checked, addonFecha:$('rAddonF').value, notas:$('rNot').value
   };
   ocupado('rGuardar', srv('guardarReserva')(datos)).then(function(d){
     cerrar('mRes');
     toast((RES?'Reserva actualizada':'Reserva creada') +
-          (d && d.total ? ' · '+plata(d.total) : ''));
+          (d && d.total ? ' · '+(d.moneda==='USD' ? dolares(d.usd) : plata(d.total)) : ''));
     recargarCal();
   }).catch(function(e){
     $('rErr').textContent=e.message||String(e); $('rErr').classList.remove('hide');
@@ -4324,13 +4488,15 @@ var QR = (function(){
      otros de 4px. El patrón se deforma lo justo para que muchas cámaras no
      lo lean —que es lo que estaba pasando—, aunque a la vista se vea bien.
 
-     Cinco píxeles por módulo es el mínimo cómodo para leerlo de una pantalla
-     con la cámara de un teléfono. */
+     Seis píxeles por módulo es el mínimo con el que la cámara de un teléfono
+     corriente lee de una pantalla sin tener que acercarse tanto que pierde
+     el foco. Con cinco a veces lee y a veces no, y ese "a veces" es
+     justamente lo que no puede pasar con un huésped esperando. */
   function svg(texto, ladoDeseado){
     var m=matriz(texto);
     if(!m) return '';
     var n=m.length, borde=4, total=n+borde*2;
-    var escala=Math.max(5, Math.floor((ladoDeseado||240)/total));
+    var escala=Math.max(6, Math.floor((ladoDeseado||240)/total));
     var lado=total*escala;
     var d='';
     for(var i=0;i<n;i++) for(var j=0;j<n;j++)
@@ -4363,20 +4529,30 @@ function abrirDocumentos(r){
   $('docQr').innerHTML='';
   abrir('mDoc');
   refrescarDocumentos();
-  // El QR necesita el enlace de la ficha; si todavía no existe, se crea.
-  srv('linkFicha')(r.id).then(function(d){
+  // El enlace del QR es propio de recepción y va aparte del de la ficha del
+  // huésped: es más corto —y por eso el código sale con cuadritos más
+  // grandes, que es lo que decide si la cámara lo agarra o no— y abre una
+  // pantalla que no hace nada más que sacar las dos fotos.
+  srv('linkDocumentos')(r.id).then(function(d){
     var url = d && d.url ? d.url : String(d||'');
-    var dibujo = QR.svg(url, 250);
-    // Debajo va el enlace escrito: si la cámara no coopera —pantalla con
-    // brillo, poca luz, teléfono viejo— se copia y se manda por WhatsApp.
-    $('docQr').innerHTML = (dibujo ||
-        '<span class="muted" style="font-size:12.5px">No se pudo generar el código.</span>')+
-      '<div style="margin-top:10px">'+
-        '<button class="btn gh sm" id="docCopiar">Copiar el enlace</button>'+
-        '<div class="muted" style="font-size:11px;margin-top:7px;word-break:break-all">'+
-          url+'</div></div>';
-    var b=$('docCopiar');
-    if(b) b.onclick=function(){
+    var dibujo = QR.svg(url, 300);
+    if(!dibujo){
+      $('docQr').innerHTML='<span class="muted" style="font-size:12.5px">'+
+        'No se pudo generar el código.</span>';
+      return;
+    }
+    // Ampliar es la salida cuando la cámara no coopera —pantalla con brillo,
+    // poca luz, teléfono viejo—: a pantalla completa el código queda del
+    // doble de grande y se lee desde lejos. Y debajo va el enlace escrito,
+    // por si aun así no hay caso.
+    $('docQr').innerHTML = dibujo +
+      '<div style="margin-top:10px;display:flex;gap:7px;justify-content:center">'+
+        '<button class="btn sm" id="docAmpliar">Ampliar para escanear</button>'+
+        '<button class="btn gh sm" id="docCopiar">Copiar el enlace</button></div>'+
+      '<div class="muted" style="font-size:11px;margin-top:7px;word-break:break-all">'+
+        url+'</div>';
+    $('docAmpliar').onclick=function(){ ampliarQr(url, r.huesped); };
+    $('docCopiar').onclick=function(){
       var listo = copiarTexto(url);
       toast(listo ? 'Enlace copiado' : 'Cópialo a mano desde abajo', !listo);
     };
@@ -4386,12 +4562,39 @@ function abrirDocumentos(r){
   });
 }
 
+/* El código a pantalla completa, tan grande como quepa. Es lo que se usa
+   cuando el teléfono no lo agarra a tamaño normal: un módulo de 10px se lee
+   desde medio metro y con mala luz. Se cierra tocando en cualquier parte. */
+function ampliarQr(url, huesped){
+  var lado = Math.min(window.innerWidth, window.innerHeight) - 90;
+  var capa = document.createElement('div');
+  capa.className='qrGrande';
+  capa.innerHTML = '<div>'+QR.svg(url, lado)+
+    '<div class="pie">Escanéalo con tu teléfono · '+(huesped||'')+
+    '<br><span>Toca en cualquier parte para cerrar</span></div></div>';
+  capa.onclick=function(){ document.body.removeChild(capa); };
+  document.body.appendChild(capa);
+}
+
+/* El mismo resumen que arma el servidor, pero acá: así la franja de la
+   reserva se pone al día en cuanto se sube o se borra un documento, sin
+   tener que recargar el calendario entero. */
+function estadoDocsDe(lista, exige){
+  var t={};
+  (lista||[]).forEach(function(d){ t[d.tipo]=true; });
+  var n=(lista||[]).length;
+  return { total:n, pasaporte:!!t.pasaporte, pdi:!!t.pdi, exige:!!exige,
+           completo: exige ? (!!t.pasaporte && !!t.pdi) : n>0 };
+}
+
 function refrescarDocumentos(){
   if(!DOCS) return Promise.resolve();
   return srv('documentosDe')(DOCS.id).then(function(lista){
     var c=$('docLista'); c.innerHTML='';
     $('docCuenta').textContent = lista.length
       ? plural(lista.length,'documento','documentos') : '';
+    DOCS.docs = estadoDocsDe(lista, DOCS.extranjero);
+    if(RES && RES.id===DOCS.id){ RES.docs=DOCS.docs; pintarDocsReserva(RES); }
     if(!lista.length){
       c.innerHTML='<div class="empty">Todavía no ha subido ninguno. '+
                   'Se le piden igual en el check-in.</div>';

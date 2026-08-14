@@ -431,23 +431,36 @@ pesos no da la exención: da una diferencia de IVA que aparece en una
 fiscalización. Por eso el sistema no se limita a la marca — registra en qué
 moneda entró cada peso.
 
-**Al hacer la reserva** hay una casilla *Turista extranjero*. Al marcarla pasan
-tres cosas de una vez: se le **descuenta el IVA**, se le **fija el tipo de
-cambio del día** y el formulario muestra cuánto queda en dólares. Ese cambio
-**se le respeta después**, aunque el dólar se mueva.
+**Marcada la casilla *Turista extranjero*, esa reserva pasa a ser una reserva
+en dólares.** No es una etiqueta: le cambia la moneda. De ahí en adelante **no
+vuelve a aparecer un peso chileno en ninguna parte suya** —ni en el formulario,
+ni en el detalle noche a noche, ni en su cuenta, ni en el comprobante que se le
+manda— y **nada lleva impuesto**.
 
-**El precio baja, y esa es la parte importante.** Las tarifas de la casa se
-escriben **con IVA incluido**, como se muestran en Chile. Al turista exento le
-corresponde el neto, así que una habitación de $55.000 se le cobra en $46.218
-—y son esos $46.218 los que se pasan a dólares, no los $55.000—. El formulario
-muestra siempre **las dos cifras**: *Tarifa $55.000 con IVA → se le cobra
-$46.218*. Desmarcar la casilla devuelve el IVA y el precio vuelve a su valor.
+Al marcarla, de una vez:
 
-Mirando un número no hay forma de saber si ya lleva el descuento: $45.000
-puede ser con o sin impuesto. Por eso cada reserva guarda **si el IVA ya se le
-descontó**. Sin ese dato la pantalla adivinaba, y adivinaba mal: la misma
-reserva mostraba una cifra al crearla y otra al abrirla. Además es lo que
-impide descontarlo dos veces, o devolverlo sin haberlo sacado.
+- Las casillas **Total** y **Abonado** cambian de rótulo y pasan a decir
+  **US$**. Lo que se escribe ahí son dólares, y son los dólares que paga.
+- Se le **fija el tipo de cambio del día**, y **se le respeta después** aunque
+  el dólar se mueva.
+- El precio que propone el sistema sale de la tarifa de la casa **sin el IVA**
+  —las tarifas se escriben con impuesto incluido, como se muestran en Chile— y
+  ya convertido a dólares.
+
+Desmarcarla hace el camino de vuelta: las casillas vuelven a decir pesos y el
+precio recupera su IVA.
+
+> **Por qué la casilla es de dólares y no de pesos.** Antes decía pesos y el
+> equivalente en dólares se calculaba en una nota abajo. El problema es que
+> $45.000 se ve idéntico con IVA y sin IVA: al volver a abrir la reserva y
+> guardarla, el formulario devolvía esa cifra y el impuesto se colaba de
+> vuelta, así que la misma reserva valía una cosa al crearla y un 19% más al
+> día siguiente. Con la casilla en dólares no hay nada que adivinar — lo que
+> está escrito es lo que se cobra.
+
+Por dentro la planilla se sigue llevando en pesos, porque en pesos se declara y
+en pesos se leen el cierre de cada noche y los informes de la casa. Esa
+conversión es cuenta interna y no aparece en ninguna pantalla.
 
 Las reservas de extranjeros cargadas antes de que existiera el descuento se
 corrigen solas la próxima vez que ejecutes `setup()`.
@@ -455,9 +468,10 @@ corrigen solas la próxima vez que ejecutes `setup()`.
 Lo mismo en la pestaña *Alojamiento*: el precio en dólares de cada pieza va
 **sin IVA**, porque es el que se le cotiza a alguien de afuera.
 
-**Al cobrar**, el pago se registra en pesos o en dólares. Si eligen dólares se
-escribe el monto en US$ y el sistema lo convierte al cambio de esa reserva,
-dejando las dos cifras anotadas.
+**Al cobrar**, la cuenta de un extranjero ya viene puesta en dólares: el
+consumo se anota en US$ y el pago también, y el sistema los convierte al cambio
+de esa reserva antes de guardarlos. Si igual entra un pago en pesos, esa línea
+queda marcada — porque es justamente lo que rompe la exención.
 
 **Si algo no calza, se dice.** Un huésped marcado exento con pagos en pesos
 sale con un aviso en su cuenta *y* en el cierre de esa noche, mientras todavía
@@ -489,30 +503,52 @@ para cotizarle a alguien de afuera sin sacar la calculadora.
 ### Pasaporte y tarjeta PDI
 
 Los dos papeles que acreditan la exención se piden en el mostrador con el
-huésped esperando. Ahora se pueden tener antes:
+huésped esperando. Hay **dos caminos, y son de dos personas distintas**:
 
-- **El huésped los sube desde su celular.** Su ficha muestra dos botones
-  grandes de *Cargar aquí*, uno para el pasaporte y otro para la tarjeta PDI.
-  En un teléfono abren la cámara directamente. **Es opcional a propósito**, y
-  la propia página se lo dice: si no lo hace, se le piden igual al llegar.
-- **Recepción los sube en un walk-in.** En la reserva, *Más ▾ → Pasaporte y
-  tarjeta PDI*: se arrastra el archivo, se elige del computador, o se le
-  muestra al huésped un **código QR** que le abre su ficha en su propio
-  teléfono, donde sí tiene cámara.
+**1. El huésped, desde su celular, antes de llegar.** En el enlace de su ficha
+—el que se le manda por WhatsApp— hay dos botones grandes de *Cargar aquí*, uno
+para el pasaporte y otro para la tarjeta PDI. En un teléfono abren la cámara
+directamente. **Es opcional a propósito**, y la propia página se lo dice: si no
+lo hace, se le piden igual al llegar. Funciona **aunque la ficha ya esté
+firmada** —que es el caso normal, porque el pasaporte se pide después de
+firmar— y **para cualquier huésped**, no solo los marcados como extranjeros.
 
-Tres cosas que hacían que el QR no sirviera y ya están arregladas:
+**2. Recepción, con el huésped enfrente.** Es para cuando no subió nada, o
+llegó sin reserva. En la reserva: *Más ▾ → Pasaporte y tarjeta PDI*. Ahí hay un
+**código QR** que **es una herramienta de recepción, no del huésped**: el
+recepcionista lo escanea **con su propio teléfono** y se le abre una pantalla
+que **no hace nada más que sacar las dos fotos** y guardarlas en esa reserva.
+No muestra la ficha, ni el reglamento, ni la firma, ni datos personales — solo
+de quién son los documentos, para no guardárselos a la reserva equivocada. Al
+huésped no se le muestra este código en ningún momento.
 
-- La subida **aparece aunque la ficha ya esté firmada** — que es el caso
-  normal, porque el pasaporte se pide después de firmar.
-- **Aparece para cualquier huésped**, no solo para los marcados como
-  extranjeros: recepción escanea el QR de un walk-in que todavía no está
-  marcado y antes no encontraba dónde subir nada.
-- **El código se dibuja con módulos de tamaño entero.** Antes cada cuadradito
-  medía 3,88 píxeles y, al pedir bordes nítidos, unos salían de 3px y otros de
-  4px: el patrón se deformaba lo justo para que muchas cámaras no lo leyeran,
-  aunque a la vista se viera perfecto. Ahora cada módulo mide 5 píxeles
-  exactos. Debajo del código va el **enlace escrito y un botón para copiarlo**,
-  por si la cámara igual no coopera.
+Es la manera de registrar los documentos **sin escáner**, que es lo que hay en
+el mostrador. Si el archivo ya está en el computador, en esa misma pantalla se
+puede arrastrar o elegir, sin pasar por el teléfono.
+
+**Que el QR se lea de verdad.** Es lo que más costó:
+
+- El enlace de recepción es **corto y propio**: un código de 10 letras en vez
+  del token de 32 de la ficha. Son 22 letras menos dentro del código, y eso se
+  traduce directamente en cuadraditos más grandes.
+- **Cada cuadradito mide 6 píxeles exactos.** Antes medía 3,88 y, al pedir
+  bordes nítidos, unos salían de 3px y otros de 4px: el patrón se deformaba lo
+  justo para que muchas cámaras no lo leyeran, aunque a la vista se viera
+  perfecto.
+- Hay un botón **Ampliar para escanear** que lo pone a pantalla completa, con
+  cuadraditos del doble de grandes y nada alrededor que le quite contraste. Es
+  la salida cuando el teléfono no coopera —pantalla con brillo, poca luz—.
+- Y debajo va el **enlace escrito con un botón para copiarlo**, por si aun así
+  no hay caso.
+
+Todo esto está probado dibujando el código en un navegador de verdad, sacándole
+una foto y volviendo a leerlo **desde los píxeles**, sin mirar el original: si
+esa prueba pasa, un teléfono lo escanea.
+
+**Y la reserva avisa si están o no.** Arriba del todo, apenas se abre: verde si
+el pasaporte y la tarjeta PDI ya están escaneados, ámbar si falta alguno —
+diciendo cuál—. A un huésped chileno no se le exige ninguno, así que su reserva
+no muestra la advertencia. La franja se aprieta y lleva derecho a subirlos.
 
 El archivo se guarda con **la fecha de llegada** del huésped, no la del día en
 que se subió: es de esa estadía y es así como se busca después.
