@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-17';
+var VERSION = '2026-08-18';
 
 function version() { return VERSION; }
 
@@ -32,7 +32,11 @@ var HOJAS = {
   // capacidad pero sí tienen que quedar en el registro de huéspedes.
   // 'extranjero' + 'dolar' van juntos: el tipo de cambio se fija al reservar
   // y se respeta después, aunque el dólar se mueva.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar'],
+  // 'sinIva' dice si al alojamiento YA se le descontó el IVA. Mirando el
+  // número no hay forma de saberlo —$45.000 puede ser con o sin impuesto—,
+  // y sin ese dato la pantalla mentía: le decía "sin IVA" a un precio que
+  // todavía lo llevaba, y descontarlo dos veces habría sido cosa de un clic.
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva'],
   // Lo que se cobra por CADA noche de una reserva. El total de la reserva es
   // la suma de estas filas, así que alargarla o acortarla recalcula el precio
   // solo, y una noche de promoción se baja sin tocar las demás.
@@ -644,6 +648,13 @@ function setup() {
   var reparadas = repararNoches_();
   if (reparadas) Logger.log('Se repusieron ' + plural_(reparadas, 'noche', 'noches') + ' que faltaban.');
 
+  // Las reservas de extranjeros cargadas antes de que existiera el descuento
+  // quedaron con el IVA adentro. Se les descuenta una vez y quedan marcadas,
+  // así que ejecutar setup() de nuevo no las vuelve a tocar.
+  var netas = descontarIvaPendiente_();
+  if (netas) Logger.log('A ' + plural_(netas, 'reserva', 'reservas') +
+    ' de turistas extranjeros se les descontó el IVA que tenían pendiente.');
+
   return ss.getUrl();
 }
 
@@ -869,7 +880,10 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
       addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
       notas: r.notas || '', grupo: String(r.grupo || ''),
       pax: Number(r.pax) || 1, ninos: Number(r.ninos) || 0,
-      extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0
+      extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
+      // Si al total ya se le descontó el IVA. La pantalla no puede
+      // deducirlo del número: $45.000 puede ser con o sin impuesto.
+      sinIva: !!r.sinIva
     });
   });
 
@@ -1407,6 +1421,20 @@ function asegurarPlan_(idReserva) {
   return plan.length;
 }
 
+/* Les descuenta el IVA a las reservas de turistas extranjeros que todavía lo
+   llevan incluido: las que se cargaron antes de que el sistema hiciera ese
+   descuento. La columna 'sinIva' es la que evita repetirlo. */
+function descontarIvaPendiente_() {
+  var hechas = 0;
+  leer_('Reservas').forEach(function (r) {
+    if (!r.exentoIva || r.sinIva) return;
+    if (r.estado === 'cancelada') return;
+    convertirAlojamiento_(r.id, true);
+    hechas++;
+  });
+  return hechas;
+}
+
 /* Le devuelve sus noches a las reservas que quedaron sin plan. Lo llama
    setup(), así que se arregla solo la próxima vez que alguien lo ejecute.
    Es idempotente: una reserva que ya tiene noches no se toca. */
@@ -1914,16 +1942,12 @@ function marcarExentoIva(token, idReserva, exento, docTurismo) {
   });
 
   // Y el alojamiento cambia de precio, no solo de etiqueta: las tarifas de la
-  // casa llevan IVA incluido, así que al exento le corresponde el neto. Solo
-  // se convierte cuando la marca DE VERDAD cambia, o dividir dos veces
-  // seguidas dejaría el precio por el suelo.
-  if (!!r.exentoIva !== !!exento) {
-    var total = convertirAlojamiento_(idReserva, !!exento);
-    logCambio_(u.nombre, 'iva_exento', idReserva + ' · ' + (exento ? 'sí' : 'no') +
-      ' · alojamiento ' + (exento ? 'sin' : 'con') + ' IVA: ' + total);
-    return true;
-  }
-  logCambio_(u.nombre, 'iva_exento', idReserva + ' · ' + (exento ? 'sí' : 'no'));
+  // casa llevan IVA incluido, así que al exento le corresponde el neto.
+  // convertirAlojamiento_ se fija en la columna 'sinIva', así que llamarlo de
+  // más no hace nada: no descuenta dos veces ni devuelve lo que no sacó.
+  var total = convertirAlojamiento_(idReserva, !!exento);
+  logCambio_(u.nombre, 'iva_exento', idReserva + ' · ' + (exento ? 'sí' : 'no') +
+    ' · alojamiento ' + (exento ? 'sin' : 'con') + ' IVA: ' + total);
   return true;
 }
 
@@ -1931,11 +1955,20 @@ function marcarExentoIva(token, idReserva, exento, docTurismo) {
    noches del plan y los cargos de alojamiento que ya estuvieran anotados.
    Devuelve el total que quedó. */
 function convertirAlojamiento_(idReserva, aNeto) {
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) return 0;
+  // El seguro contra descontar el IVA dos veces —o devolverlo sin haberlo
+  // sacado—: si el alojamiento ya está como se pide, no se toca.
+  if (!!r.sinIva === !!aNeto) return Math.round(Number(r.total) || 0);
+
   var nuevos = {};
   planDe_(idReserva).forEach(function (n) {
     nuevos[n.fecha] = aNeto ? netoDe_(n.valor) : brutoDe_(n.valor);
   });
-  if (!Object.keys(nuevos).length) return 0;
+  if (!Object.keys(nuevos).length) {
+    actualizar_('Reservas', 'id', idReserva, { sinIva: !!aNeto });
+    return Math.round(Number(r.total) || 0);
+  }
 
   actualizarVarias_('Noches', function (n) {
     if (String(n.idReserva) !== String(idReserva)) return null;
@@ -1952,7 +1985,7 @@ function convertirAlojamiento_(idReserva, aNeto) {
   });
 
   var total = totalDelPlan_(idReserva);
-  actualizar_('Reservas', 'id', idReserva, { total: total });
+  actualizar_('Reservas', 'id', idReserva, { total: total, sinIva: !!aNeto });
   return total;
 }
 
@@ -2887,10 +2920,15 @@ function guardarDocumento_(idReserva, d, quien) {
   }
 
   var ext = mime === 'application/pdf' ? 'pdf' : (mime.split('/')[1] || 'jpg');
-  var nombre = tipo + '-' + limpiarNombre_(r.huesped) + '-' + ahora_().replace(/[: ]/g, '-') + '.' + ext;
+  // El nombre lleva la fecha de LLEGADA, no la del día en que se subió: el
+  // documento es de esa estadía y es así como se busca después. Antes decía
+  // el día de la subida y no calzaba con la reserva.
+  var llegada = ymd_(r.checkIn) || hoy_();
+  var nombre = tipo + '-' + limpiarNombre_(r.huesped) + '-' + llegada +
+               '-' + uid_('').slice(0, 4) + '.' + ext;
 
-  // Se archiva por la fecha de llegada, igual que el comprobante.
-  var carpeta = carpetaDocs_(ymd_(r.checkIn), 'Documentos de huéspedes');
+  // Y se archiva en el mes de esa misma llegada.
+  var carpeta = carpetaDocs_(llegada, 'Documentos de huéspedes');
   var archivo = carpeta.createFile(Utilities.newBlob(bytes, mime, nombre));
 
   var fila = {

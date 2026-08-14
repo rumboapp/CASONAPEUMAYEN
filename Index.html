@@ -1315,7 +1315,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-17';
+var VERSION_ESPERADA = '2026-08-18';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
@@ -1399,11 +1399,29 @@ function ymd(d){
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
 function fmtHoy(){ return ymd(new Date()); }
-function aDate(s){ var p=s.split('-'); return new Date(+p[0], +p[1]-1, +p[2]); }
+/* Acepta "2026-08-15" y también "2026-08-15 12:33" o el ISO completo: se
+   queda con los diez primeros caracteres, que es la fecha. */
+function aDate(s){
+  var p=String(s==null?'':s).slice(0,10).split('-');
+  return new Date(+p[0], +p[1]-1, +p[2]);
+}
+function fechaValida(d){ return d instanceof Date && !isNaN(d.getTime()); }
 function mas(s,n){ var d=aDate(s); d.setDate(d.getDate()+n); return ymd(d); }
 function noches(a,b){ return Math.round((aDate(b)-aDate(a))/86400000); }
-function corto(s){ var d=aDate(s); return d.getDate()+' '+MESES[d.getMonth()].slice(0,3); }
-function largo(s){ var d=aDate(s); return DIAS[d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()].slice(0,3); }
+/* Si la fecha viene ilegible se devuelve tal cual en vez de reventar: una
+   fecha rara no puede tumbar la pantalla entera. Es lo que pasaba al listar
+   los documentos subidos —"MESES[d.getMonth()] is undefined"— y dejaba la
+   lista en blanco después de subir una foto. */
+function corto(s){
+  var d=aDate(s);
+  if(!fechaValida(d)) return String(s==null?'':s);
+  return d.getDate()+' '+MESES[d.getMonth()].slice(0,3);
+}
+function largo(s){
+  var d=aDate(s);
+  if(!fechaValida(d)) return String(s==null?'':s);
+  return DIAS[d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()].slice(0,3);
+}
 function plata(n){ return '$'+(Number(n)||0).toLocaleString('es-CL'); }
 /* "1 noche" y "2 noches", no "1 noche(s)": son textos que lee gente, no
    plantillas de formulario. */
@@ -2205,19 +2223,26 @@ function pintarExtranjero(cambioFijado){
   var cambio = Number(cambioFijado) || Number(CAL.dolar && CAL.dolar.valor) || 0;
   var iva = Number(CAL.cfg && CAL.cfg.iva) || 19;
   var total = Number($('rTot').value)||0;
-  // Las tarifas de la casa llevan IVA incluido. Al exento le corresponde el
-  // neto, así que el total BAJA al guardarlo: se avisa antes, con la cifra,
-  // para que nadie se lleve la sorpresa después.
-  var neto = RES && RES.extranjero ? total : Math.round(total/(1+iva/100));
+
+  // El total del formulario puede venir CON o SIN IVA, y por el número no hay
+  // forma de saberlo: el servidor lo dice en 'sinIva'. Adivinarlo era lo que
+  // hacía que la misma reserva mostrara una cifra al crearla y otra al
+  // abrirla. Se muestran siempre las dos: la tarifa y lo que se le cobra.
+  var yaSinIva = !!(RES && RES.sinIva);
+  var tarifa = yaSinIva ? Math.round(total*(1+iva/100)) : total;
+  var neto   = yaSinIva ? total : Math.round(total/(1+iva/100));
+
   var txt = '';
-  if(cambio && total){
-    txt = 'Se le cobra <b>'+plata(neto)+'</b> —el precio sin el IVA del '+iva+'%— '+
-          'que al cambio de $'+plataSimple(cambio)+
-          (cambioFijado ? ' fijado al reservar' : ', el de hoy, que le queda fijado')+
-          ' son <b>'+dolares(neto/cambio)+'</b>. ';
+  if(total){
+    txt = 'Tarifa <b>'+plata(tarifa)+'</b> con IVA → se le cobra <b>'+plata(neto)+'</b>'+
+          (cambio ? ', que al cambio '+
+                    (cambioFijado ? 'de $'+plataSimple(cambio)+' fijado al reservar'
+                                  : 'de hoy ($'+plataSimple(cambio)+'), que le queda fijado')+
+                    ' son <b>'+dolares(neto/cambio)+'</b>' : '')+
+          '. ';
   }
   $('rExtNota').innerHTML = txt +
-    'El alojamiento sale <b>exento de IVA</b>. Ojo: la exención solo vale si '+
+    'El alojamiento sale <b>exento del IVA del '+iva+'%</b>. Ojo: la exención solo vale si '+
     'paga en dólares — si termina pagando en pesos, corresponde IVA y la Cuenta lo avisa.';
 }
 $('rExtranjero').addEventListener('change', function(){ pintarExtranjero(RES && RES.dolar); });
@@ -4291,11 +4316,22 @@ var QR = (function(){
     m[n-8][8]=1;
   }
 
-  /* Lo dibuja como SVG: se ve nítido en pantalla y al imprimirlo. */
-  function svg(texto, lado){
+  /* Lo dibuja como SVG.
+
+     El tamaño NO es libre: cada módulo tiene que medir un número entero de
+     píxeles. Con un tamaño fijo, un código de 49 módulos en 190px dejaba
+     3,88px por módulo y, al pedirle bordes nítidos, unos salían de 3px y
+     otros de 4px. El patrón se deforma lo justo para que muchas cámaras no
+     lo lean —que es lo que estaba pasando—, aunque a la vista se vea bien.
+
+     Cinco píxeles por módulo es el mínimo cómodo para leerlo de una pantalla
+     con la cámara de un teléfono. */
+  function svg(texto, ladoDeseado){
     var m=matriz(texto);
     if(!m) return '';
     var n=m.length, borde=4, total=n+borde*2;
+    var escala=Math.max(5, Math.floor((ladoDeseado||240)/total));
+    var lado=total*escala;
     var d='';
     for(var i=0;i<n;i++) for(var j=0;j<n;j++)
       if(m[i][j]) d+='M'+(j+borde)+' '+(i+borde)+'h1v1h-1z';
@@ -4330,8 +4366,20 @@ function abrirDocumentos(r){
   // El QR necesita el enlace de la ficha; si todavía no existe, se crea.
   srv('linkFicha')(r.id).then(function(d){
     var url = d && d.url ? d.url : String(d||'');
-    $('docQr').innerHTML = QR.svg(url, 190) ||
-      '<span class="muted" style="font-size:12.5px">No se pudo generar el código.</span>';
+    var dibujo = QR.svg(url, 250);
+    // Debajo va el enlace escrito: si la cámara no coopera —pantalla con
+    // brillo, poca luz, teléfono viejo— se copia y se manda por WhatsApp.
+    $('docQr').innerHTML = (dibujo ||
+        '<span class="muted" style="font-size:12.5px">No se pudo generar el código.</span>')+
+      '<div style="margin-top:10px">'+
+        '<button class="btn gh sm" id="docCopiar">Copiar el enlace</button>'+
+        '<div class="muted" style="font-size:11px;margin-top:7px;word-break:break-all">'+
+          url+'</div></div>';
+    var b=$('docCopiar');
+    if(b) b.onclick=function(){
+      var listo = copiarTexto(url);
+      toast(listo ? 'Enlace copiado' : 'Cópialo a mano desde abajo', !listo);
+    };
   }).catch(function(){
     $('docQr').innerHTML='<span class="muted" style="font-size:12.5px">'+
       'No se pudo generar el código.</span>';

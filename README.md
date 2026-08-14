@@ -440,8 +440,17 @@ cambio del día** y el formulario muestra cuánto queda en dólares. Ese cambio
 escriben **con IVA incluido**, como se muestran en Chile. Al turista exento le
 corresponde el neto, así que una habitación de $55.000 se le cobra en $46.218
 —y son esos $46.218 los que se pasan a dólares, no los $55.000—. El formulario
-lo dice con la cifra antes de guardar, para que nadie se lleve la sorpresa
-después. Desmarcar la casilla devuelve el IVA y el precio vuelve a su valor.
+muestra siempre **las dos cifras**: *Tarifa $55.000 con IVA → se le cobra
+$46.218*. Desmarcar la casilla devuelve el IVA y el precio vuelve a su valor.
+
+Mirando un número no hay forma de saber si ya lleva el descuento: $45.000
+puede ser con o sin impuesto. Por eso cada reserva guarda **si el IVA ya se le
+descontó**. Sin ese dato la pantalla adivinaba, y adivinaba mal: la misma
+reserva mostraba una cifra al crearla y otra al abrirla. Además es lo que
+impide descontarlo dos veces, o devolverlo sin haberlo sacado.
+
+Las reservas de extranjeros cargadas antes de que existiera el descuento se
+corrigen solas la próxima vez que ejecutes `setup()`.
 
 Lo mismo en la pestaña *Alojamiento*: el precio en dólares de cada pieza va
 **sin IVA**, porque es el que se le cotiza a alguien de afuera.
@@ -491,11 +500,22 @@ huésped esperando. Ahora se pueden tener antes:
   muestra al huésped un **código QR** que le abre su ficha en su propio
   teléfono, donde sí tiene cámara.
 
-Dos cosas que hacían que el QR no sirviera y ya están arregladas: la subida
-**aparece aunque la ficha ya esté firmada** —que es el caso normal, porque el
-pasaporte se pide después de firmar— y **aparece para cualquier huésped**, no
-solo para los marcados como extranjeros; recepción escanea el QR de un walk-in
-que todavía no está marcado y antes no encontraba dónde subir nada.
+Tres cosas que hacían que el QR no sirviera y ya están arregladas:
+
+- La subida **aparece aunque la ficha ya esté firmada** — que es el caso
+  normal, porque el pasaporte se pide después de firmar.
+- **Aparece para cualquier huésped**, no solo para los marcados como
+  extranjeros: recepción escanea el QR de un walk-in que todavía no está
+  marcado y antes no encontraba dónde subir nada.
+- **El código se dibuja con módulos de tamaño entero.** Antes cada cuadradito
+  medía 3,88 píxeles y, al pedir bordes nítidos, unos salían de 3px y otros de
+  4px: el patrón se deformaba lo justo para que muchas cámaras no lo leyeran,
+  aunque a la vista se viera perfecto. Ahora cada módulo mide 5 píxeles
+  exactos. Debajo del código va el **enlace escrito y un botón para copiarlo**,
+  por si la cámara igual no coopera.
+
+El archivo se guarda con **la fecha de llegada** del huésped, no la del día en
+que se subió: es de esa estadía y es así como se busca después.
 
 La foto **se achica en el propio navegador antes de subirla**: una foto de
 celular pesa varios megas y con datos móviles no llegaría nunca. Queda en unos
