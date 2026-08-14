@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-14';
+var VERSION = '2026-08-14b';
 
 function version() { return VERSION; }
 
@@ -28,21 +28,31 @@ var HOJAS = {
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
   // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
   // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo'],
+  // 'ninos' son los menores de 6 que no pagan: no cuentan para el tope de
+  // capacidad pero sí tienen que quedar en el registro de huéspedes.
+  // 'extranjero' + 'dolar' van juntos: el tipo de cambio se fija al reservar
+  // y se respeta después, aunque el dólar se mueva.
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar'],
   // Lo que se cobra por CADA noche de una reserva. El total de la reserva es
   // la suma de estas filas, así que alargarla o acortarla recalcula el precio
   // solo, y una noche de promoción se baja sin tocar las demás.
   Noches: ['idReserva', 'fecha', 'valor', 'ajustada', 'nota'],
   // La cuenta del huésped: cargos y pagos en un solo libro, en orden.
   // Un cargo suma y un pago resta; el saldo es la diferencia.
-  Cuenta: ['id', 'idReserva', 'fecha', 'clase', 'tipo', 'centro', 'descripcion', 'cantidad', 'unitario', 'total', 'exento', 'medio', 'anulado', 'creado', 'creadoPor'],
+  // 'moneda' y 'usd' solo se llenan en los pagos: la exención de IVA a
+  // turistas extranjeros exige que el pago haya sido en moneda extranjera,
+  // así que hay que dejar constancia de en qué moneda entró cada peso.
+  Cuenta: ['id', 'idReserva', 'fecha', 'clase', 'tipo', 'centro', 'descripcion', 'cantidad', 'unitario', 'total', 'exento', 'medio', 'anulado', 'creado', 'creadoPor', 'moneda', 'usd'],
   // Un renglón por día cerrado: deja constancia de qué se posteó y quién cerró.
   Cierres: ['fecha', 'ejecutado', 'por', 'noches', 'alojamiento', 'consumos', 'pagos', 'avisos'],
   Aseo: ['idUnidad', 'estado', 'responsable', 'notas', 'actualizado'],
   Fichas: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'procedencia', 'destino', 'motivo', 'emergencia', 'firmaUrl', 'fecha'],
   // Quiénes más duermen en esa reserva. Firma solo el representante, pero el
   // registro de huéspedes tiene que nombrar a todos los que pernoctan.
-  Acompanantes: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'notas', 'creado'],
+  Acompanantes: ['id', 'idReserva', 'nombre', 'documento', 'nacionalidad', 'nacimiento', 'notas', 'creado', 'menor'],
+  // Fotos de pasaporte y tarjeta PDI. El archivo vive en Drive; acá queda
+  // solo la referencia, para no inflar la planilla con imágenes.
+  Documentos: ['id', 'idReserva', 'tipo', 'nombre', 'archivoId', 'archivoUrl', 'subidoPor', 'creado'],
   Usuarios: ['nombre', 'rol', 'pinHash', 'activo'],
   Sesiones: ['token', 'nombre', 'rol', 'expira'],
   Log: ['fecha', 'usuario', 'accion', 'detalle'],
@@ -56,6 +66,7 @@ var COLS_TEXTO = {
   Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo'],
   Noches: ['fecha'],
   Acompanantes: ['nacimiento', 'creado'],
+  Documentos: ['creado'],
   Cuenta: ['fecha', 'creado'],
   Cierres: ['fecha', 'ejecutado'],
   Fichas: ['nacimiento', 'fecha'],
@@ -442,6 +453,7 @@ function olvidarAseo_() {
    lo que uno ejecuta cuando algo quedó raro: así nada viejo sobrevive. */
 function limpiarCaches_() {
   olvidarRecursos_(); olvidarConfig_(); olvidarFirmadas_(); olvidarAseo_();
+  try { CacheService.getScriptCache().remove('dolar'); } catch (e) {}
   Object.keys(HOJAS).forEach(function (n) {
     try { CacheService.getScriptCache().remove('cab_' + n); } catch (e) {}
   });
@@ -458,6 +470,79 @@ function esAlta_(fechaYmd) {
   var ini = String(config_('temporadaAltaInicio', '12-15'));
   var fin = String(config_('temporadaAltaFin', '03-15'));
   return ini <= fin ? (mmdd >= ini && mmdd <= fin) : (mmdd >= ini || mmdd <= fin);
+}
+
+/* ===================== TIPO DE CAMBIO =====================
+   El dólar observado se busca una vez al día en mindicador.cl y queda
+   guardado. Si el servicio no contesta —o si prefieren fijarlo a mano— vale
+   lo que diga 'dolarManual' en Config, y si tampoco hay eso, el último valor
+   conocido. Nunca queda en cero: un cero convertiría cualquier precio en
+   infinito y eso sí sería un problema. */
+var DOLAR_RESPALDO = 950;
+
+function dolarHoy_() {
+  if (MEMO.__dolar) return MEMO.__dolar;
+
+  // Fijado a mano: manda por sobre todo lo demás.
+  var manual = Number(config_('dolarManual', 0)) || 0;
+  if (manual > 0) { MEMO.__dolar = { valor: manual, fuente: 'manual', fecha: hoy_() }; return MEMO.__dolar; }
+
+  try {
+    var g = CacheService.getScriptCache().get('dolar');
+    if (g) {
+      var d = JSON.parse(g);
+      if (d && d.fecha === hoy_() && d.valor > 0) { MEMO.__dolar = d; return d; }
+    }
+  } catch (e) {}
+
+  var valor = 0;
+  try {
+    var r = UrlFetchApp.fetch('https://mindicador.cl/api/dolar', {
+      muteHttpExceptions: true, followRedirects: true, validateHttpsCertificates: true
+    });
+    if (r.getResponseCode() === 200) {
+      var j = JSON.parse(r.getContentText());
+      if (j && j.serie && j.serie.length) valor = Number(j.serie[0].valor) || 0;
+    }
+  } catch (e) {}
+
+  var fuente = 'observado';
+  if (valor <= 0) {
+    // No se pudo consultar: se usa el último que sí sirvió.
+    valor = Number(config_('dolarUltimo', 0)) || DOLAR_RESPALDO;
+    fuente = 'último conocido';
+  } else {
+    // Se guarda para poder seguir trabajando el día que el servicio se caiga.
+    try { actualizarConfig_('dolarUltimo', valor); } catch (e) {}
+  }
+
+  var dato = { valor: Math.round(valor), fuente: fuente, fecha: hoy_() };
+  MEMO.__dolar = dato;
+  try { CacheService.getScriptCache().put('dolar', JSON.stringify(dato), 21600); } catch (e) {}
+  return dato;
+}
+
+/* Escribe una clave de Config sin pasar por guardarConfiguracion(), que exige
+   sesión de administración: esto lo llama el propio sistema. */
+function actualizarConfig_(clave, valor) {
+  var hay = leer_('Config').filter(function (c) { return c.clave === clave; })[0];
+  if (hay) actualizar_('Config', 'clave', clave, { valor: valor });
+  else insertar_('Config', { clave: clave, valor: valor });
+  olvidarConfig_();
+}
+
+/* Los pesos de una reserva pasados a dólares, al cambio que se le fijó.
+   Si la reserva no tiene cambio propio (las viejas), se usa el de hoy. */
+function aUsd_(pesos, cambio) {
+  var c = Number(cambio) || dolarHoy_().valor;
+  if (!(c > 0)) return 0;
+  return Math.round((Number(pesos) || 0) / c * 100) / 100;
+}
+
+/* Lo que ve la pantalla: el valor de hoy y de dónde salió. */
+function tipoDeCambio(token) {
+  sesion_(token);
+  return dolarHoy_();
 }
 
 /* ===================== SETUP ===================== */
@@ -771,7 +856,8 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
       estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
       addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
       notas: r.notas || '', grupo: String(r.grupo || ''),
-      pax: Number(r.pax) || 1
+      pax: Number(r.pax) || 1, ninos: Number(r.ninos) || 0,
+      extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0
     });
   });
 
@@ -787,6 +873,9 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
     // Reservas que existen en la planilla pero no se pueden ubicar en el
     // calendario porque su fecha quedó ilegible: se avisa en pantalla.
     ilegibles: ilegibles,
+    // El dólar del día, para cotizarle a un extranjero sin salir de la
+    // pantalla. Se busca una vez al día, así que viaja gratis.
+    dolar: dolarHoy_(),
     cfg: {
       altaIni: String(config_('temporadaAltaInicio', '12-15')),
       altaFin: String(config_('temporadaAltaFin', '03-15')),
@@ -865,12 +954,14 @@ function guardarReserva(token, datos) {
     verificarLibre_(datos.recurso, f.checkIn, f.checkOut, datos.id);
     var unidad = recursos_().filter(function (x) { return x.id === datos.recurso; })[0];
 
-    // Los pax no pueden pasarse de lo que cabe en el alojamiento.
+    // Los pax no pueden pasarse de lo que cabe en el alojamiento. Los menores
+    // de 6 no pagan y no ocupan cupo, así que van aparte y sin tope.
     var tope = unidad ? (Number(unidad.capacidad) || 1) : 1;
     var pax = Math.min(Math.max(Number(datos.pax) || 1, 1), tope);
+    var ninos = Math.max(Number(datos.ninos) || 0, 0);
 
     var campos = {
-      pax: pax,
+      pax: pax, ninos: ninos,
       recurso: datos.recurso, idUnidad: unidad ? unidad.idUnidad : '',
       huesped: datos.huesped, telefono: datos.telefono || '', email: datos.email || '',
       canal: datos.canal || 'whatsapp',
@@ -879,6 +970,20 @@ function guardarReserva(token, datos) {
       addon: !!datos.addon, addonFecha: datos.addonFecha || '', notas: datos.notas || ''
     };
     if (datos.grupo !== undefined) campos.grupo = datos.grupo || '';
+
+    // Huésped extranjero: se le fija el tipo de cambio del día en que reserva
+    // y se le respeta después, aunque el dólar se mueva. La exención de IVA
+    // viene de la mano, pero solo vale si termina pagando en moneda
+    // extranjera: eso se comprueba al cobrar, no acá.
+    if (datos.extranjero !== undefined) {
+      campos.extranjero = !!datos.extranjero;
+      if (datos.extranjero) {
+        campos.exentoIva = true;
+        if (!datos.id) campos.dolar = dolarHoy_().valor;
+      } else {
+        campos.exentoIva = false;
+      }
+    }
 
     var pedido = (datos.total === undefined || datos.total === null || datos.total === '')
       ? null : Math.round(Number(datos.total) || 0);
@@ -1381,11 +1486,13 @@ function cuentaDe(token, idReserva) {
   var movs = movimientosDe_(idReserva);
 
   var cargos = 0, pagos = 0, neto = 0, iva = 0, exentos = 0;
+  var pagadoEnPesos = 0, pagadoEnDolares = 0;
   var porCentro = {};
   var lista = movs.map(function (m) {
     var total = Math.round(Number(m.total) || 0);
     if (m.clase === 'pago') {
       pagos += total;
+      if (String(m.moneda) === 'USD') pagadoEnDolares += total; else pagadoEnPesos += total;
     } else {
       cargos += total;
       var d = desglosarIva_(total, m.exento);
@@ -1399,6 +1506,7 @@ function cuentaDe(token, idReserva) {
       centro: m.centro || '', descripcion: m.descripcion || '',
       cantidad: Number(m.cantidad) || 1, unitario: Math.round(Number(m.unitario) || 0),
       total: total, exento: !!m.exento, medio: m.medio || '',
+      moneda: String(m.moneda || ''), usd: Number(m.usd) || 0,
       creado: String(m.creado || ''), creadoPor: m.creadoPor || ''
     };
   }).sort(function (a, b) {
@@ -1407,20 +1515,45 @@ function cuentaDe(token, idReserva) {
   });
 
   var pendiente = alojamientoPendiente_(r, movs);
+  var cambio = Number(r.dolar) || dolarHoy_().valor;
+  var saldo = cargos - pagos;
+
+  // El aviso que importa: la exención de IVA a turistas extranjeros solo vale
+  // si el pago entró en moneda extranjera. Si se marcó exento y se le cobró
+  // en pesos, hay que decirlo mientras el huésped todavía está en la casa.
+  var avisoExencion = '';
+  if (r.exentoIva && pagadoEnPesos > 0) {
+    avisoExencion = 'Está marcado como turista exento de IVA, pero hay ' +
+      plataTxt_(pagadoEnPesos) + ' cobrados en pesos. La exención exige que el ' +
+      'pago sea en moneda extranjera: o se cobra en dólares, o corresponde IVA.';
+  } else if (r.exentoIva && pagos === 0) {
+    avisoExencion = 'Está marcado como turista exento de IVA. Para que la ' +
+      'exención valga, el pago tiene que entrar en dólares.';
+  }
+
   return {
     idReserva: idReserva, huesped: r.huesped,
     noches: noches_(ymd_(r.checkIn), ymd_(r.checkOut)),
     exentoIva: !!r.exentoIva, docTurismo: String(r.docTurismo || ''),
+    extranjero: !!r.extranjero, dolar: cambio,
+    pagadoEnPesos: pagadoEnPesos, pagadoEnDolares: pagadoEnDolares,
+    avisoExencion: avisoExencion,
     ivaPct: ivaPct_(),
     movimientos: lista,
-    cargos: cargos, pagos: pagos, saldo: cargos - pagos,
+    cargos: cargos, pagos: pagos, saldo: saldo,
+    saldoUsd: aUsd_(saldo, cambio),
     neto: neto, iva: iva, exentos: exentos,
     porCentro: porCentro,
     alojamientoAcordado: Math.round(Number(r.total) || 0),
     alojamientoPendiente: pendiente,
     // Lo que quedaría por cobrar si la estadía se completa tal como está.
-    saldoProyectado: cargos - pagos + pendiente
+    saldoProyectado: saldo + pendiente,
+    saldoProyectadoUsd: aUsd_(saldo + pendiente, cambio)
   };
+}
+
+function plataTxt_(n) {
+  return '$' + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 }
 
 function noches_(desde, hasta) {
@@ -1438,7 +1571,8 @@ function anotar_(idReserva, mov, quien) {
     unitario: Math.round(Number(mov.unitario) || 0),
     total: Math.round(Number(mov.total) || 0),
     exento: !!mov.exento, medio: mov.medio || '', anulado: false,
-    creado: ahora_(), creadoPor: quien || ''
+    creado: ahora_(), creadoPor: quien || '',
+    moneda: mov.moneda || '', usd: Number(mov.usd) || 0
   };
   insertar_('Cuenta', fila);
   return fila.id;
@@ -1459,31 +1593,58 @@ function agregarCargo(token, idReserva, d) {
     centro: d.centro || TIPOS_CARGO[tipo].centro,
     descripcion: String(d.descripcion || TIPOS_CARGO[tipo].rotulo),
     cantidad: cantidad, unitario: unitario, total: unitario * cantidad,
-    // Si el huésped está marcado como turista extranjero exento, sus cargos
-    // salen exentos salvo que se diga lo contrario.
-    exento: d.exento === undefined ? !!r.exentoIva : !!d.exento,
+    exento: d.exento === undefined ? exentoPorDefecto_(r, tipo) : !!d.exento,
     fecha: ymd_(d.fecha) || hoy_()
   }, u.nombre);
   logCambio_(u.nombre, 'cargo', idReserva + ' · ' + tipo + ' · ' + (unitario * cantidad));
   return { id: id };
 }
 
+/* Qué cargos salen exentos cuando el huésped es turista extranjero.
+   La exención del DL 825 cubre el servicio de alojamiento y lo que va
+   incluido en él; el restaurante, el bar y la tinaja se venden aparte y
+   llevan IVA. Por eso no basta con mirar al huésped: hay que mirar QUÉ se
+   le está cobrando. */
+var TIPOS_EXENTOS = { alojamiento: 1 };
+
+function exentoPorDefecto_(reserva, tipo) {
+  return !!reserva.exentoIva && !!TIPOS_EXENTOS[tipo];
+}
+
+/* Un pago puede entrar en pesos o en dólares. La distinción no es cosmética:
+   la exención de IVA a turistas extranjeros exige que el pago haya sido en
+   moneda extranjera, así que un exento pagado en pesos es un problema y el
+   sistema tiene que poder decirlo. */
 function agregarPago(token, idReserva, d) {
   var u = sesion_(token);
   var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
   if (!r) throw new Error('No se encontró la reserva.');
-  var monto = Math.round(Number(d.monto) || 0);
-  if (monto <= 0) throw new Error('El monto del pago tiene que ser mayor que cero.');
   var medio = MEDIOS_PAGO.indexOf(d.medio) > -1 ? d.medio : 'otro';
+  var moneda = String(d.moneda || 'CLP').toUpperCase() === 'USD' ? 'USD' : 'CLP';
+  var cambio = Number(r.dolar) || dolarHoy_().valor;
+
+  // En dólares se escribe el monto en USD y se convierte; en pesos, al revés.
+  var monto, usd;
+  if (moneda === 'USD') {
+    usd = Math.round((Number(d.monto) || 0) * 100) / 100;
+    if (usd <= 0) throw new Error('El monto del pago tiene que ser mayor que cero.');
+    monto = Math.round(usd * cambio);
+  } else {
+    monto = Math.round(Number(d.monto) || 0);
+    if (monto <= 0) throw new Error('El monto del pago tiene que ser mayor que cero.');
+    usd = aUsd_(monto, cambio);
+  }
 
   var id = anotar_(idReserva, {
     clase: 'pago', tipo: 'pago', centro: '',
-    descripcion: String(d.descripcion || 'Pago'),
+    descripcion: String(d.descripcion || 'Pago') +
+      (moneda === 'USD' ? ' · US$' + usd.toFixed(2) + ' a $' + cambio : ''),
     cantidad: 1, unitario: monto, total: monto, medio: medio,
+    moneda: moneda, usd: usd,
     fecha: ymd_(d.fecha) || hoy_()
   }, u.nombre);
   sincronizarAnticipo_(idReserva);
-  logCambio_(u.nombre, 'pago', idReserva + ' · ' + medio + ' · ' + monto);
+  logCambio_(u.nombre, 'pago', idReserva + ' · ' + medio + ' · ' + moneda + ' ' + monto);
   return { id: id };
 }
 
@@ -1572,18 +1733,21 @@ function cargarPrograma(token, idReserva, monto) {
   var pct = Math.min(Math.max(Number(config_('addonParteRestaurante', 50)) || 0, 0), 100);
   var parteSushi = Math.round(t * pct / 100);
   var parteTinaja = t - parteSushi;
-  var exento = !!r.exentoIva;
+  // La tinaja y el sushi se venden aparte del alojamiento, así que llevan
+  // IVA aunque el huésped sea turista extranjero.
   var fecha = ymd_(r.addonFecha) || hoy_();
 
   if (parteTinaja > 0) {
     anotar_(idReserva, { clase: 'cargo', tipo: 'tinaja', centro: 'lodge',
       descripcion: 'Programa tinaja + sushi · parte tinaja', cantidad: 1,
-      unitario: parteTinaja, total: parteTinaja, exento: exento, fecha: fecha }, u.nombre);
+      unitario: parteTinaja, total: parteTinaja,
+      exento: exentoPorDefecto_(r, 'tinaja'), fecha: fecha }, u.nombre);
   }
   if (parteSushi > 0) {
     anotar_(idReserva, { clase: 'cargo', tipo: 'sushi', centro: 'restaurante',
       descripcion: 'Programa tinaja + sushi · parte sushi', cantidad: 1,
-      unitario: parteSushi, total: parteSushi, exento: exento, fecha: fecha }, u.nombre);
+      unitario: parteSushi, total: parteSushi,
+      exento: exentoPorDefecto_(r, 'sushi'), fecha: fecha }, u.nombre);
   }
   logCambio_(u.nombre, 'programa_cargado', idReserva + ' · ' + t);
   return { total: t, tinaja: parteTinaja, sushi: parteSushi };
@@ -1592,19 +1756,25 @@ function cargarPrograma(token, idReserva, monto) {
 /* Marca de turista extranjero exento de IVA. Se acredita con el pasaporte y
    la tarjeta de turismo que entrega la PDI al entrar al país.
 
-   La exención es una condición de la PERSONA, no de cada línea: si se marca
-   a mitad de la estadía, los cargos que ya estaban anotados también quedan
-   exentos. Si no, la cuenta saldría mitad con IVA y mitad sin, que es
-   justamente lo que no se puede llevar a una boleta. */
+   Marcarlo a mitad de la estadía arrastra los cargos que ya estaban
+   anotados: si no, la cuenta saldría mitad con IVA y mitad sin, que es
+   justamente lo que no se puede llevar a una boleta. Pero solo arrastra los
+   que corresponde — el alojamiento —, porque el restaurante y el bar se
+   venden aparte y llevan IVA igual. */
 function marcarExentoIva(token, idReserva, exento, docTurismo) {
   var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
   actualizar_('Reservas', 'id', idReserva, {
-    exentoIva: !!exento, docTurismo: String(docTurismo || '')
+    exentoIva: !!exento, docTurismo: String(docTurismo || ''),
+    // Si nunca se le fijó un tipo de cambio, se le fija ahora.
+    dolar: Number(r.dolar) || (exento ? dolarHoy_().valor : 0)
   });
   movimientosDe_(idReserva).forEach(function (m) {
     if (m.clase !== 'cargo') return;
-    if (!!m.exento === !!exento) return;
-    actualizar_('Cuenta', 'id', m.id, { exento: !!exento });
+    var debeSer = !!exento && !!TIPOS_EXENTOS[m.tipo];
+    if (!!m.exento === debeSer) return;
+    actualizar_('Cuenta', 'id', m.id, { exento: debeSer });
   });
   logCambio_(u.nombre, 'iva_exento', idReserva + ' · ' + (exento ? 'sí' : 'no'));
   return true;
@@ -1729,6 +1899,20 @@ function resumenDia_(dia, reservas) {
         avisos.push({ tipo: 'sin_acompanantes', idReserva: r.id, huesped: r.huesped,
           texto: 'Faltan ' + (esperados - anotados) + ' de ' + esperados +
                  ' acompañante(s) por registrar.' });
+      }
+    }
+    // Un exento que pagó en pesos pierde la exención. Mejor saberlo mientras
+    // todavía está alojado y se puede arreglar, que al cerrar el mes.
+    if (ci <= dia && co >= dia && r.exentoIva) {
+      var enPesos = 0;
+      movimientosDe_(r.id).forEach(function (m) {
+        if (m.clase === 'pago' && String(m.moneda) !== 'USD') enPesos += Number(m.total) || 0;
+      });
+      if (enPesos > 0) {
+        avisos.push({ tipo: 'exento_en_pesos', idReserva: r.id, huesped: r.huesped,
+          monto: enPesos,
+          texto: 'Marcado exento de IVA pero pagó ' + plataTxt_(enPesos) + ' en pesos: ' +
+                 'la exención exige pago en moneda extranjera.' });
       }
     }
     if (co === dia) {
@@ -2008,6 +2192,7 @@ function armarComprobante_(idReserva) {
     if (m.clase === 'pago') pagado += Number(m.total) || 0;
   });
   var total = Math.round(Number(r.total) || 0);
+  var cambioR = Number(r.dolar) || dolarHoy_().valor;
 
   var filas = plan.map(function (n) {
     return '<tr><td>' + escapar_(n.fecha) + (n.nota ? ' · ' + escapar_(n.nota) : '') +
@@ -2025,7 +2210,8 @@ function armarComprobante_(idReserva) {
     '<tr><td>Llegada</td><td class="n">' + ymd_(r.checkIn) + ' desde las ' + entrada + '</td></tr>' +
     '<tr><td>Salida</td><td class="n">' + ymd_(r.checkOut) + ' hasta las ' + salida + '</td></tr>' +
     '<tr><td>Noches</td><td class="n">' + plan.length + '</td></tr>' +
-    '<tr><td>Personas</td><td class="n">' + (Number(r.pax) || 1) + '</td></tr>' +
+    '<tr><td>Personas</td><td class="n">' + (Number(r.pax) || 1) +
+      (Number(r.ninos) ? ' + ' + Number(r.ninos) + ' menor(es) de 6' : '') + '</td></tr>' +
     (r.addon ? '<tr><td>Programa tinaja + tabla de sushi</td><td class="n">incluido</td></tr>' : '') +
     '</table>' +
     (acompanantes.length
@@ -2041,6 +2227,15 @@ function armarComprobante_(idReserva) {
               '<tr><td><b>Saldo al llegar</b></td><td class="n"><b>' +
               plata_(total - pagado) + '</b></td></tr>' : '') +
     '</table>' +
+    // A un turista extranjero el precio en pesos no le dice nada: se le
+    // muestra el equivalente al cambio que se le fijó al reservar.
+    (r.extranjero
+      ? '<p style="color:#6b7280;font-size:12.5px">Equivalente aproximado: ' +
+        'US$' + aUsd_(total, cambioR).toFixed(2) +
+        (pagado ? ' · saldo US$' + aUsd_(total - pagado, cambioR).toFixed(2) : '') +
+        ' (al cambio de $' + cambioR + ' fijado al reservar). ' +
+        'El cobro se hace en pesos chilenos salvo que se pague en dólares.</p>'
+      : '') +
     '<h2>Condiciones de la estadía</h2><ul class="reglas">' +
     reglas.map(function (x) { return '<li>' + escapar_(x) + '</li>'; }).join('') +
     '</ul>';
@@ -2096,7 +2291,8 @@ function armarCierre_(dia) {
   var rotulo = {
     sin_llegar: 'No se registró la llegada', sin_salir: 'No se marcó el check-out',
     sin_firma: 'Ficha sin firmar', sin_acompanantes: 'Faltan acompañantes por registrar',
-    saldo: 'Se fue con saldo pendiente', sucia: 'Habitación sucia'
+    saldo: 'Se fue con saldo pendiente', sucia: 'Habitación sucia',
+    exento_en_pesos: 'Exento de IVA pagado en pesos'
   };
   var cuerpo =
     '<h1>Cierre de la noche del ' + dia + '</h1>' +
@@ -2394,7 +2590,7 @@ function acompanantesDe_(idReserva) {
       return {
         id: a.id, nombre: String(a.nombre || ''), documento: String(a.documento || ''),
         nacionalidad: String(a.nacionalidad || ''), nacimiento: String(a.nacimiento || ''),
-        notas: String(a.notas || '')
+        notas: String(a.notas || ''), menor: !!a.menor
       };
     });
 }
@@ -2403,11 +2599,15 @@ function acompanantesDe(token, idReserva) {
   sesion_(token);
   var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
   if (!r) throw new Error('No se encontró la reserva.');
+  var lista = acompanantesDe_(idReserva);
+  // Los menores de 6 no ocupan cupo, así que no cuentan para lo que falta.
+  var adultos = lista.filter(function (a) { return !a.menor; }).length;
   return {
     idReserva: idReserva, huesped: r.huesped, pax: Number(r.pax) || 1,
+    ninos: Number(r.ninos) || 0,
     // El titular cuenta como una de las personas de la reserva.
-    faltan: Math.max((Number(r.pax) || 1) - 1 - acompanantesDe_(idReserva).length, 0),
-    lista: acompanantesDe_(idReserva)
+    faltan: Math.max((Number(r.pax) || 1) - 1 - adultos, 0),
+    lista: lista
   };
 }
 
@@ -2424,6 +2624,7 @@ function guardarAcompanantes_(idReserva, lista) {
         nacionalidad: String(a.nacionalidad || '').trim(),
         nacimiento: String(a.nacimiento || '').trim(),
         notas: String(a.notas || '').trim(),
+        menor: !!a.menor,
         creado: ahora_()
       };
     });
@@ -2436,8 +2637,10 @@ function guardarAcompanantes(token, idReserva, lista) {
   var u = sesion_(token);
   var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
   if (!r) throw new Error('No se encontró la reserva.');
+  // Los menores de 6 van aparte y no ocupan cupo: el tope es solo de adultos.
+  var adultos = (lista || []).filter(function (a) { return a && !a.menor; }).length;
   var tope = Math.max((Number(r.pax) || 1) - 1, 0);
-  if ((lista || []).length > tope) {
+  if (adultos > tope) {
     throw new Error('La reserva es para ' + (Number(r.pax) || 1) + ' persona(s): ' +
       'caben ' + tope + ' acompañante(s) además del titular. ' +
       'Sube el número de personas de la reserva si van más.');
@@ -2445,6 +2648,115 @@ function guardarAcompanantes(token, idReserva, lista) {
   var n = guardarAcompanantes_(idReserva, lista);
   logCambio_(u.nombre, 'acompanantes', idReserva + ' · ' + n);
   return { guardados: n };
+}
+
+/* ===================== DOCUMENTOS DEL HUÉSPED =====================
+   Foto del pasaporte y de la tarjeta de turismo PDI. Son los dos papeles que
+   acreditan la exención de IVA, y hoy se piden en el mostrador con el
+   huésped esperando. Si los sube antes desde su celular, el check-in se
+   acorta; si no los sube, no pasa nada: se piden igual al llegar.
+
+   La imagen no entra a la planilla — ahí quedaría ilegible y la inflaría —:
+   va a Drive, en la misma carpeta por año y mes que el resto, y en la
+   planilla queda solo la referencia. */
+var TIPOS_DOC = {
+  pasaporte: 'Pasaporte',
+  pdi: 'Tarjeta de turismo PDI',
+  otro: 'Otro documento'
+};
+
+/* Límite del archivo ya decodificado. Una foto de celular redimensionada
+   pesa unos 300 KB; 8 MB deja aire de sobra y frena un video subido por
+   error, que sí reventaría la ejecución. */
+var TOPE_DOC = 8 * 1024 * 1024;
+
+function guardarDocumento_(idReserva, d, quien) {
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+
+  var tipo = TIPOS_DOC[d.tipo] ? d.tipo : 'otro';
+  var datos = String(d.datos || '');
+  // Llega como data:image/jpeg;base64,AAAA… : se parte en tipo y contenido.
+  var corte = datos.indexOf(',');
+  var cabecera = corte > -1 ? datos.slice(0, corte) : '';
+  var cuerpo = corte > -1 ? datos.slice(corte + 1) : datos;
+  if (!cuerpo) throw new Error('No llegó ninguna imagen.');
+
+  var mime = (cabecera.match(/data:([^;]+)/) || [])[1] || 'image/jpeg';
+  if (!/^(image\/|application\/pdf)/.test(mime)) {
+    throw new Error('Solo se aceptan fotos o archivos PDF.');
+  }
+
+  var bytes;
+  try { bytes = Utilities.base64Decode(cuerpo); }
+  catch (e) { throw new Error('La imagen llegó dañada. Inténtalo de nuevo.'); }
+  if (bytes.length > TOPE_DOC) {
+    throw new Error('El archivo pesa demasiado. Saca la foto de nuevo o usa una más liviana.');
+  }
+
+  var ext = mime === 'application/pdf' ? 'pdf' : (mime.split('/')[1] || 'jpg');
+  var nombre = tipo + '-' + limpiarNombre_(r.huesped) + '-' + ahora_().replace(/[: ]/g, '-') + '.' + ext;
+
+  // Se archiva por la fecha de llegada, igual que el comprobante.
+  var carpeta = carpetaDocs_(ymd_(r.checkIn), 'Documentos de huéspedes');
+  var archivo = carpeta.createFile(Utilities.newBlob(bytes, mime, nombre));
+
+  var fila = {
+    id: uid_('D'), idReserva: idReserva, tipo: tipo,
+    nombre: String(d.nombre || TIPOS_DOC[tipo]),
+    archivoId: archivo.getId(), archivoUrl: archivo.getUrl(),
+    subidoPor: quien || 'el huésped', creado: ahora_()
+  };
+  insertar_('Documentos', fila);
+  olvidar_('Documentos');
+  return fila;
+}
+
+function limpiarNombre_(t) {
+  return String(t || 'huesped').replace(/[^\wáéíóúñÁÉÍÓÚÑ ]+/g, '').trim().slice(0, 40) || 'huesped';
+}
+
+function documentosDe_(idReserva) {
+  return (agrupar_('Documentos', 'idReserva')[String(idReserva)] || [])
+    .map(function (d) {
+      return {
+        id: d.id, tipo: d.tipo, rotulo: TIPOS_DOC[d.tipo] || 'Documento',
+        nombre: String(d.nombre || ''), archivoUrl: String(d.archivoUrl || ''),
+        subidoPor: String(d.subidoPor || ''), creado: String(d.creado || '')
+      };
+    });
+}
+
+/* Desde recepción, con sesión. */
+function documentosDe(token, idReserva) {
+  sesion_(token);
+  return documentosDe_(idReserva);
+}
+
+function subirDocumento(token, idReserva, d) {
+  var u = sesion_(token);
+  var fila = guardarDocumento_(idReserva, d, u.nombre);
+  logCambio_(u.nombre, 'documento', idReserva + ' · ' + fila.tipo);
+  return { id: fila.id, url: fila.archivoUrl, rotulo: TIPOS_DOC[fila.tipo] };
+}
+
+function borrarDocumento(token, id) {
+  var u = sesion_(token);
+  var d = leer_('Documentos').filter(function (x) { return x.id === id; })[0];
+  if (!d) throw new Error('No se encontró el documento.');
+  // El archivo se manda a la papelera de Drive: si fue un error, se recupera.
+  try { DriveApp.getFileById(d.archivoId).setTrashed(true); } catch (e) {}
+  borrar_('Documentos', 'id', id);
+  olvidar_('Documentos');
+  logCambio_(u.nombre, 'documento_borrado', id);
+  return true;
+}
+
+/* Desde el celular del huésped, con el token de su ficha y sin sesión. */
+function fichaPublicaSubir(t, d) {
+  var r = porTokenFicha_(t);
+  var fila = guardarDocumento_(r.id, d, 'el huésped');
+  return { id: fila.id, rotulo: TIPOS_DOC[fila.tipo] };
 }
 
 /* ===================== REGLAMENTO =====================
@@ -2519,7 +2831,10 @@ var CONFIG_EDITABLE = [
   { clave: 'addonBase', rotulo: 'Programa tinaja + sushi (baja)', tipo: 'numero', grupo: 'avanzado' },
   { clave: 'addonAlta', rotulo: 'Programa tinaja + sushi (alta)', tipo: 'numero', grupo: 'avanzado' },
   { clave: 'addonParteRestaurante', rotulo: '% del programa que va al restaurante', tipo: 'numero', grupo: 'avanzado' },
-  { clave: 'iva', rotulo: 'IVA (%)', tipo: 'numero', grupo: 'avanzado' }
+  { clave: 'iva', rotulo: 'IVA (%)', tipo: 'numero', grupo: 'avanzado' },
+  // El dólar se busca solo cada día; esto es para fijarlo a mano cuando se
+  // quiere trabajar con un valor propio. En 0 vuelve al automático.
+  { clave: 'dolarManual', rotulo: 'Dólar fijado a mano (0 = automático)', tipo: 'numero', grupo: 'avanzado' }
 ];
 
 function configuracion(token) {
@@ -2542,7 +2857,8 @@ function configuracion(token) {
                grupo: c.grupo, valor: valor };
     }),
     reglasPorDefecto: porDefecto,
-    vistaPrevia: reglamento()
+    vistaPrevia: reglamento(),
+    dolar: dolarHoy_()
   };
 }
 
@@ -2584,13 +2900,19 @@ function linkFicha(token, idReserva) {
   return { url: ScriptApp.getService().getUrl() + '?f=' + t, token: t };
 }
 
-function fichaPublicaCargar(t) {
+/* El enlace de la ficha es la única llave del huésped: no hay sesión ni
+   clave, así que la validación vive en un solo lugar. */
+function porTokenFicha_(t) {
   var r = leer_('Reservas').filter(function (x) {
     return String(x.tokenFicha) === String(t) && String(t) !== '';
   })[0];
   if (!r) throw new Error('Enlace no válido o vencido.');
   if (r.estado === 'cancelada') throw new Error('Esta reserva fue cancelada.');
+  return r;
+}
 
+function fichaPublicaCargar(t) {
+  var r = porTokenFicha_(t);
   var rec = recursos_().filter(function (x) { return x.id === r.recurso; })[0];
   var yaFirmo = !!firmadas_()[r.id];
   return {
@@ -2603,15 +2925,18 @@ function fichaPublicaCargar(t) {
     // Cuántas personas vienen: la página pide los datos del resto, para que
     // el titular los complete de una vez y no haya que perseguirlos después.
     pax: Number(r.pax) || 1,
+    ninos: Number(r.ninos) || 0,
+    // Si es turista extranjero, la página le ofrece subir pasaporte y PDI.
+    extranjero: !!r.extranjero,
+    documentos: documentosDe_(r.id).map(function (d) {
+      return { id: d.id, tipo: d.tipo, rotulo: d.rotulo, creado: d.creado };
+    }),
     acompanantes: acompanantesDe_(r.id)
   };
 }
 
 function fichaPublicaFirmar(t, d) {
-  var r = leer_('Reservas').filter(function (x) {
-    return String(x.tokenFicha) === String(t) && String(t) !== '';
-  })[0];
-  if (!r) throw new Error('Enlace no válido o vencido.');
+  var r = porTokenFicha_(t);
   guardarFicha_(r.id, d);
   return true;
 }
@@ -2624,7 +2949,8 @@ function inventarioAdmin(token) {
   var u = sesion_(token);
   exigirAdmin_(u);
   var camas = leer_('Camas');
-  return leer_('Unidades')
+  var cambio = dolarHoy_();
+  var lista = leer_('Unidades')
     .sort(function (a, b) { return Number(a.orden) - Number(b.orden); })
     .map(function (x) {
       return {
@@ -2632,17 +2958,24 @@ function inventarioAdmin(token) {
         bano: x.bano, porCama: !!x.porCama, modo: modoDe_(x),
         categoria: String(x.categoria || '') || categoriaPorDefecto_(x),
         precioBase: Number(x.precioBase) || 0, precioAlta: Number(x.precioAlta) || 0,
+        // El mismo precio visto en dólares, al cambio de hoy: es lo que hay
+        // que cotizarle a un extranjero sin sacar la calculadora.
+        usdBase: aUsd_(x.precioBase, cambio.valor),
+        usdAlta: aUsd_(x.precioAlta, cambio.valor),
         orden: Number(x.orden) || 0, activa: !!x.activa,
         camas: camas.filter(function (c) { return c.idUnidad === x.id; })
           .sort(function (a, b) { return Number(a.orden) - Number(b.orden); })
           .map(function (c) {
             return {
               id: c.id, nombre: c.nombre, precioBase: Number(c.precioBase) || 0,
-              precioAlta: Number(c.precioAlta) || 0, activa: !!c.activa
+              precioAlta: Number(c.precioAlta) || 0, activa: !!c.activa,
+              usdBase: aUsd_(c.precioBase, cambio.valor),
+              usdAlta: aUsd_(c.precioAlta, cambio.valor)
             };
           })
       };
     });
+  return { unidades: lista, dolar: cambio };
 }
 
 function exigirAdmin_(u) {
@@ -2969,10 +3302,15 @@ function llaveHuesped_(r, ficha) {
   return 'nom:' + normalizar_(r.huesped);
 }
 
-function huespedes(token, texto) {
+/* El buscador acepta además un rango de fechas: "quiénes se alojaron en
+   febrero". Una estadía entra si se cruza con el rango en aunque sea una
+   noche, no solo si empieza dentro: alguien que llegó el 28 y se fue el 3
+   estuvo en los dos meses. */
+function huespedes(token, texto, desde, hasta) {
   sesion_(token);
   var busca = normalizar_(texto);
   var digitos = soloDigitos_(texto);
+  var d = ymd_(desde), h = ymd_(hasta);
 
   var fichasPorReserva = {};
   leer_('Fichas').forEach(function (f) { fichasPorReserva[f.idReserva] = f; });
@@ -2988,6 +3326,10 @@ function huespedes(token, texto) {
   leer_('Reservas').forEach(function (r) {
     var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
     if (!ci || !co) return;
+    // Se cruzan los rangos: la estadía toca el período si empieza antes de
+    // que termine y termina después de que empieza.
+    if (d && co <= d) return;
+    if (h && ci >= h) return;
     var ficha = fichasPorReserva[r.id];
     var llave = llaveHuesped_(r, ficha);
 
@@ -3087,6 +3429,7 @@ function huesped(token, llave) {
     x.cuenta = cuentaDe(token, x.id);
     x.ficha = fichaDe(token, x.id);
     x.acompanantes = acompanantesDe_(x.id);
+    x.documentos = documentosDe_(x.id);
   });
   return g;
 }

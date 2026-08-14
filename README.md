@@ -103,6 +103,12 @@ permiso para usar Drive y Gmail. Es normal: los documentos se guardan en tu
 Drive y los correos salen desde tu cuenta. Acepta una vez y no vuelve a
 preguntar.
 
+También va a pedir permiso para **crear carpetas en Drive** (los documentos se
+archivan por año y mes) y para **hacer consultas a internet** (el dólar del día
+sale de mindicador.cl). Es la misma pantalla de autorización de siempre, solo
+que con dos líneas más. Si prefieres no dar el permiso de internet, fija el
+dólar a mano en *Configuración* y el sistema no consulta nada.
+
 ### Si no ves el logo
 
 El logo ya no viaja dentro de la página: se pide aparte, así que si algo falla
@@ -160,6 +166,11 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
 - **Personas**: cada reserva lleva su número de pax, con el máximo puesto por
   la capacidad del alojamiento. Una matrimonial parte en 2 y no deja poner
   más; una cama individual queda en 1. Los informes suman las pax-noche.
+- **Niños menores de 6**: van en un campo aparte porque **no pagan y no
+  ocupan cupo** — una matrimonial con dos adultos y un bebé sigue siendo de 2
+  pax. Pero el registro de huéspedes tiene que nombrarlos igual, así que
+  aparecen como acompañantes marcados *menor de 6*, y la ficha se los pide al
+  huésped junto con el resto.
 - **Baño**: cada fila indica `PRIV` o `COMP` según sea privado o compartido,
   y el selector de la reserva lo repite junto a la capacidad.
 - **El estado de aseo se ve en el propio calendario**: cada fila lleva un
@@ -196,6 +207,12 @@ Al tocar a una persona se abre su historial: cada estadía con su alojamiento,
 sus fechas, sus acompañantes, **el detalle de su cuenta movimiento por
 movimiento** y un enlace para ver la ficha que firmó. Desde ahí se salta a la
 reserva en el calendario.
+
+También se puede **filtrar por fechas**: *"quiénes se alojaron entre el 1 y el
+28 de febrero"*, con atajos para **este mes** y **este año**. Una estadía cuenta
+si toca el período aunque sea una noche, no solo si empieza dentro: alguien que
+llegó el 28 de enero y se fue el 3 de febrero aparece en los dos meses, que es
+lo correcto.
 
 Las reservas canceladas y los no-show quedan en el historial —para saber que
 existieron— pero no suman noches ni estadías.
@@ -269,9 +286,11 @@ que la reserva lleva el número de personas y los datos del resto:
 - El texto que acepta dice explícitamente que firma **en su nombre y en el de
   las personas que lo acompañan**, en español y en inglés.
 
-Si van más personas de las que dice la reserva, primero hay que subir el
+Si van más **adultos** de los que dice la reserva, primero hay que subir el
 número de personas: el sistema no deja anotar más acompañantes que los que
-caben.
+caben. Los **menores de 6 no cuentan para ese tope** — van en el campo de niños
+de la reserva, no pagan ni ocupan cupo, pero igual aparecen como acompañantes
+marcados *menor de 6* para que el registro los nombre.
 
 ## Estados de una reserva
 
@@ -322,14 +341,20 @@ Cada reserva tiene su propia cuenta: un libro donde **los cargos suman y los
 pagos restan**. Se abre con el botón *Cuenta* de la reserva, o directo desde
 la pestaña *Hoy*, donde el botón muestra lo que ese huésped debe.
 
-Arriba se ve de un vistazo lo cargado, lo pagado y lo que queda por cobrar.
-Ese número incluye **el alojamiento que todavía no se ha anotado**: si no,
-una estadía que recién empieza parecería no deber nada.
+La pantalla está ordenada en el orden en que uno la usa: **primero cuánto
+debe**, que es a lo que se abre; después el detalle de lo cargado y lo pagado;
+después lo que falta por cargar; después las dos cosas que uno viene a hacer
+—anotar un consumo o cobrar—; y al final lo tributario, que se toca una vez y
+no se vuelve a mirar.
+
+El número de arriba incluye **el alojamiento que todavía no se ha anotado**: si
+no, una estadía que recién empieza parecería no deber nada.
 
 - **El alojamiento lo anota el cierre de día**, noche por noche, cada una por
-  lo que vale (ver *El precio se arma noche a noche*). Si prefieres dejar la
-  cuenta lista al hacer el check-in, el botón *Postear el alojamiento* las
-  anota todas de una vez.
+  lo que vale (ver *El precio se arma noche a noche*). Si alguien paga la
+  estadía completa al llegar y quieres dejar la cuenta lista de entrada, el
+  botón **Cargar las noches que faltan** las anota todas de una vez. No es
+  obligatorio: si no lo aprietas, se van cargando solas cada madrugada.
 - **Lo demás se agrega cuando ocurre**: una cena, el bar, lavandería, un daño.
   Hay botones rápidos para lo más común.
 - **Cada cargo sabe a qué centro de ingreso pertenece**, el lodge o el
@@ -344,21 +369,75 @@ una estadía que recién empieza parecería no deber nada.
 - **Nada se borra.** Un movimiento equivocado se *anula*: deja de sumar pero
   queda en la planilla como rastro de lo que pasó.
 
-### Turistas extranjeros y el IVA
+### Turistas extranjeros, el dólar y el IVA
 
 Los servicios de hotelería a turistas extranjeros sin domicilio ni residencia
-en Chile van **exentos del 19%**, cuando el ingreso se percibe en moneda
-extranjera y la empresa está registrada ante el SII; se documenta con factura
-de exportación y la calidad de turista se acredita con el pasaporte y la
-tarjeta de turismo que entrega la PDI al entrar al país. Ojo: el SII aclaró
-que **no se le puede exigir al huésped que pague en dólares**.
+en Chile van **exentos del 19%**. La exención tiene tres condiciones que van
+juntas, y el sistema está armado alrededor de eso:
 
-En la cuenta hay una marca *Turista extranjero — exento de IVA* y un campo
-para el número de la tarjeta de turismo. Al marcarla, **toda la cuenta queda
-sin IVA, también lo que ya estaba anotado**: la exención es una condición de
-la persona, no de cada línea, y una cuenta mitad con IVA y mitad sin no se
-puede llevar a una boleta. Si se marcó por error, se desmarca y vuelve todo
-atrás.
+1. Que sea **turista extranjero sin residencia**.
+2. Que se acredite con **pasaporte y la tarjeta de turismo de la PDI**.
+3. Que **el pago entre en moneda extranjera**.
+
+**La tercera es la que se olvida.** Marcar a alguien como exento y cobrarle en
+pesos no da la exención: da una diferencia de IVA que aparece en una
+fiscalización. Por eso el sistema no se limita a la marca — registra en qué
+moneda entró cada peso.
+
+**Al hacer la reserva** hay una casilla *Turista extranjero*. Al marcarla pasan
+tres cosas de una vez: queda exenta de IVA, se le **fija el tipo de cambio del
+día** y el formulario muestra cuánto es en dólares. Ese cambio **se le respeta
+después**, aunque el dólar se mueva: si cotizaste en dólares, ese es el precio.
+
+**Al cobrar**, el pago se registra en pesos o en dólares. Si eligen dólares se
+escribe el monto en US$ y el sistema lo convierte al cambio de esa reserva,
+dejando las dos cifras anotadas.
+
+**Si algo no calza, se dice.** Un huésped marcado exento con pagos en pesos
+sale con un aviso en su cuenta *y* en el cierre de esa noche, mientras todavía
+está alojado y se puede arreglar — no a fin de mes.
+
+**Qué cubre la exención.** El **alojamiento** y lo que va incluido en él. El
+restaurante, el bar y la tinaja se venden aparte y llevan IVA aunque el
+huésped sea extranjero. Marcar a alguien a mitad de la estadía arrastra el
+alojamiento que ya estaba anotado —si no, la cuenta saldría mitad con IVA y
+mitad sin— pero no toca sus consumos. Si se marcó por error, se desmarca y
+vuelve todo atrás.
+
+> Esto es cómo está programado, no una asesoría tributaria. Confirmen el
+> criterio con su contador; si deciden otra cosa, se cambia.
+
+**De dónde sale el dólar.** Se consulta solo una vez al día a mindicador.cl
+(el dólar observado). Si el servicio no contesta, se sigue trabajando con el
+último valor que sí llegó, y la pantalla dice cuál de los dos está usando. En
+*Configuración → ajustes que casi nunca se tocan* hay un campo para **fijarlo a
+mano**; en 0 vuelve al automático.
+
+En **Alojamiento**, cada precio se muestra también en dólares al cambio de hoy,
+para cotizarle a alguien de afuera sin sacar la calculadora.
+
+### Pasaporte y tarjeta PDI
+
+Los dos papeles que acreditan la exención se piden en el mostrador con el
+huésped esperando. Ahora se pueden tener antes:
+
+- **El huésped los sube desde su celular.** Si la reserva está marcada como
+  extranjera, su ficha muestra dos botones grandes de *Cargar aquí*, uno para
+  el pasaporte y otro para la tarjeta PDI. En un teléfono abren la cámara
+  directamente. **Es opcional a propósito**, y la propia página se lo dice: si
+  no lo hace, se le piden igual al llegar.
+- **Recepción los sube en un walk-in.** En la reserva, *Más ▾ → Pasaporte y
+  tarjeta PDI*: se arrastra el archivo, se elige del computador, o se le
+  muestra al huésped un **código QR** que le abre su ficha en su propio
+  teléfono, donde sí tiene cámara.
+
+La foto **se achica en el propio navegador antes de subirla**: una foto de
+celular pesa varios megas y con datos móviles no llegaría nunca. Queda en unos
+300 KB, que es más que suficiente para leer un pasaporte.
+
+Los archivos se guardan en Drive, en `AAAA / MM mes / Documentos de huéspedes`,
+y en la planilla queda solo la referencia. Borrar uno lo manda a la papelera de
+Drive, no lo destruye.
 
 ## Cierre de día
 
@@ -372,7 +451,9 @@ los números cuadren. En la pestaña **Cierre** eliges la noche y aprietas
    IVA.
 4. Lista **lo que hay que revisar antes de irse a dormir**: quién llegaba y no
    se registró, quién salía y no se marcó el check-out, quién está alojado sin
-   firmar la ficha, quién se fue con saldo y qué habitaciones quedaron sucias.
+   firmar la ficha, quién se fue con saldo, qué habitaciones quedaron sucias y
+   **quién está marcado exento de IVA pero pagó en pesos** — el único de la
+   lista que cuesta plata si se descubre tarde.
 
 Se puede ejecutar **más de una vez sin miedo**: no cobra dos veces la misma
 noche. Y a propósito **no cambia el estado de nadie**: el check-in y los
@@ -471,7 +552,12 @@ Detrás de *Ajustes que casi nunca se tocan* quedan los datos que el sistema usa
 por dentro y que casi nunca hay que mover: el correo al que llega el cierre de
 cada noche, las horas de check-in y check-out (aparecen en la pantalla de aseo y
 en el comprobante), las fechas de temporada alta, el precio del programa tinaja
-+ sushi, el porcentaje que va al restaurante y el IVA.
++ sushi, el porcentaje que va al restaurante, el IVA y el **dólar fijado a
+mano** (en 0 se busca solo cada día).
+
+Ahí mismo está también **Probar la generación de documentos**, que dice en qué
+paso falla un PDF: el permiso de Drive, la conversión, el logo o el correo. Casi
+nunca se usa, pero el día que Drive se cae es lo único que responde *por qué*.
 
 ## Documentos en PDF
 
@@ -602,12 +688,18 @@ Cada alojamiento tiene un modo de venta:
   razón salen rayadas en gris, y al pasar el mouse dicen quién tomó el
   espacio.
 
-Esto se cambia cuando quieras desde *Alojamiento → Editar*. Si hoy prefieres
-vender las habitaciones 5 a 8 completas, ponlas en **solo la habitación
-completa** y dales un precio; las camas quedan guardadas y el día que quieras
-volver a venderlas por cama —o las dos cosas— basta cambiar el modo. Para
-vender una pieza completa hay que ponerle precio: el sistema no deja
-guardarla sin él.
+Hoy **todas se venden como habitación completa**. Por eso la pestaña
+*Alojamiento* **no muestra ninguna cama**: aparecen solo cuando esa pieza está
+en modo por cama. Antes se listaban igual, archivadas y en gris, y no eran más
+que ruido debajo de cada habitación.
+
+Cambiarlo es un botón: **Vender por cama** en la habitación que quieras. Sus
+camas se reactivan solas —siguen guardadas con sus precios, nunca se borraron—
+y pasan a ser filas del calendario. **Vender entera** las vuelve a archivar.
+Para el detalle fino (los dos modos a la vez) está *Editar*. Para vender una
+pieza completa hay que ponerle precio: el sistema no deja guardarla sin él.
+
+Cada precio se muestra además **en dólares**, al cambio del día.
 
 ### Categorías, y cómo publicar la oferta en un canal
 
@@ -711,10 +803,10 @@ pasa de la décima de segundo con tres años de historia.
 
 ## Reglas del modelo
 
-- **Una reserva ocupa un recurso.** Las habitaciones 1 a 4 y las carpas se
-  reservan completas; las habitaciones 5 a 8 se reservan por cama, así que
-  cada cama es una fila propia en el calendario. Si un grupo toma dos
-  habitaciones, se cargan dos reservas.
+- **Una reserva ocupa un recurso.** Hoy todas las habitaciones y las carpas se
+  reservan completas, así que cada una es una fila del calendario. Si una pieza
+  se pone a venderse por cama, cada cama pasa a ser su propia fila. Si un grupo
+  toma dos habitaciones, se cargan dos reservas.
 - **El día de check-out queda libre** para quien llega ese mismo día, como en
   cualquier hotel.
 - **No se pueden pisar dos reservas.** Se valida en el navegador y otra vez en
@@ -722,6 +814,13 @@ pasa de la décima de segundo con tres años de historia.
 - **Las fechas se guardan como texto** `AAAA-MM-DD` para que Sheets no las
   convierta a fecha con hora y zona horaria (eso rompía la detección de choques
   en la versión anterior).
+- **Las columnas nuevas siempre se agregan al final.** Si se insertan en medio,
+  las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles. Por
+  eso `setup()` se puede ejecutar sobre una planilla vieja sin miedo.
+- **El código QR se genera dentro de la propia página**, sin pedirle nada a
+  ningún servicio de afuera — la misma razón por la que el logo viaja
+  incrustado. Hay una prueba que lo codifica y lo vuelve a decodificar, para
+  que no se publique nunca un código que un teléfono no pueda leer.
 
 ## Roles
 
@@ -737,7 +836,11 @@ editor la función `crearUsuario("nombre", "pin", "admin")`.
 ## Lo que todavía no hace
 
 - **No emite la boleta ni la factura de exportación.** Lleva la cuenta con su
-  neto y su IVA, y marca lo exento, pero el documento se emite fuera.
+  neto y su IVA, marca lo exento y avisa cuando la exención no se sostiene,
+  pero el documento se emite fuera.
+- **No cobra en dólares por sí solo.** Registra que el pago entró en dólares y
+  lo convierte, pero recibir la plata sigue siendo cosa tuya: efectivo,
+  transferencia o el terminal de tarjeta.
 - **No importa reservas desde Booking ni Airbnb.** Es lo siguiente: la vía
   realista es leer los correos de reserva de Booking desde el mismo Apps
   Script y crear la reserva sola. La conexión de dos vías con Booking solo la

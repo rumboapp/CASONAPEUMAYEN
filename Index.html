@@ -209,6 +209,25 @@
   .ctaMov .quitar{color:var(--tx3);font-size:15px;line-height:1;padding:2px 6px;border-radius:5px}
   .ctaMov .quitar:hover{background:var(--line2);color:var(--dan)}
 
+  /* El equivalente en dólares nunca compite con el precio en pesos: es una
+     referencia, y se lee como tal. */
+  .usd{color:var(--tx3);font-variant-numeric:tabular-nums}
+  .ctaMov .cen.usd-tag{background:#e6f0e6;color:#25612b}
+
+  /* Aviso dentro de una pantalla: algo que hay que arreglar, no un error
+     que impida seguir. */
+  .aviso{background:#fdf3e3;border:1px solid #f0d9a8;color:#7a5312;
+    border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin:0 0 14px}
+
+  /* Soltar un archivo encima. En el celular no se usa —ahí se aprieta el
+     botón y se abre la cámara—, pero en el mostrador es lo más rápido. */
+  .zonaSoltar{margin-top:10px;padding:16px;text-align:center;font-size:12.5px;
+    color:var(--tx3);border:1.5px dashed var(--line);border-radius:8px}
+  .zonaSoltar.encima{border-color:var(--ac);background:var(--line2);color:var(--tx2)}
+  .docFila{display:flex;align-items:center;gap:9px;padding:8px 10px;font-size:13px;
+    border:1px solid var(--line);border-radius:8px;margin-bottom:7px}
+  .docFila .quien{color:var(--tx3);font-size:11.5px}
+
   .ctaCaja{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:14px}
   .ctaTit{font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:9px}
   .ctaForm{display:flex;gap:7px;flex-wrap:wrap}
@@ -510,6 +529,17 @@
           <button class="btn sm" id="genBuscar">Buscar</button>
           <span class="muted" id="genCuenta" style="font-size:12.5px"></span>
         </div>
+        <!-- Filtro por fechas: "quiénes se alojaron en febrero". Cuenta una
+             estadía si toca el período, aunque haya empezado antes. -->
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+          <span class="muted" style="font-size:12.5px">Se alojaron entre</span>
+          <input id="genDesde" type="date" style="flex:0 1 155px">
+          <span class="muted" style="font-size:12.5px">y</span>
+          <input id="genHasta" type="date" style="flex:0 1 155px">
+          <button class="btn gh sm" id="genMes">Este mes</button>
+          <button class="btn gh sm" id="genAnio">Este año</button>
+          <button class="btn gh sm hide" id="genLimpiar">Quitar el filtro</button>
+        </div>
       </div>
       <div id="genLista"></div>
     </section>
@@ -543,10 +573,12 @@
     <section id="v-inv" class="hide">
       <div class="card">
         <h2>Alojamientos</h2>
-        <p class="muted" style="font-size:13px;margin-bottom:12px">
+        <p class="muted" style="font-size:13px;margin-bottom:6px">
           Al agregar un alojamiento aparece de inmediato como fila nueva en el calendario.
-          Si se vende por camas separadas, agrégale las camas y cada una tendrá su propia fila.
+          Hoy todas se venden como habitación completa; con <b>Vender por cama</b> una pieza
+          pasa a tener una fila por cama, y se puede volver atrás cuando quieras.
         </p>
+        <p class="muted hide" id="invDolar" style="font-size:12.5px;margin-bottom:12px"></p>
         <div id="invLista"></div>
         <button class="btn sm" id="invNueva" style="margin-top:14px">Agregar alojamiento</button>
       </div>
@@ -578,17 +610,21 @@
             text-decoration:underline">Ajustes que casi nunca se tocan</button>
         </div>
         <div id="cfgAvanzados" class="hide" style="margin-top:16px;padding-top:14px;
-             border-top:1px solid var(--line)"></div>
+             border-top:1px solid var(--line)">
+          <div id="cfgAvCampos"></div>
+          <!-- El diagnóstico casi nunca se usa, pero es lo único que dice POR QUÉ
+               falló un PDF. Queda a mano sin estorbar el resto del tiempo. -->
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+            <div class="ctaTit">Si un documento no se genera</div>
+            <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+              Dice en qué paso falla: el permiso de Drive, la conversión a PDF, el logo
+              o el correo.
+            </p>
+            <button class="btn gh sm" id="docProbar">Probar la generación de documentos</button>
+            <div id="docCuerpo" style="margin-top:12px"></div>
+          </div>
+        </div>
         <div class="err hide" id="cfgErr"></div>
-      </div>
-      <div class="card">
-        <h2>Revisar los documentos</h2>
-        <p class="muted" style="font-size:13px;margin-bottom:12px">
-          Si el comprobante o el cierre no se generan, esto dice exactamente en qué paso
-          falla: el permiso de Drive, la conversión a PDF, el logo o el correo.
-        </p>
-        <button class="btn gh sm" id="docProbar">Probar la generación de documentos</button>
-        <div id="docCuerpo" style="margin-top:12px"></div>
       </div>
       <div class="card">
         <h2>Cómo se verán las normas</h2>
@@ -682,6 +718,18 @@
           <input id="rPax" type="number" min="1" value="1">
         </div>
         <div class="fld">
+          <label>Niños <span class="muted">· menores de 6, no pagan</span></label>
+          <input id="rNinos" type="number" min="0" value="0">
+        </div>
+      </div>
+      <!-- Turista extranjero: fija el cambio del día y deja el alojamiento
+           exento de IVA. Los dos van juntos porque la ley los amarra. -->
+      <div class="fld">
+        <label class="chk"><input type="checkbox" id="rExtranjero"> Turista extranjero (paga en dólares, alojamiento exento de IVA)</label>
+        <div class="muted hide" id="rExtNota" style="font-size:11.5px;margin-top:6px"></div>
+      </div>
+      <div class="g2">
+        <div class="fld">
           <label>Total ($)</label>
           <input id="rTot" type="number" min="0" step="1000">
           <div style="font-size:11.5px;margin-top:5px">
@@ -690,12 +738,12 @@
               style="color:var(--ac);text-decoration:underline;margin-left:6px">Ver noche por noche</button>
           </div>
         </div>
-      </div>
-      <div class="fld">
-        <label>Abonado ($)</label>
-        <input id="rAnt" type="number" min="0" step="1000" value="0">
-        <div class="muted hide" id="rAntNota" style="font-size:11.5px;margin-top:5px">
-          Los pagos se llevan en la <b>Cuenta</b> del huésped; acá solo se muestra el total pagado.
+        <div class="fld">
+          <label>Abonado ($)</label>
+          <input id="rAnt" type="number" min="0" step="1000" value="0">
+          <div class="muted hide" id="rAntNota" style="font-size:11.5px;margin-top:5px">
+            Los pagos se llevan en la <b>Cuenta</b>; acá solo se muestra el total pagado.
+          </div>
         </div>
       </div>
       <div class="fld hide" id="rAddonBox">
@@ -715,6 +763,7 @@
           <button class="btn gh sm" id="rMasBtn" type="button">Más ▾</button>
           <div class="menu-lista hide" id="rMasLista">
             <button class="hide" id="rAcom">Acompañantes</button>
+            <button class="hide" id="rDocs">Pasaporte y tarjeta PDI</button>
             <button class="hide" id="rVerFicha">Ver ficha firmada</button>
             <button class="hide" id="rEnviar">Copiar enlace de la ficha</button>
             <button class="hide" id="rFicha">Firmar aquí</button>
@@ -787,6 +836,53 @@
   </div>
 </div>
 
+<!-- ==================== DOCUMENTOS DEL HUÉSPED ====================
+     Pasaporte y tarjeta PDI. Los sube el huésped desde su celular, o
+     recepción en un walk-in: escanea el QR y sigue en su propio teléfono. -->
+<div class="ov hide" id="mDoc">
+  <div class="mo" style="max-width:520px">
+    <header><h3 id="docTit">Pasaporte y tarjeta PDI</h3><button class="x" data-cerrar="mDoc">×</button></header>
+    <div class="body">
+      <p class="muted" style="font-size:12.5px;margin-bottom:12px">
+        Son los dos papeles que acreditan la exención de IVA a turistas extranjeros.
+        Se pueden subir acá, o el huésped los sube solo desde su celular con el
+        enlace de su ficha.
+      </p>
+
+      <div id="docLista" style="margin-bottom:14px"></div>
+
+      <div class="ctaCaja" style="margin-top:0">
+        <div class="ctaTit">Subir desde este equipo</div>
+        <div class="ctaForm">
+          <select id="docTipo">
+            <option value="pasaporte">Pasaporte</option>
+            <option value="pdi">Tarjeta de turismo PDI</option>
+            <option value="otro">Otro documento</option>
+          </select>
+          <button class="btn sm" id="docElegir">Elegir foto o PDF</button>
+        </div>
+        <input type="file" id="docArchivo" accept="image/*,application/pdf" class="hide">
+        <div id="docZona" class="zonaSoltar">o arrastra el archivo hasta acá</div>
+      </div>
+
+      <div class="ctaCaja">
+        <div class="ctaTit">Que lo haga con su celular</div>
+        <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+          El huésped escanea este código con la cámara, se le abre su ficha y desde
+          ahí saca la foto. Sirve igual para un walk-in: lo escaneas tú.
+        </p>
+        <div id="docQr" style="text-align:center"></div>
+      </div>
+
+      <div class="err hide" id="docErr"></div>
+    </div>
+    <footer>
+      <div class="left"><span class="muted" id="docCuenta"></span></div>
+      <button class="btn gh" data-cerrar="mDoc">Cerrar</button>
+    </footer>
+  </div>
+</div>
+
 <!-- ==================== ACOMPAÑANTES ==================== -->
 <div class="ov hide" id="mAcom">
   <div class="mo" style="max-width:520px">
@@ -813,37 +909,43 @@
   <div class="mo ancho">
     <header><h3 id="ctaTit">Cuenta</h3><button class="x" data-cerrar="mCta">×</button></header>
     <div class="body">
+      <!-- 1. Cuánto debe. Es lo primero que uno mira. -->
       <div class="ctaResumen" id="ctaResumen"></div>
+      <div class="aviso hide" id="ctaAviso"></div>
 
-      <label class="chk" style="margin:4px 0 6px">
-        <input type="checkbox" id="ctaExento">
-        Turista extranjero sin domicilio en Chile — exento de IVA
-      </label>
-      <div class="muted" style="font-size:11.5px;margin:0 0 12px 24px">
-        Se aplica a toda la cuenta, también a lo que ya estaba anotado.
-      </div>
-      <div class="fld hide" id="ctaDocBox">
-        <label>Tarjeta de turismo (PDI)</label>
-        <input id="ctaDoc" placeholder="Número de la tarjeta que entregan al entrar al país">
-      </div>
-
+      <!-- 2. Qué se le cobró y qué pagó. -->
       <div id="ctaMovs"></div>
 
+      <!-- 3. Lo que falta por cargar, si es que falta. -->
+      <div class="ctaCaja hide" id="ctaPendBox">
+        <div class="ctaTit">Todavía por cargar</div>
+        <p class="muted" style="font-size:12.5px;margin-bottom:10px" id="ctaPendTxt"></p>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">
+          <button class="btn gh sm" id="ctaPostear">Cargar las noches que faltan</button>
+          <button class="btn gh sm" id="ctaPrograma">Cargar tinaja + sushi</button>
+        </div>
+      </div>
+
+      <!-- 4. Lo que uno viene a hacer: anotar un consumo o cobrar. -->
       <div class="ctaCaja">
-        <div class="ctaTit">Agregar un cargo</div>
+        <div class="ctaTit">Anotar un consumo</div>
         <div class="ctaRapidos" id="ctaRapidos"></div>
         <div class="ctaForm">
           <select id="ctaTipo"></select>
           <input id="ctaDesc" placeholder="Descripción">
           <input id="ctaCant" type="number" min="1" value="1" title="Cantidad">
           <input id="ctaMonto" type="number" min="0" step="500" placeholder="Monto c/u">
-          <button class="btn sm" id="ctaAgregar">Agregar</button>
+          <button class="btn sm" id="ctaAgregar">Anotar</button>
         </div>
       </div>
 
       <div class="ctaCaja">
         <div class="ctaTit">Registrar un pago</div>
         <div class="ctaForm">
+          <select id="ctaMoneda" title="Moneda del pago">
+            <option value="CLP">Pesos $</option>
+            <option value="USD">Dólares US$</option>
+          </select>
           <select id="ctaMedio">
             <option value="efectivo">Efectivo</option>
             <option value="transferencia">Transferencia</option>
@@ -855,14 +957,28 @@
           <input id="ctaPago" type="number" min="0" step="1000" placeholder="Monto">
           <button class="btn sm" id="ctaPagar">Registrar pago</button>
         </div>
+        <div class="muted hide" id="ctaPagoNota" style="font-size:11.5px;margin-top:8px"></div>
+      </div>
+
+      <!-- 5. Lo tributario: se toca una vez y no se vuelve a mirar. -->
+      <div class="ctaCaja">
+        <div class="ctaTit">Turista extranjero</div>
+        <label class="chk">
+          <input type="checkbox" id="ctaExento">
+          Sin domicilio en Chile — alojamiento exento de IVA
+        </label>
+        <div class="muted" style="font-size:11.5px;margin:6px 0 0 24px">
+          Cubre el <b>alojamiento</b>, no el restaurante ni el bar, que se venden aparte.
+          Solo vale si paga en <b>moneda extranjera</b>.
+        </div>
+        <div class="fld hide" id="ctaDocBox" style="margin-top:10px">
+          <label>Tarjeta de turismo (PDI)</label>
+          <input id="ctaDoc" placeholder="Número de la tarjeta que entregan al entrar al país">
+        </div>
       </div>
       <div class="err hide" id="ctaErr"></div>
     </div>
     <footer>
-      <div class="left">
-        <button class="btn gh sm" id="ctaPostear">Postear el alojamiento</button>
-        <button class="btn gh sm" id="ctaPrograma">Cargar tinaja + sushi</button>
-      </div>
       <button class="btn gh" data-cerrar="mCta">Cerrar</button>
     </footer>
   </div>
@@ -1093,10 +1209,10 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-14';
+var VERSION_ESPERADA = '2026-08-14b';
 
 var S = { token:null, user:null, rol:null };
-var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{} };
+var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
 var RES = null;               // reserva abierta en el modal
 var SEL = null;               // selección en curso sobre el calendario
 var RANGO = { in:null, out:null };
@@ -1138,6 +1254,9 @@ function noches(a,b){ return Math.round((aDate(b)-aDate(a))/86400000); }
 function corto(s){ var d=aDate(s); return d.getDate()+' '+MESES[d.getMonth()].slice(0,3); }
 function largo(s){ var d=aDate(s); return DIAS[d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()].slice(0,3); }
 function plata(n){ return '$'+(Number(n)||0).toLocaleString('es-CL'); }
+function plataSimple(n){ return (Number(n)||0).toLocaleString('es-CL'); }
+function dolares(n){ return 'US$'+(Number(n)||0).toLocaleString('en-US',
+  { minimumFractionDigits:2, maximumFractionDigits:2 }); }
 function finde(s){ var g=aDate(s).getDay(); return g===0||g===6; }
 
 function esAlta(f){
@@ -1403,6 +1522,7 @@ function aplicarTablero(d){
   if(d.recursosVer) CAL.recursosVer=d.recursosVer;
   CAL.reservas=d.reservas||[];
   CAL.hoy=d.hoy||fmtHoy(); CAL.cfg=d.cfg||{}; CAL.aseo=d.aseo||{};
+  if(d.dolar) CAL.dolar=d.dolar;
 
   var av=$('avisoIleg');
   if(d.ilegibles){
@@ -1887,6 +2007,31 @@ function recalcularTotal(){
 $('rRec').addEventListener('change', recalcularTotal);
 $('rAddon').addEventListener('change', function(){ $('rAddonF').classList.toggle('hide', !this.checked); });
 
+/* Turista extranjero: el precio se le cotiza en dólares al cambio de hoy y
+   ese cambio se le respeta después. La nota dice las dos cosas que hay que
+   tener claras: cuánto es en dólares, y que la exención de IVA solo vale si
+   efectivamente paga en moneda extranjera. */
+function pintarExtranjero(cambioFijado){
+  var on=$('rExtranjero').checked;
+  $('rExtNota').classList.toggle('hide', !on);
+  if(!on) return;
+  var cambio = Number(cambioFijado) || Number(CAL.dolar && CAL.dolar.valor) || 0;
+  var total = Number($('rTot').value)||0;
+  var txt = cambio
+    ? (cambioFijado
+        ? 'Cambio fijado al reservar: $'+plataSimple(cambio)+'. '
+        : 'Al cambio de hoy ($'+plataSimple(cambio)+'), que le queda fijado. ')
+      + (total ? 'Total ≈ '+dolares(total/cambio)+'. ' : '')
+    : '';
+  $('rExtNota').innerHTML = txt +
+    'El alojamiento sale <b>exento de IVA</b>. Ojo: la exención solo vale si '+
+    'paga en dólares — si termina pagando en pesos, corresponde IVA y la Cuenta lo avisa.';
+}
+$('rExtranjero').addEventListener('change', function(){ pintarExtranjero(RES && RES.dolar); });
+$('rTot').addEventListener('input', function(){
+  if($('rExtranjero').checked) pintarExtranjero(RES && RES.dolar);
+});
+
 function nuevaReserva(rec, entrada, salida){
   RES=null;
   RANGO={ in:entrada, out:salida };
@@ -1895,12 +2040,15 @@ function nuevaReserva(rec, entrada, salida){
   $('rNom').value=''; $('rTel').value=''; $('rMail').value=''; $('rCan').value='whatsapp';
   $('rEst').value='confirmada'; $('rAnt').value=0; $('rNot').value='';
   $('rPax').value='';   // lo rellena ajustarPax() según lo que quepa
+  $('rNinos').value=0;
+  $('rExtranjero').checked=false; pintarExtranjero();
   $('rAddon').checked=false; $('rAddonF').value=''; $('rAddonF').classList.add('hide');
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
   $('rBorrar').classList.add('hide');
   $('rEnviar').classList.add('hide'); $('rVerFicha').classList.add('hide');
   $('rCuenta').classList.add('hide'); $('rAcom').classList.add('hide');
+  $('rDocs').classList.add('hide');
   $('rComprobante').classList.add('hide'); $('rVerNoches').classList.add('hide');
   $('rMas').classList.add('hide'); $('rMasLista').classList.add('hide');
   $('rAnt').readOnly=false; $('rAntNota').classList.add('hide');
@@ -1924,8 +2072,11 @@ function abrirReserva(r){
   $('rVerNoches').classList.remove('hide');
   $('rTotNota').textContent='Suma de '+noches(r.checkIn,r.checkOut)+' noche(s)';
   $('rAcom').classList.remove('hide');
+  $('rDocs').classList.remove('hide');
   $('rComprobante').classList.remove('hide');
   $('rPax').value=r.pax||1; ajustarPax();
+  $('rNinos').value=r.ninos||0;
+  $('rExtranjero').checked=!!r.extranjero; pintarExtranjero(r.dolar);
   $('rNot').value=r.notas||'';
   $('rAddon').checked=!!r.addon;
   $('rAddonF').value=r.addonFecha||'';
@@ -2027,20 +2178,38 @@ function refrescarCuenta(id){
 function pintarCuenta(){
   var c=CTA; if(!c) return;
   var saldo = c.saldoProyectado;
+  // Lo primero y más grande es cuánto debe: es a lo que uno abre esta
+  // pantalla. El resto queda de apoyo.
   $('ctaResumen').innerHTML =
-    caja('Cargos', plata(c.cargos)) +
-    caja('Pagado', plata(c.pagos), 'pagado') +
     caja(saldo>0?'Por cobrar':(saldo<0?'A favor del huésped':'Saldo'),
          plata(Math.abs(saldo)), saldo>0?'debe':(saldo<0?'pagado':''),
-         c.alojamientoPendiente>0
-           ? 'incluye '+plata(c.alojamientoPendiente)+' de alojamiento por postear' : '') +
-    caja(c.exentoIva?'Exento de IVA':('IVA '+c.ivaPct+'%'),
-         c.exentoIva ? plata(c.neto) : plata(c.iva),
-         '', c.exentoIva ? 'neto, sin impuesto' : 'neto '+plata(c.neto));
+         (c.exentoIva && c.saldoProyectadoUsd
+            ? '≈ '+dolares(Math.abs(c.saldoProyectadoUsd))+' al cambio de la reserva'
+            : (c.alojamientoPendiente>0
+                 ? 'incluye '+plata(c.alojamientoPendiente)+' de noches por cargar' : ''))) +
+    caja('Cargos', plata(c.cargos)) +
+    caja('Pagado', plata(c.pagos), 'pagado',
+         c.pagadoEnDolares>0 ? plata(c.pagadoEnDolares)+' en dólares' : '') +
+    caja(c.exentoIva?'Exento (alojamiento)':('IVA '+c.ivaPct+'%'),
+         c.exentoIva ? plata(c.exentos) : plata(c.iva),
+         '', c.exentoIva ? 'y '+plata(c.iva)+' de IVA en consumos' : 'neto '+plata(c.neto));
+
+  // El aviso que de verdad importa: exento cobrado en pesos.
+  var av=$('ctaAviso');
+  av.textContent = c.avisoExencion || '';
+  av.classList.toggle('hide', !c.avisoExencion);
 
   $('ctaExento').checked = !!c.exentoIva;
   $('ctaDoc').value = c.docTurismo || '';
   $('ctaDocBox').classList.toggle('hide', !c.exentoIva);
+
+  // El monto del pago cambia de significado según la moneda.
+  var enUsd = $('ctaMoneda').value==='USD';
+  $('ctaPago').placeholder = enUsd ? 'Monto en US$' : 'Monto en $';
+  $('ctaPago').step = enUsd ? '1' : '1000';
+  $('ctaPagoNota').classList.toggle('hide', !enUsd);
+  if(enUsd) $('ctaPagoNota').textContent =
+    'Se convierte a $'+plataSimple(c.dolar)+' por dólar, el cambio fijado a esta reserva.';
 
   if(!c.movimientos.length){
     $('ctaMovs').innerHTML='<div class="empty">Todavía no hay movimientos en esta cuenta.</div>';
@@ -2049,7 +2218,8 @@ function pintarCuenta(){
           '<th class="n">Monto</th><th></th></tr></thead><tbody>';
     c.movimientos.forEach(function(m){
       var etiqueta = m.clase==='pago'
-        ? (m.descripcion||'Pago')+' <span class="cen">'+m.medio+'</span>'
+        ? (m.descripcion||'Pago')+' <span class="cen">'+m.medio+'</span>'+
+          (m.moneda==='USD' ? '<span class="cen usd-tag">US$'+m.usd+'</span>' : '')
         : m.descripcion + (m.cantidad>1 ? ' <span class="muted">×'+m.cantidad+'</span>' : '') +
           (m.centro ? '<span class="cen '+m.centro+'">'+m.centro+'</span>' : '') +
           (m.exento ? '<span class="cen">exento</span>' : '');
@@ -2069,9 +2239,19 @@ function pintarCuenta(){
     });
   }
 
-  // Los botones de arriba solo tienen sentido si queda algo que hacer.
-  $('ctaPostear').classList.toggle('hide', c.alojamientoPendiente<=0);
-  $('ctaPostear').textContent='Postear el alojamiento ('+plata(c.alojamientoPendiente)+')';
+  // "Postear" era jerga de hotel y nadie sabía qué hacía. Ahora dice qué es:
+  // las noches se van cargando solas cada madrugada, y esto las adelanta.
+  var falta = c.alojamientoPendiente>0;
+  $('ctaPendBox').classList.toggle('hide', !falta);
+  $('ctaPostear').classList.toggle('hide', !falta);
+  if(falta){
+    $('ctaPostear').textContent='Cargar las '+
+      (c.noches?'noches':'noche')+' que faltan ('+plata(c.alojamientoPendiente)+')';
+    $('ctaPendTxt').textContent=
+      'Quedan '+plata(c.alojamientoPendiente)+' de alojamiento sin cargar a la cuenta. '+
+      'El cierre de cada noche los va cargando solo; esto los carga todos ahora, '+
+      'para cuando alguien paga la estadía completa al llegar.';
+  }
 }
 
 function caja(k, v, clase, nota){
@@ -2092,13 +2272,15 @@ function caja(k, v, clase, nota){
   });
 })();
 
+$('ctaMoneda').onchange=function(){ if(CTA) pintarCuenta(); };
+
 $('ctaExento').onchange=function(){
   if(!CTA) return;
   var on=$('ctaExento').checked;
   $('ctaDocBox').classList.toggle('hide', !on);
   srv('marcarExentoIva')(CTA.idReserva, on, $('ctaDoc').value.trim())
     .then(function(){ return refrescarCuenta(CTA.idReserva); })
-    .then(function(){ toast(on?'Marcado como turista exento de IVA':'Vuelve a pagar IVA'); })
+    .then(function(){ toast(on?'Alojamiento exento de IVA':'Vuelve a pagar IVA'); })
     .catch(fallo);
 };
 $('ctaDoc').onchange=function(){
@@ -2119,7 +2301,7 @@ $('ctaAgregar').onclick=function(){
   })).then(function(){
     $('ctaDesc').value=''; $('ctaMonto').value=''; $('ctaCant').value=1;
     return refrescarCuenta(CTA.idReserva);
-  }).then(function(){ toast('Cargo agregado'); }).catch(function(e){ errCta(e.message||String(e)); });
+  }).then(function(){ toast('Consumo anotado'); }).catch(function(e){ errCta(e.message||String(e)); });
 };
 
 $('ctaPagar').onclick=function(){
@@ -2127,7 +2309,7 @@ $('ctaPagar').onclick=function(){
   var monto=Number($('ctaPago').value)||0;
   if(monto<=0){ errCta('Escribe el monto del pago.'); return; }
   ocupado('ctaPagar', srv('agregarPago')(CTA.idReserva, {
-    monto: monto, medio: $('ctaMedio').value,
+    monto: monto, medio: $('ctaMedio').value, moneda: $('ctaMoneda').value,
     descripcion: $('ctaPagoDesc').value.trim()
   })).then(function(){
     $('ctaPago').value=''; $('ctaPagoDesc').value='';
@@ -2141,7 +2323,8 @@ $('ctaPostear').onclick=function(){
   ocupado('ctaPostear', srv('postearAlojamiento')(CTA.idReserva))
     .then(function(d){
       return refrescarCuenta(CTA.idReserva).then(function(){
-        toast(d.noches ? d.noches+' noche(s) posteada(s)' : 'No quedaban noches por postear');
+        toast(d.noches ? d.noches+' noche(s) cargada(s) a la cuenta'
+                       : 'No quedaban noches por cargar');
       });
     }).catch(fallo);
 };
@@ -2414,6 +2597,7 @@ $('rGuardar').onclick=function(){
     huesped:$('rNom').value.trim(), telefono:$('rTel').value, email:$('rMail').value,
     canal:$('rCan').value,
     estado:$('rEst').value, pax:+$('rPax').value||1,
+    ninos:+$('rNinos').value||0, extranjero:$('rExtranjero').checked,
     // El total solo se manda si alguien lo escribió a mano; si no, lo arma el
     // servidor sumando las noches, y así una promoción no se pierde al guardar.
     total: TOTAL_TOCADO ? (+$('rTot').value||0) : null,
@@ -2828,7 +3012,9 @@ var GENTE = null, GENTE_RELOJ = null;
 
 function cargarHuespedes(){
   esqueleto('genLista',4);
-  srv('huespedes')($('genQ').value.trim()).then(function(d){
+  var desde=$('genDesde').value, hasta=$('genHasta').value;
+  $('genLimpiar').classList.toggle('hide', !desde && !hasta);
+  srv('huespedes')($('genQ').value.trim(), desde, hasta).then(function(d){
     GENTE=d; pintarHuespedes();
   }).catch(fallo);
 }
@@ -2842,6 +3028,27 @@ $('genQ').addEventListener('input', function(){
 $('genQ').addEventListener('keydown', function(e){
   if(e.key==='Enter'){ clearTimeout(GENTE_RELOJ); cargarHuespedes(); }
 });
+$('genDesde').addEventListener('change', cargarHuespedes);
+$('genHasta').addEventListener('change', cargarHuespedes);
+$('genLimpiar').onclick=function(){
+  $('genDesde').value=''; $('genHasta').value=''; cargarHuespedes();
+};
+// Los dos rangos que uno pide de verdad, a un clic.
+$('genMes').onclick=function(){
+  var h=CAL.hoy||fmtHoy();
+  var a=Number(h.slice(0,4)), m=Number(h.slice(5,7));
+  var dos=function(n){ return (n<10?'0':'')+n; };
+  $('genDesde').value=a+'-'+dos(m)+'-01';
+  // El hasta es el primer día del mes siguiente: el rango no incluye ese día.
+  $('genHasta').value=(m===12 ? (a+1)+'-01-01' : a+'-'+dos(m+1)+'-01');
+  cargarHuespedes();
+};
+$('genAnio').onclick=function(){
+  var a=(CAL.hoy||fmtHoy()).slice(0,4);
+  $('genDesde').value=a+'-01-01';
+  $('genHasta').value=(Number(a)+1)+'-01-01';
+  cargarHuespedes();
+};
 
 function pintarHuespedes(){
   if(!GENTE) return;
@@ -3253,30 +3460,42 @@ var UNI=null, CAMA=null;
 function cargarInventario(){
   esqueleto('invLista',4);
   pintarCategorias();
-  srv('inventarioAdmin')().then(function(lista){
-    lista = lista || [];
+  srv('inventarioAdmin')().then(function(resp){
+    // El servidor pasó a mandar {unidades, dolar}; se acepta también la
+    // lista pelada por si quedó una versión anterior publicada.
+    var lista = (resp && resp.unidades) ? resp.unidades : (resp || []);
+    var cambio = (resp && resp.dolar) ? resp.dolar : null;
     var c=$('invLista'); c.innerHTML='';
+    if(cambio){
+      $('invDolar').classList.remove('hide');
+      $('invDolar').textContent='Valores en dólares al cambio de hoy: $'+
+        plataSimple(cambio.valor)+' ('+cambio.fuente+').';
+    }
     if(!lista.length){ c.innerHTML='<div class="empty">Sin unidades.</div>'; return; }
     lista.forEach(function(u){
       var d=document.createElement('div');
       d.style.cssText='border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:10px'+
                       (u.activa?'':';opacity:.55');
-      var precio = u.porCama ? '<span class="muted">se vende por cama</span>'
-                             : plata(u.precioBase)+' / '+plata(u.precioAlta);
+      var precio = (u.modo==='camas') ? '<span class="muted">se vende por cama</span>'
+                             : plata(u.precioBase)+' / '+plata(u.precioAlta)+
+                               '<span class="usd"> · US$'+u.usdBase+' / US$'+u.usdAlta+'</span>';
       d.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
         '<b style="font-size:13.5px">'+u.nombre+'</b>'+
         '<span class="tag '+(u.activa?'confirmada':'no_show')+'">'+(u.activa?u.grupo:'archivada')+'</span>'+
         '<span class="muted" style="font-size:12px">'+u.capacidad+' pax · baño '+u.bano+' · '+precio+'</span>'+
         '<span style="margin-left:auto;display:flex;gap:6px" class="acc"></span></div>';
 
-      if(u.camas.length){
+      // Las camas solo se muestran si la pieza se vende por cama. Si no,
+      // son filas archivadas que no hacen más que estorbar.
+      if(u.modo==='camas' && u.camas.length){
         var ul=document.createElement('div');
         ul.style.cssText='margin-top:9px;padding-left:12px;border-left:2px solid var(--line2)';
         u.camas.forEach(function(cm){
           var f=document.createElement('div');
           f.style.cssText='font-size:12.5px;padding:3px 0;display:flex;gap:8px;align-items:center'+
                           (cm.activa?'':';opacity:.5');
-          f.innerHTML='<span>'+cm.nombre+'</span><span class="muted">'+plata(cm.precioBase)+' / '+plata(cm.precioAlta)+'</span>';
+          f.innerHTML='<span>'+cm.nombre+'</span><span class="muted">'+plata(cm.precioBase)+' / '+plata(cm.precioAlta)+
+                      '<span class="usd"> · US$'+cm.usdBase+' / US$'+cm.usdAlta+'</span></span>';
           if(!cm.activa) f.innerHTML+='<span class="cen">archivada</span>';
           var e=document.createElement('button');
           e.className='btn gh sm'; e.textContent='Editar'; e.style.marginLeft='auto';
@@ -3304,10 +3523,26 @@ function cargarInventario(){
       bEd.onclick=function(){ abrirUnidad(u); };
       acc.appendChild(bEd);
 
-      var bCama=document.createElement('button');
-      bCama.className='btn gh sm'; bCama.textContent='+ Cama';
-      bCama.onclick=function(){ abrirCama(u, null); };
-      acc.appendChild(bCama);
+      // Hoy todo se vende como habitación completa. El día que quieran
+      // volver a vender una pieza por cama, se cambia acá: no hay que tocar
+      // el código ni volver a cargar las camas a mano.
+      if(u.modo==='camas'){
+        var bCama=document.createElement('button');
+        bCama.className='btn gh sm'; bCama.textContent='+ Cama';
+        bCama.onclick=function(){ abrirCama(u, null); };
+        acc.appendChild(bCama);
+
+        var bEnt=document.createElement('button');
+        bEnt.className='btn gh sm'; bEnt.textContent='Vender entera';
+        bEnt.onclick=function(){ cambiarModo(u, 'entera'); };
+        acc.appendChild(bEnt);
+      } else {
+        var bPorCama=document.createElement('button');
+        bPorCama.className='btn gh sm'; bPorCama.textContent='Vender por cama';
+        bPorCama.title='Pasa esta habitación a venderse cama por cama.';
+        bPorCama.onclick=function(){ cambiarModo(u, 'camas'); };
+        acc.appendChild(bPorCama);
+      }
 
       var bAr=document.createElement('button');
       bAr.className='btn gh sm'; bAr.textContent=u.activa?'Archivar':'Reactivar';
@@ -3323,6 +3558,39 @@ function cargarInventario(){
       c.appendChild(d);
     });
   }).catch(fallo);
+}
+
+/* Cambiar cómo se vende una pieza. Pasar a camas necesita que existan camas
+   activas; si están archivadas de una etapa anterior, se avisa en vez de
+   dejar la habitación sin filas en el calendario. */
+function cambiarModo(u, modo){
+  if(modo==='camas'){
+    if(!u.camas.length){
+      alert('"'+u.nombre+'" todavía no tiene camas cargadas. Pásala a por cama y '+
+            'después agrégalas con "+ Cama".');
+    } else if(!u.camas.some(function(c){ return c.activa; })){
+      if(!confirm('"'+u.nombre+'" tiene '+u.camas.length+' cama(s), todas archivadas. '+
+                  'Se van a volver a poner en venta. ¿Seguir?')) return;
+    }
+  } else if(!confirm('"'+u.nombre+'" pasará a venderse como habitación completa. '+
+                     'Sus camas quedan archivadas, no se borran. ¿Seguir?')) return;
+
+  srv('guardarUnidad')({ id:u.id, nombre:u.nombre, grupo:u.grupo, capacidad:u.capacidad,
+      bano:u.bano, modo:modo, categoria:u.categoria,
+      precioBase:u.precioBase, precioAlta:u.precioAlta })
+    .then(function(){
+      // Al volver a vender por cama, las camas archivadas se reactivan: si
+      // no, la habitación quedaría sin ninguna fila donde reservar.
+      var pendientes = (modo==='camas')
+        ? u.camas.filter(function(c){ return !c.activa; })
+                 .map(function(c){ return srv('archivarCama')(c.id, false); })
+        : [];
+      return Promise.all(pendientes);
+    })
+    .then(function(){
+      toast(modo==='camas' ? 'Ahora se vende por cama' : 'Ahora se vende entera');
+      cargarInventario(); recargarCal();
+    }).catch(fallo);
 }
 
 function abrirUnidad(u){
@@ -3380,11 +3648,15 @@ function pintarConfiguracion(){
     CFG.campos.filter(function(c){ return c.grupo!=='avanzado'; }).map(campo).join('');
 
   var avanzados=CFG.campos.filter(function(c){ return c.grupo==='avanzado'; });
-  $('cfgAvanzados').innerHTML =
+  $('cfgAvCampos').innerHTML =
     '<p class="muted" style="font-size:12.5px;margin-bottom:12px">Estos no cambian el '+
     'texto de las normas: son datos que el sistema usa por dentro. El horario aparece '+
     'en la pantalla de aseo y en el comprobante; el correo es al que llega el cierre '+
-    'de cada noche.</p>' + avanzados.map(campo).join('');
+    'de cada noche.'+
+    (CFG.dolar ? ' El dólar de hoy es <b>$'+plataSimple(CFG.dolar.valor)+'</b> ('+
+                 CFG.dolar.fuente+'): se busca solo cada día, y solo hay que fijarlo '+
+                 'a mano si prefieren usar otro valor.' : '')+
+    '</p>' + avanzados.map(campo).join('');
 
   pintarVistaPrevia(CFG.vistaPrevia);
 }
@@ -3409,7 +3681,7 @@ function pintarVistaPrevia(g){
 $('cfgGuardar').onclick=function(){
   var cambios={};
   Array.prototype.forEach.call(
-    document.querySelectorAll('#cfgCampos [data-c], #cfgAvanzados [data-c]'), function(el){
+    document.querySelectorAll('#cfgCampos [data-c], #cfgAvCampos [data-c]'), function(el){
       cambios[el.dataset.c]=el.value;
     });
   ocupado('cfgGuardar', srv('guardarConfiguracion')(cambios)).then(function(d){
@@ -3580,6 +3852,410 @@ $('fGuardar').onclick=function(){
   }).catch(function(e){ errFicha(e.message||String(e)); });
 };
 function errFicha(m){ $('fErr').textContent=m; $('fErr').classList.remove('hide'); }
+
+/* ==================================================================
+   Código QR
+   El huésped —o el recepcionista— escanea y se le abre la ficha en su
+   propio celular, donde sí tiene cámara. El generador va incrustado
+   porque la app tiene que funcionar sin depender de ningún servicio de
+   afuera: es la misma razón por la que el logo viaja adentro.
+   Nivel de corrección L y versiones 1 a 10, que aguantan 271 caracteres.
+   Un enlace de ficha son unos 130.
+   ================================================================== */
+var QR = (function(){
+  var CAP     = [17,32,53,78,106,134,154,192,230,271];   // bytes que caben
+  var EC      = [7,10,15,20,26,18,20,24,30,18];          // codewords de corrección
+  var BLOQUES = [[1,19],[1,34],[1,55],[1,80],[1,108],
+                 [2,68],[2,78],[2,97],[2,116],[2,68,2,69]];
+  var ALIN    = [[],[6,18],[6,22],[6,26],[6,30],[6,34],
+                 [6,22,38],[6,24,42],[6,26,46],[6,28,50]];
+
+  // Aritmética del cuerpo finito que usa Reed-Solomon.
+  var EXP=[], LOG=[];
+  (function(){ var x=1;
+    for(var i=0;i<255;i++){ EXP[i]=x; LOG[x]=i; x<<=1; if(x&256) x^=285; } })();
+  function mul(a,b){ return (!a||!b) ? 0 : EXP[(LOG[a]+LOG[b])%255]; }
+
+  function generador(n){
+    var g=[1];
+    for(var i=0;i<n;i++){
+      var nuevo=g.concat([0]);
+      for(var j=0;j<g.length;j++) nuevo[j+1]^=mul(g[j], EXP[i]);
+      g=nuevo;
+    }
+    return g;
+  }
+
+  function correccion(datos, n){
+    var g=generador(n), r=datos.slice();
+    for(var i=0;i<n;i++) r.push(0);
+    for(var i=0;i<datos.length;i++){
+      var c=r[i]; if(!c) continue;
+      for(var j=0;j<g.length;j++) r[i+j]^=mul(g[j], c);
+    }
+    return r.slice(datos.length);
+  }
+
+  function bitsFormato(mascara){
+    var d=(1<<3)|mascara, v=d<<10;
+    for(var i=4;i>=0;i--) if(v & (1<<(i+10))) v^=0x537<<i;
+    return ((d<<10)|v) ^ 0x5412;
+  }
+
+  function bitsVersion(ver){
+    var v=ver<<12;
+    for(var i=5;i>=0;i--) if(v & (1<<(i+12))) v^=0x1F25<<i;
+    return (ver<<12)|v;
+  }
+
+  function utf8(s){
+    var out=[], b=unescape(encodeURIComponent(s));
+    for(var i=0;i<b.length;i++) out.push(b.charCodeAt(i));
+    return out;
+  }
+
+  var MASCARAS=[
+    function(i,j){ return (i+j)%2===0; },
+    function(i){ return i%2===0; },
+    function(i,j){ return j%3===0; },
+    function(i,j){ return (i+j)%3===0; },
+    function(i,j){ return (Math.floor(i/2)+Math.floor(j/3))%2===0; },
+    function(i,j){ return (i*j)%2 + (i*j)%3 === 0; },
+    function(i,j){ return ((i*j)%2 + (i*j)%3)%2===0; },
+    function(i,j){ return ((i+j)%2 + (i*j)%3)%2===0; }
+  ];
+
+  /* La máscara se elige por castigo: la norma puntúa lo que confunde a un
+     lector —rayas largas, cuadrados de un solo color, algo parecido a un
+     ojo de posición— y gana la que menos castigo junta. */
+  function castigo(m){
+    var n=m.length, p=0, oscuros=0, i, j, k;
+
+    for(i=0;i<n;i++){
+      for(var eje=0;eje<2;eje++){
+        var largo=1, previo=-1;
+        for(j=0;j<n;j++){
+          var v = eje ? m[j][i] : m[i][j];
+          if(v===previo) largo++;
+          else { if(largo>=5) p+=3+(largo-5); largo=1; previo=v; }
+        }
+        if(largo>=5) p+=3+(largo-5);
+      }
+    }
+
+    for(i=0;i<n-1;i++) for(j=0;j<n-1;j++){
+      var a=m[i][j];
+      if(a===m[i][j+1] && a===m[i+1][j] && a===m[i+1][j+1]) p+=3;
+    }
+
+    var patron=[1,0,1,1,1,0,1,0,0,0,0];
+    var coincide=function(get, base){
+      var ok1=true, ok2=true;
+      for(k=0;k<11;k++){
+        if(get(base+k)!==patron[k]) ok1=false;
+        if(get(base+k)!==patron[10-k]) ok2=false;
+      }
+      return ok1||ok2;
+    };
+    for(i=0;i<n;i++) for(j=0;j<=n-11;j++){
+      if(coincide(function(x){ return m[i][x]; }, j)) p+=40;
+      if(coincide(function(x){ return m[x][i]; }, j)) p+=40;
+    }
+
+    for(i=0;i<n;i++) for(j=0;j<n;j++) if(m[i][j]) oscuros++;
+    p += 10*Math.floor(Math.abs(oscuros*100/(n*n) - 50)/5);
+    return p;
+  }
+
+  /* Devuelve la matriz de módulos, o null si el texto no cabe. */
+  function matriz(texto){
+    var bytes=utf8(texto), ver=0;
+    while(ver<CAP.length-1 && CAP[ver]<bytes.length) ver++;
+    if(CAP[ver]<bytes.length) return null;
+    var version=ver+1, n=version*4+17;
+
+    var bits=[], meter=function(val, cuantos){
+      for(var i=cuantos-1;i>=0;i--) bits.push((val>>i)&1);
+    };
+    meter(4,4);                                   // modo byte
+    meter(bytes.length, version<10 ? 8 : 16);
+    bytes.forEach(function(b){ meter(b,8); });
+
+    var bl=BLOQUES[ver], totalDatos=0, g;
+    for(g=0;g<bl.length;g+=2) totalDatos += bl[g]*bl[g+1];
+
+    var tope=totalDatos*8;
+    for(var i=0;i<4 && bits.length<tope;i++) bits.push(0);
+    while(bits.length%8) bits.push(0);
+    var cw=[];
+    for(i=0;i<bits.length;i+=8){
+      var b=0; for(var j=0;j<8;j++) b=(b<<1)|bits[i+j]; cw.push(b);
+    }
+    var relleno=[0xEC,0x11], t=0;
+    while(cw.length<totalDatos) cw.push(relleno[t++%2]);
+
+    var dB=[], eB=[], pos=0;
+    for(g=0;g<bl.length;g+=2) for(var b2=0;b2<bl[g];b2++){
+      var d=cw.slice(pos, pos+bl[g+1]); pos+=bl[g+1];
+      dB.push(d); eB.push(correccion(d, EC[ver]));
+    }
+
+    // Los bloques se entrelazan: así una mancha en el papel no se come un
+    // bloque entero y la corrección alcanza a reponerlo.
+    var flujo=[], maxD=0;
+    dB.forEach(function(d){ if(d.length>maxD) maxD=d.length; });
+    for(i=0;i<maxD;i++) dB.forEach(function(d){ if(i<d.length) flujo.push(d[i]); });
+    for(i=0;i<EC[ver];i++) eB.forEach(function(e){ flujo.push(e[i]); });
+
+    var m=[], fijo=[];
+    for(i=0;i<n;i++){ m.push([]); fijo.push([]);
+      for(j=0;j<n;j++){ m[i].push(0); fijo[i].push(false); } }
+    var poner=function(r,c,v){
+      if(r<0||r>=n||c<0||c>=n) return;
+      m[r][c]=v; fijo[r][c]=true;
+    };
+
+    var ojo=function(fr,fc){
+      for(var r=-1;r<=7;r++) for(var c=-1;c<=7;c++){
+        var negro = (r>=0&&r<=6&&(c===0||c===6)) || (c>=0&&c<=6&&(r===0||r===6)) ||
+                    (r>=2&&r<=4&&c>=2&&c<=4);
+        poner(fr+r, fc+c, negro?1:0);
+      }
+    };
+    ojo(0,0); ojo(0,n-7); ojo(n-7,0);
+
+    for(i=8;i<n-8;i++){ poner(6,i, i%2===0?1:0); poner(i,6, i%2===0?1:0); }
+
+    var al=ALIN[ver];
+    al.forEach(function(r){ al.forEach(function(c){
+      if(fijo[r][c]) return;                      // se solapa con un ojo
+      for(var dr=-2;dr<=2;dr++) for(var dc=-2;dc<=2;dc++)
+        poner(r+dr, c+dc,
+          (Math.abs(dr)===2||Math.abs(dc)===2||(dr===0&&dc===0))?1:0);
+    }); });
+
+    poner(n-8, 8, 1);                             // el módulo que siempre va negro
+    // Se reserva el sitio del formato. Ojo con el 6: (8,6) y (6,8) NO son del
+    // formato sino de la línea de sincronía, y borrarlos le abre un hueco que
+    // deja a varios lectores sin poder alinear el código.
+    for(i=0;i<9;i++){ if(i!==6){ poner(8,i,0); poner(i,8,0); } }
+    for(i=0;i<8;i++){ poner(8,n-1-i,0); poner(n-1-i,8,0); }
+    // El módulo negro se acaba de pisar al reservar el formato: se repone.
+    poner(n-8, 8, 1);
+
+    if(version>=7){
+      var vb=bitsVersion(version);
+      for(i=0;i<18;i++){
+        var bit=(vb>>i)&1, r=Math.floor(i/3), c=i%3;
+        poner(n-11+c, r, bit); poner(r, n-11+c, bit);
+      }
+    }
+
+    // Los datos se escriben en zigzag, de abajo a la derecha hacia arriba.
+    var idx=0, sobra=0, col=n-1, subiendo=true;
+    while(col>0){
+      if(col===6) col--;                          // la columna de sincronía no lleva datos
+      for(i=0;i<n;i++){
+        var fila = subiendo ? n-1-i : i;
+        for(var dj=0;dj<2;dj++){
+          var cc=col-dj;
+          if(fijo[fila][cc]) continue;
+          var v=0;
+          if(idx<flujo.length) v=(flujo[idx]>>(7-sobra))&1;
+          sobra++; if(sobra===8){ sobra=0; idx++; }
+          m[fila][cc]=v;
+        }
+      }
+      subiendo=!subiendo; col-=2;
+    }
+
+    var mejor=null, mejorP=Infinity, mejorM=0;
+    for(var mk=0;mk<8;mk++){
+      var prueba=[];
+      for(i=0;i<n;i++){
+        prueba.push([]);
+        for(j=0;j<n;j++)
+          prueba[i].push(fijo[i][j] ? m[i][j] : (m[i][j] ^ (MASCARAS[mk](i,j)?1:0)));
+      }
+      var fmt=bitsFormato(mk);
+      ponerFormato(prueba, n, fmt);
+      var p=castigo(prueba);
+      if(p<mejorP){ mejorP=p; mejor=prueba; mejorM=mk; }
+    }
+    return mejor;
+  }
+
+  function ponerFormato(m, n, fmt){
+    for(var i=0;i<15;i++){
+      var bit=(fmt>>i)&1;
+      // Copia de arriba a la izquierda…
+      if(i<6) m[8][i]=bit;
+      else if(i===6) m[8][7]=bit;
+      else if(i===7) m[8][8]=bit;
+      else if(i===8) m[7][8]=bit;
+      else m[14-i][8]=bit;
+      // …y la segunda, repartida en las otras dos esquinas.
+      if(i<8) m[n-1-i][8]=bit;
+      else m[8][n-15+i]=bit;
+    }
+    m[n-8][8]=1;
+  }
+
+  /* Lo dibuja como SVG: se ve nítido en pantalla y al imprimirlo. */
+  function svg(texto, lado){
+    var m=matriz(texto);
+    if(!m) return '';
+    var n=m.length, borde=4, total=n+borde*2;
+    var d='';
+    for(var i=0;i<n;i++) for(var j=0;j<n;j++)
+      if(m[i][j]) d+='M'+(j+borde)+' '+(i+borde)+'h1v1h-1z';
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="'+lado+'" height="'+lado+'" '+
+           'viewBox="0 0 '+total+' '+total+'" shape-rendering="crispEdges" '+
+           'role="img" aria-label="Código QR de la ficha">'+
+           '<rect width="'+total+'" height="'+total+'" fill="#fff"/>'+
+           '<path d="'+d+'" fill="#16191d"/></svg>';
+  }
+
+  return { svg: svg, matriz: matriz };
+})();
+
+/* ==================================================================
+   Pasaporte y tarjeta PDI
+   La foto se achica en el propio navegador antes de subirla: una foto de
+   celular pesa varios megas y no hay ninguna razón para mandar todo eso a
+   Drive, ni para hacer esperar a alguien en el mostrador.
+   ================================================================== */
+var DOCS = null;                 // reserva cuyos documentos están abiertos
+
+$('rDocs').onclick=function(){ if(RES) abrirDocumentos(RES); };
+
+function abrirDocumentos(r){
+  DOCS = r;
+  $('docTit').textContent='Documentos de '+r.huesped;
+  $('docErr').classList.add('hide');
+  $('docLista').innerHTML='<div class="esqueleto"></div>';
+  $('docQr').innerHTML='';
+  abrir('mDoc');
+  refrescarDocumentos();
+  // El QR necesita el enlace de la ficha; si todavía no existe, se crea.
+  srv('linkFicha')(r.id).then(function(d){
+    var url = d && d.url ? d.url : String(d||'');
+    $('docQr').innerHTML = QR.svg(url, 190) ||
+      '<span class="muted" style="font-size:12.5px">No se pudo generar el código.</span>';
+  }).catch(function(){
+    $('docQr').innerHTML='<span class="muted" style="font-size:12.5px">'+
+      'No se pudo generar el código.</span>';
+  });
+}
+
+function refrescarDocumentos(){
+  if(!DOCS) return Promise.resolve();
+  return srv('documentosDe')(DOCS.id).then(function(lista){
+    var c=$('docLista'); c.innerHTML='';
+    $('docCuenta').textContent = lista.length
+      ? lista.length+' documento(s)' : '';
+    if(!lista.length){
+      c.innerHTML='<div class="empty">Todavía no ha subido ninguno. '+
+                  'Se le piden igual en el check-in.</div>';
+      return;
+    }
+    lista.forEach(function(d){
+      var f=document.createElement('div');
+      f.className='docFila';
+      // 'creado' viene con hora ("2026-08-14 12:33") y corto() solo entiende
+      // la fecha suelta: sin recortarla devolvía una fecha inválida y la
+      // lista entera se quedaba sin pintar.
+      f.innerHTML='<b style="font-size:12.5px">'+d.rotulo+'</b>'+
+                  '<span class="quien">'+corto(String(d.creado).slice(0,10))+
+                  ' · lo subió '+d.subidoPor+'</span>';
+      var ver=document.createElement('a');
+      ver.href=d.archivoUrl; ver.target='_blank'; ver.rel='noopener';
+      ver.className='btn gh sm'; ver.textContent='Ver'; ver.style.marginLeft='auto';
+      f.appendChild(ver);
+      var bo=document.createElement('button');
+      bo.className='quitar'; bo.textContent='×'; bo.title='Borrar';
+      bo.onclick=function(){
+        if(!confirm('¿Borrar este documento? Queda en la papelera de Drive.')) return;
+        srv('borrarDocumento')(d.id)
+          .then(refrescarDocumentos)
+          .then(function(){ toast('Documento borrado'); }).catch(fallo);
+      };
+      f.appendChild(bo);
+      c.appendChild(f);
+    });
+  }).catch(function(e){ errDoc(e.message||String(e)); });
+}
+
+/* Achica la foto antes de mandarla. Un pasaporte se lee de sobra a 1600px,
+   y así pasa de 4 MB a unos 300 KB. Los PDF se mandan tal cual. */
+function achicar(archivo){
+  return new Promise(function(listo, falla){
+    if(archivo.type === 'application/pdf'){
+      var lector=new FileReader();
+      lector.onload=function(){ listo(lector.result); };
+      lector.onerror=function(){ falla(new Error('No se pudo leer el archivo.')); };
+      lector.readAsDataURL(archivo);
+      return;
+    }
+    if(archivo.type.indexOf('image/')!==0){
+      falla(new Error('Tiene que ser una foto o un PDF.')); return;
+    }
+    var lector=new FileReader();
+    lector.onload=function(){
+      var img=new Image();
+      img.onload=function(){
+        var tope=1600;
+        var esc=Math.min(1, tope/Math.max(img.width, img.height));
+        var cv=document.createElement('canvas');
+        cv.width=Math.round(img.width*esc); cv.height=Math.round(img.height*esc);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        listo(cv.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror=function(){ falla(new Error('No se pudo leer la foto.')); };
+      img.src=lector.result;
+    };
+    lector.onerror=function(){ falla(new Error('No se pudo leer el archivo.')); };
+    lector.readAsDataURL(archivo);
+  });
+}
+
+function subirArchivo(archivo){
+  if(!DOCS || !archivo) return;
+  $('docErr').classList.add('hide');
+  $('docZona').textContent='Subiendo…';
+  achicar(archivo).then(function(datos){
+    return srv('subirDocumento')(DOCS.id, { tipo:$('docTipo').value, datos:datos });
+  }).then(function(d){
+    $('docZona').textContent='o arrastra el archivo hasta acá';
+    toast(d.rotulo+' guardado');
+    return refrescarDocumentos();
+  }).catch(function(e){
+    $('docZona').textContent='o arrastra el archivo hasta acá';
+    errDoc(e.message||String(e));
+  });
+}
+
+$('docElegir').onclick=function(){ $('docArchivo').click(); };
+$('docArchivo').addEventListener('change', function(){
+  if(this.files && this.files[0]) subirArchivo(this.files[0]);
+  this.value='';
+});
+['dragenter','dragover'].forEach(function(ev){
+  $('docZona').addEventListener(ev, function(e){
+    e.preventDefault(); this.classList.add('encima');
+  });
+});
+['dragleave','drop'].forEach(function(ev){
+  $('docZona').addEventListener(ev, function(e){
+    e.preventDefault(); this.classList.remove('encima');
+  });
+});
+$('docZona').addEventListener('drop', function(e){
+  var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f) subirArchivo(f);
+});
+function errDoc(m){ $('docErr').textContent=m; $('docErr').classList.remove('hide'); }
+
 </script>
 </body>
 </html>

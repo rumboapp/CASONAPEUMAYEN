@@ -57,6 +57,22 @@
   .listo h2{font-size:18px;margin-bottom:8px}
   .listo p{color:var(--tx2);font-size:14px}
   .pie{text-align:center;color:var(--tx3);font-size:12px;margin-top:8px}
+
+  /* "Cargar aquí": tiene que ser grande y evidente en un teléfono, y abrir
+     la cámara de una, sin pasos intermedios. */
+  .subir{display:block;width:100%;border:1.5px dashed var(--line);border-radius:10px;
+    padding:18px 14px;text-align:center;background:var(--surface);
+    color:var(--tx2);font:inherit;font-size:14px;margin-bottom:12px;cursor:pointer}
+  .subir:active{background:var(--line2)}
+  .subir b{display:block;font-size:13px;color:var(--tx);margin-bottom:4px}
+  .subir .estado{font-size:12.5px;color:var(--tx3)}
+  .subir.listo{border-style:solid;border-color:var(--ok);background:#f0f8f1}
+  .subir.listo .estado{color:var(--ok);font-weight:600}
+  .subir.malo{border-color:var(--dan)}
+  .subir.malo .estado{color:var(--dan)}
+  .menorChk{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--tx2);
+    margin-top:2px}
+  .menorChk input{width:18px;height:18px}
 </style>
 </head>
 <body>
@@ -119,6 +135,14 @@
       <div id="acomCampos"></div>
     </div>
 
+    <!-- Solo para huéspedes extranjeros. Es opcional a propósito: si no lo
+         hace, se le piden los papeles en el mostrador como siempre. -->
+    <div class="card hide" id="cardDoc">
+      <h2 data-t="docTit">Pasaporte y tarjeta de turismo</h2>
+      <p style="font-size:13px;color:var(--tx2);margin-bottom:14px" data-t="docAyuda"></p>
+      <div id="docCajas"></div>
+    </div>
+
     <div class="card">
       <h2 data-t="normas">Normas de convivencia</h2>
       <ul class="reglas" id="listaReglas"></ul>
@@ -161,6 +185,17 @@ var T = {
     acomN:'Acompañante', acomNombre:'Nombre completo',
     acomDoc:'RUT o pasaporte (opcional)', acomNac:'Nacionalidad (opcional)',
     acomNacim:'Fecha de nacimiento (opcional)',
+    acomMenor:'Es menor de 6 años',
+    ninosTit:'Niños menores de 6',
+    ninosAyuda:'Van {n} menor(es) de 6 años. No pagan alojamiento, pero el registro '+
+               'de huéspedes tiene que nombrarlos igual.',
+    docTit:'Pasaporte y tarjeta de turismo',
+    docAyuda:'Si vienes del extranjero, puedes dejar acá una foto de tu pasaporte y de '+
+             'la tarjeta de turismo que te entregó la PDI al entrar al país. Es opcional: '+
+             'si prefieres, te los pedimos al llegar.',
+    docPasaporte:'Foto del pasaporte', docPdi:'Foto de la tarjeta PDI',
+    docCargar:'Cargar aquí', docSubiendo:'Subiendo…', docListo:'Recibido',
+    docError:'No se pudo subir. Puedes intentarlo de nuevo o traerlo al llegar.',
     firma:'Firma', firmaAyuda:'Firma con el dedo dentro del recuadro.',
     borrar:'Borrar', enviar:'Enviar registro',
     listoTit:'¡Registro completo!',
@@ -186,6 +221,17 @@ var T = {
     acomN:'Guest', acomNombre:'Full name',
     acomDoc:'ID or passport (optional)', acomNac:'Nationality (optional)',
     acomNacim:'Date of birth (optional)',
+    acomMenor:'Under 6 years old',
+    ninosTit:'Children under 6',
+    ninosAyuda:'{n} child(ren) under 6 are travelling with you. They do not pay for '+
+               'accommodation, but the guest register still has to name them.',
+    docTit:'Passport and tourist card',
+    docAyuda:'If you are travelling from abroad, you can leave a photo of your passport '+
+             'and of the tourist card the police gave you on arrival. This is optional: '+
+             'if you prefer, we will ask for them at check-in.',
+    docPasaporte:'Photo of your passport', docPdi:'Photo of the tourist card',
+    docCargar:'Upload here', docSubiendo:'Uploading…', docListo:'Received',
+    docError:'Upload failed. You can try again or bring it with you.',
     firma:'Signature', firmaAyuda:'Sign with your finger inside the box.',
     borrar:'Clear', enviar:'Submit registration',
     listoTit:'You are all set!',
@@ -274,6 +320,7 @@ llamar('fichaPublicaCargar', [TOKEN], function(d){
   $('form').classList.remove('hide');
   $('fNom').value = d.huesped || '';
   pintarAcompanantes();
+  pintarDocumentos();
   aplicarIdioma();
   prepararLienzo();
 }, function(e){
@@ -282,17 +329,21 @@ llamar('fichaPublicaCargar', [TOKEN], function(d){
   $('aviso').textContent = e.message || String(e);
 });
 
-/* Un bloque por cada persona además del titular. Si la reserva es para dos,
-   sale un bloque; si es para cuatro, salen tres. */
+/* Un bloque por cada persona además del titular, más uno por cada menor de
+   6. Los menores no pagan y no ocupan cupo, pero el registro de huéspedes
+   los tiene que nombrar igual, así que se piden acá y no en el mostrador. */
 function pintarAcompanantes(){
   var pax = Number(DATOS && DATOS.pax) || 1;
-  var cupos = Math.max(pax - 1, 0);
+  var ninos = Number(DATOS && DATOS.ninos) || 0;
+  var cupos = Math.max(pax - 1, 0) + ninos;
   $('cardAcom').classList.toggle('hide', cupos === 0);
   if (!cupos) return;
   var ya = (DATOS.acompanantes || []);
   var h = '';
   for (var i = 0; i < cupos; i++){
     var a = ya[i] || {};
+    // Los últimos bloques son los de los menores, y ya vienen marcados.
+    var esMenor = (a.menor !== undefined) ? !!a.menor : (i >= cupos - ninos);
     h += '<div class="acomBloque" style="border:1px solid var(--line);border-radius:8px;'+
          'padding:12px;margin-bottom:10px">'+
          '<div style="font-size:12px;color:var(--tx2);font-weight:600;margin-bottom:9px" '+
@@ -307,6 +358,8 @@ function pintarAcompanantes(){
          '</div>'+
          '<div class="fld"><label data-t="acomNacim"></label>'+
            '<input type="date" data-a="nacimiento" data-i="'+i+'" value="'+(a.nacimiento||'')+'"></div>'+
+         '<label class="menorChk"><input type="checkbox" data-menor="'+i+'"'+
+           (esMenor?' checked':'')+'><span data-t="acomMenor"></span></label>'+
          '</div>';
   }
   $('acomCampos').innerHTML = h;
@@ -319,7 +372,99 @@ function leerAcompanantes(){
     if (!lista[i]) lista[i] = {};
     lista[i][inp.dataset.a] = inp.value.trim();
   });
+  Array.prototype.forEach.call(document.querySelectorAll('#acomCampos [data-menor]'), function(chk){
+    var i = +chk.dataset.menor;
+    if (!lista[i]) lista[i] = {};
+    lista[i].menor = chk.checked;
+  });
   return lista;
+}
+
+/* ------------------------------------------------------------------
+   Pasaporte y tarjeta PDI
+   Solo se le ofrece al huésped extranjero, y siempre como algo opcional:
+   si no lo hace, se le piden los papeles al llegar, como toda la vida.
+   La foto se achica en el propio teléfono antes de subirla — una foto de
+   celular pesa varios megas y con datos móviles eso no llega nunca.
+   ------------------------------------------------------------------ */
+var DOC_TIPOS = [['pasaporte','docPasaporte'], ['pdi','docPdi']];
+
+function pintarDocumentos(){
+  if (!DATOS || !DATOS.extranjero){ $('cardDoc').classList.add('hide'); return; }
+  $('cardDoc').classList.remove('hide');
+  var ya = {};
+  (DATOS.documentos || []).forEach(function(d){ ya[d.tipo] = true; });
+
+  var c = $('docCajas');
+  c.innerHTML = '';
+  DOC_TIPOS.forEach(function(par){
+    var caja = document.createElement('button');
+    caja.type = 'button';
+    caja.className = 'subir' + (ya[par[0]] ? ' listo' : '');
+    caja.innerHTML = '<b data-t="'+par[1]+'"></b>'+
+      '<span class="estado" data-t="'+(ya[par[0]] ? 'docListo' : 'docCargar')+'"></span>';
+    var entrada = document.createElement('input');
+    entrada.type = 'file';
+    // capture pide la cámara directamente en el teléfono, que es de donde
+    // va a salir la foto el 99% de las veces.
+    entrada.accept = 'image/*,application/pdf';
+    entrada.setAttribute('capture', 'environment');
+    entrada.style.display = 'none';
+    entrada.addEventListener('change', function(){
+      if (this.files && this.files[0]) subirDoc(par[0], this.files[0], caja);
+      this.value = '';
+    });
+    caja.onclick = function(){ entrada.click(); };
+    c.appendChild(caja);
+    c.appendChild(entrada);
+  });
+}
+
+function achicarFoto(archivo){
+  return new Promise(function(listo, falla){
+    var lector = new FileReader();
+    lector.onerror = function(){ falla(new Error('lectura')); };
+    if (archivo.type === 'application/pdf'){
+      lector.onload = function(){ listo(lector.result); };
+      lector.readAsDataURL(archivo);
+      return;
+    }
+    lector.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        var tope = 1600;
+        var esc = Math.min(1, tope / Math.max(img.width, img.height));
+        var cv = document.createElement('canvas');
+        cv.width = Math.round(img.width * esc);
+        cv.height = Math.round(img.height * esc);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        listo(cv.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = function(){ falla(new Error('imagen')); };
+      img.src = lector.result;
+    };
+    lector.readAsDataURL(archivo);
+  });
+}
+
+function subirDoc(tipo, archivo, caja){
+  var estado = caja.querySelector('.estado');
+  caja.classList.remove('listo','malo');
+  estado.removeAttribute('data-t');
+  estado.textContent = T[IDIOMA].docSubiendo;
+  achicarFoto(archivo).then(function(datos){
+    llamar('fichaPublicaSubir', [TOKEN, { tipo: tipo, datos: datos }], function(){
+      caja.classList.add('listo');
+      estado.setAttribute('data-t','docListo');
+      estado.textContent = T[IDIOMA].docListo;
+    }, function(){
+      caja.classList.add('malo');
+      estado.textContent = T[IDIOMA].docError;
+    });
+  }).catch(function(){
+    caja.classList.add('malo');
+    estado.textContent = T[IDIOMA].docError;
+  });
 }
 
 function prepararLienzo(){
