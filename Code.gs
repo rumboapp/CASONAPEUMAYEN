@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-16';
+var VERSION = '2026-08-17';
 
 function version() { return VERSION; }
 
@@ -892,7 +892,10 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
       altaIni: String(config_('temporadaAltaInicio', '12-15')),
       altaFin: String(config_('temporadaAltaFin', '03-15')),
       addonBase: Number(config_('addonBase', 30000)),
-      addonAlta: Number(config_('addonAlta', 35000))
+      addonAlta: Number(config_('addonAlta', 35000)),
+      // La pantalla necesita el IVA para avisar cuánto baja el precio al
+      // marcar a alguien como turista extranjero.
+      iva: ivaPct_()
     }
   };
 }
@@ -991,15 +994,23 @@ function guardarReserva(token, datos) {
     // mismo que marcarla desde la cuenta, incluido arrastrar los cargos de
     // alojamiento ya anotados. Si no, la reserva diría una cosa y su cuenta
     // otra distinta.
-    var cambiaExento = false;
+    // La casilla de turista extranjero no es solo una etiqueta: cambia el
+    // precio, porque las tarifas de la casa llevan IVA incluido y al exento
+    // le corresponde el neto. Quien hace ese trabajo es marcarExentoIva(),
+    // así que acá NO se escribe la marca: se anota que cambió y se le pasa
+    // el encargo. Si se escribiera antes, marcarExentoIva() vería la marca
+    // ya puesta, creería que no cambió nada y no convertiría el precio.
+    var cambiaExento = false, antes = null;
     if (datos.extranjero !== undefined) {
-      campos.extranjero = !!datos.extranjero;
-      campos.exentoIva = !!datos.extranjero;
-      if (datos.extranjero && !datos.id) campos.dolar = dolarHoy_().valor;
       if (datos.id) {
-        var antes = leer_('Reservas').filter(function (x) { return x.id === datos.id; })[0];
-        cambiaExento = antes && (!!antes.exentoIva !== !!datos.extranjero);
+        antes = leer_('Reservas').filter(function (x) { return x.id === datos.id; })[0];
+        cambiaExento = !!antes && (!!antes.exentoIva !== !!datos.extranjero);
       }
+      if (!cambiaExento) {
+        campos.extranjero = !!datos.extranjero;
+        campos.exentoIva = !!datos.extranjero;
+      }
+      if (datos.extranjero && !datos.id) campos.dolar = dolarHoy_().valor;
     }
 
     var pedido = (datos.total === undefined || datos.total === null || datos.total === '')
@@ -1032,6 +1043,13 @@ function guardarReserva(token, datos) {
     campos.total = plan.total;
     insertar_('Reservas', campos);
     insertarVarias_('Noches', plan.noches);
+    // Recién creada y ya marcada como extranjera: el plan se armó con las
+    // tarifas de lista, que llevan IVA, así que se le descuenta.
+    if (campos.exentoIva) {
+      olvidar_('Noches');
+      campos.total = convertirAlojamiento_(id, true);
+      plan.total = campos.total;
+    }
     // El abono que se escribe al crear la reserva entra a la cuenta como un
     // pago, para que exista un solo lugar donde vive la plata.
     if (campos.anticipo > 0) {
@@ -1282,10 +1300,17 @@ function sincronizarNoches_(reserva, quien) {
 
   // El total se lleva en memoria mientras se decide qué agregar y qué sacar:
   // así no hay que volver a leer la hoja para saber cuánto quedó.
+  // Si la reserva es de un turista extranjero exento, las noches que se
+  // agreguen tienen que entrar SIN IVA: la tarifa de lista lo lleva incluido,
+  // y estirar la estadía no puede colarle el impuesto de vuelta.
+  var suya = leer_('Reservas').filter(function (x) { return x.id === reserva.id; })[0];
+  var sinIva = !!(suya && suya.exentoIva);
+
   var total = 0, agregadas = 0, quitadas = 0, nuevas = [], sobran = {};
   Object.keys(quiero).forEach(function (f) {
     if (actuales[f]) { total += actuales[f].valor; return; }
     var valor = tarifaDe_(reserva.recurso, f);
+    if (sinIva) valor = netoDe_(valor);
     nuevas.push({ idReserva: reserva.id, fecha: f, valor: valor, ajustada: false, nota: '' });
     total += valor;
     agregadas++;
@@ -1354,6 +1379,9 @@ function planEfectivo_(reserva) {
   for (var f = ci; f < co; f = sumarDias_(f, 1)) {
     dias.push({ fecha: f, valor: tarifaDe_(reserva.recurso, f) });
   }
+  // El total guardado ya viene neto si la reserva es exenta, así que
+  // repartirlo alcanza; si no hay total, la tarifa de lista se netea.
+  if (reserva.exentoIva) dias.forEach(function (d) { d.valor = netoDe_(d.valor); });
   var total = Math.round(Number(reserva.total) || 0);
   var valores = total > 0 ? repartir_(total, dias) : null;
   return dias.map(function (d) {
@@ -1538,12 +1566,22 @@ function ivaPct_() { return Number(config_('iva', 19)) || 0; }
 
 /* En Chile los precios se muestran con IVA incluido, así que el neto se saca
    del total. Los servicios a turistas extranjeros sin domicilio en Chile van
-   exentos, y en ese caso el total ES el neto. */
+   exentos, y en ese caso lo que se le cobra YA es el neto. */
 function desglosarIva_(total, exento) {
   var t = Math.round(Number(total) || 0);
   if (exento) return { total: t, neto: t, iva: 0 };
-  var neto = Math.round(t / (1 + ivaPct_() / 100));
-  return { total: t, neto: neto, iva: t - neto };
+  return { total: t, neto: netoDe_(t), iva: t - netoDe_(t) };
+}
+
+/* Le saca el IVA a un precio que lo lleva incluido. Es la cuenta que hay que
+   hacer para cobrarle a un turista extranjero exento: la tarifa de la casa
+   son $55.000 con IVA, y a él le corresponde pagar $46.218. */
+function netoDe_(bruto) {
+  return Math.round((Number(bruto) || 0) / (1 + ivaPct_() / 100));
+}
+
+function brutoDe_(neto) {
+  return Math.round((Number(neto) || 0) * (1 + ivaPct_() / 100));
 }
 
 function movimientosDe_(idReserva) {
@@ -1874,8 +1912,48 @@ function marcarExentoIva(token, idReserva, exento, docTurismo) {
     if (!!m.exento === debeSer) return;
     actualizar_('Cuenta', 'id', m.id, { exento: debeSer });
   });
+
+  // Y el alojamiento cambia de precio, no solo de etiqueta: las tarifas de la
+  // casa llevan IVA incluido, así que al exento le corresponde el neto. Solo
+  // se convierte cuando la marca DE VERDAD cambia, o dividir dos veces
+  // seguidas dejaría el precio por el suelo.
+  if (!!r.exentoIva !== !!exento) {
+    var total = convertirAlojamiento_(idReserva, !!exento);
+    logCambio_(u.nombre, 'iva_exento', idReserva + ' · ' + (exento ? 'sí' : 'no') +
+      ' · alojamiento ' + (exento ? 'sin' : 'con') + ' IVA: ' + total);
+    return true;
+  }
   logCambio_(u.nombre, 'iva_exento', idReserva + ' · ' + (exento ? 'sí' : 'no'));
   return true;
+}
+
+/* Pasa el alojamiento de una reserva de con IVA a sin IVA, o al revés: las
+   noches del plan y los cargos de alojamiento que ya estuvieran anotados.
+   Devuelve el total que quedó. */
+function convertirAlojamiento_(idReserva, aNeto) {
+  var nuevos = {};
+  planDe_(idReserva).forEach(function (n) {
+    nuevos[n.fecha] = aNeto ? netoDe_(n.valor) : brutoDe_(n.valor);
+  });
+  if (!Object.keys(nuevos).length) return 0;
+
+  actualizarVarias_('Noches', function (n) {
+    if (String(n.idReserva) !== String(idReserva)) return null;
+    var f = ymd_(n.fecha);
+    if (nuevos[f] === undefined) return null;
+    return { valor: nuevos[f] };
+  });
+  actualizarVarias_('Cuenta', function (m) {
+    if (String(m.idReserva) !== String(idReserva) || m.anulado) return null;
+    if (m.clase !== 'cargo' || m.tipo !== 'alojamiento') return null;
+    var f = ymd_(m.fecha);
+    if (nuevos[f] === undefined) return null;
+    return { unitario: nuevos[f], total: nuevos[f] };
+  });
+
+  var total = totalDelPlan_(idReserva);
+  actualizar_('Reservas', 'id', idReserva, { total: total });
+  return total;
 }
 
 /* ===================== CIERRE DE DÍA =====================
@@ -2123,11 +2201,46 @@ function carpetaDocs_(fecha, sub) {
   return carpetaFecha_('Casona Peumayén — Documentos', fecha, sub);
 }
 
-/* Convierte el HTML en PDF y lo deja en Drive. La conversión de Google a
-   veces se atraganta con el logo incrustado, así que si falla se reintenta
-   sin él; y si igual no se puede, se guarda el documento como página web
-   para no dejar a nadie sin su comprobante. El motivo del fallo se devuelve,
-   en vez de quedar en silencio. */
+/* Convierte el HTML en un PDF y devuelve el archivo en bruto, SIN pasar por
+   Drive. Es lo que se le entrega al navegador para que lo baje al tiro: no
+   hay que esperar a que Drive lo guarde ni a que lo comparta, ni el huésped
+   termina mirando un visor de Google.
+
+   La conversión de Google a veces se atraganta con el logo incrustado, así
+   que si falla se reintenta sin él. */
+function pdfEnBruto_(html, nombreArchivo) {
+  try {
+    return { blob: Utilities.newBlob(html, 'text/html', nombreArchivo + '.html')
+                     .getAs('application/pdf').setName(nombreArchivo + '.pdf'),
+             aviso: '' };
+  } catch (e1) {
+    var sinLogo = html.replace(/<img class="logo"[^>]*>/, '<h1>Casona Peumayén</h1>');
+    return { blob: Utilities.newBlob(sinLogo, 'text/html', nombreArchivo + '.html')
+                     .getAs('application/pdf').setName(nombreArchivo + '.pdf'),
+             aviso: 'El PDF se generó sin el logo: la conversión de Google no lo ' +
+                    'aceptó (' + String(e1.message || e1) + ').' };
+  }
+}
+
+/* El PDF listo para mandárselo al navegador: los bytes en base64 y el nombre
+   con que se va a guardar. */
+function pdfParaBajar_(html, nombreArchivo) {
+  var r = pdfEnBruto_(html, nombreArchivo);
+  return {
+    nombre: nombreArchivo + '.pdf',
+    datos: Utilities.base64Encode(r.blob.getBytes()),
+    aviso: r.aviso
+  };
+}
+
+/* Convierte el HTML en PDF y lo deja en Drive. Se usa para lo que es archivo
+   —el cierre que sale por correo de madrugada, las fichas firmadas—, donde
+   el documento necesita quedar guardado y nadie está esperando delante de la
+   pantalla. Lo que se genera a pedido no pasa por acá.
+
+   Si la conversión no se puede hacer de ninguna forma, se guarda el
+   documento como página web para no dejar a nadie sin su comprobante. El
+   motivo del fallo se devuelve, en vez de quedar en silencio. */
 function pdfDesdeHtml_(html, nombreArchivo, publico, fecha, sub) {
   var carpeta = carpetaDocs_(fecha, sub);
   var archivo = null, tipo = 'pdf', aviso = '';
@@ -2173,13 +2286,17 @@ function probarDocumentos(token) {
   var pasos = [];
   var anotar = function (paso, ok, detalle) { pasos.push({ paso: paso, ok: ok, detalle: detalle || '' }); };
 
-  try { carpetaDocs_(hoy_(), 'Comprobantes');
-        anotar('Acceso a Drive', true, 'La carpeta del mes está disponible.'); }
+  // Drive ya NO hace falta para el comprobante ni para el cierre que se bajan
+  // desde la pantalla: esos se arman y se entregan al navegador. Sigue
+  // haciendo falta para el archivo —el cierre que sale por correo— y para
+  // guardar las fotos de pasaporte, así que se revisa, pero sin cortar acá:
+  // que Drive falle no significa que el comprobante no funcione.
+  try { carpetaDocs_(hoy_(), 'Cierres');
+        anotar('Acceso a Drive', true,
+               'Disponible. Se usa para archivar los cierres y los documentos de huéspedes.'); }
   catch (e) {
-    anotar('Acceso a Drive', false, String(e.message || e));
-    return { ok: false, pasos: pasos,
-      mensaje: 'Google todavía no dio permiso para usar Drive. Genera un documento una vez ' +
-        'y acepta el permiso que pide, o ejecuta setup() desde el editor.' };
+    anotar('Acceso a Drive', false, String(e.message || e) +
+      ' · El comprobante y el cierre se pueden bajar igual: no pasan por Drive.');
   }
 
   try {
@@ -2189,9 +2306,8 @@ function probarDocumentos(token) {
   } catch (e) {
     anotar('Convertir a PDF', false, String(e.message || e));
     return { ok: false, pasos: pasos,
-      mensaje: 'Este proyecto no puede convertir a PDF. Los documentos se van a guardar ' +
-        'como página web, que se abre en el navegador y se imprime o se guarda como PDF ' +
-        'desde ahí. Error exacto: ' + String(e.message || e) };
+      mensaje: 'Este proyecto no puede convertir a PDF, así que el comprobante y el ' +
+        'cierre no se van a poder generar. Error exacto: ' + String(e.message || e) };
   }
 
   try {
@@ -2248,19 +2364,17 @@ function hojaHtml_(titulo, cuerpo) {
 
 /* ---------- Comprobante de la reserva, para mandarle al huésped ---------- */
 
+/* Devuelve el PDF mismo, no un enlace. Antes se guardaba en Drive y se abría
+   su visor: había que esperar a que Drive lo creara y lo compartiera —con
+   una pestaña en blanco mientras tanto— y el archivo terminaba viviendo allá.
+   Ahora el comprobante llega al navegador y se baja como cualquier archivo,
+   listo para adjuntarlo en un WhatsApp. */
 function comprobante(token, idReserva) {
   var u = sesion_(token);
   var d = armarComprobante_(idReserva);
-  var doc = pdfDesdeHtml_(d.html, 'Reserva ' + d.huesped + ' ' + d.checkIn, true,
-                          d.checkIn, 'Comprobantes');
+  var doc = pdfParaBajar_(d.html, 'Reserva ' + limpiarNombre_(d.huesped) + ' ' + d.checkIn);
   logCambio_(u.nombre, 'comprobante', idReserva);
-  return {
-    url: doc.url, tipo: doc.tipo, aviso: doc.aviso,
-    texto: d.texto.replace('{url}', doc.url),
-    whatsapp: 'https://wa.me/' + d.telefono +
-              '?text=' + encodeURIComponent(d.texto.replace('{url}', doc.url)),
-    correo: d.correo
-  };
+  return { nombre: doc.nombre, datos: doc.datos, aviso: doc.aviso, huesped: d.huesped };
 }
 
 function armarComprobante_(idReserva) {
@@ -2308,21 +2422,33 @@ function armarComprobante_(idReserva) {
         '</table>'
       : '') +
     '<h2>Valor</h2>' +
-    '<table><tr><th>Noche</th><th class="n">Valor</th></tr>' + filas +
-    '<tr class="tot"><td>Total</td><td class="n">' + plata_(total) + '</td></tr>' +
-    (pagado ? '<tr><td>Abonado</td><td class="n">' + plata_(pagado) + '</td></tr>' +
-              '<tr><td><b>Saldo al llegar</b></td><td class="n"><b>' +
-              plata_(total - pagado) + '</b></td></tr>' : '') +
-    '</table>' +
-    // A un turista extranjero el precio en pesos no le dice nada: se le
-    // muestra el equivalente al cambio que se le fijó al reservar.
+    // A un turista extranjero el precio en pesos no le dice nada: el dólar
+    // manda y los pesos van de referencia, no al revés.
     (r.extranjero
-      ? '<p style="color:#6b7280;font-size:12.5px">Equivalente aproximado: ' +
-        'US$' + aUsd_(total, cambioR).toFixed(2) +
-        (pagado ? ' · saldo US$' + aUsd_(total - pagado, cambioR).toFixed(2) : '') +
-        ' (al cambio de $' + cambioR + ' fijado al reservar). ' +
-        'El cobro se hace en pesos chilenos salvo que se pague en dólares.</p>'
-      : '') +
+      ? '<table><tr><th>Noche</th><th class="n">USD</th><th class="n">CLP</th></tr>' +
+        plan.map(function (n) {
+          return '<tr><td>' + escapar_(n.fecha) + (n.nota ? ' · ' + escapar_(n.nota) : '') +
+                 '</td><td class="n">US$' + aUsd_(n.valor, cambioR).toFixed(2) +
+                 '</td><td class="n">' + plata_(n.valor) + '</td></tr>';
+        }).join('') +
+        '<tr class="tot"><td>Total</td><td class="n">US$' + aUsd_(total, cambioR).toFixed(2) +
+        '</td><td class="n">' + plata_(total) + '</td></tr>' +
+        (pagado ? '<tr><td>Abonado</td><td class="n">US$' + aUsd_(pagado, cambioR).toFixed(2) +
+                  '</td><td class="n">' + plata_(pagado) + '</td></tr>' +
+                  '<tr><td><b>Saldo al llegar</b></td><td class="n"><b>US$' +
+                  aUsd_(total - pagado, cambioR).toFixed(2) + '</b></td><td class="n"><b>' +
+                  plata_(total - pagado) + '</b></td></tr>' : '') +
+        '</table>' +
+        '<p style="color:#6b7280;font-size:12.5px">Valores <b>exentos de IVA</b> por ' +
+        'tratarse de un turista extranjero sin domicilio en Chile (DL 825, art. 12 E N°17), ' +
+        'al cambio de $' + cambioR + ' por dólar fijado al reservar. ' +
+        'La exención requiere que el pago se haga en moneda extranjera.</p>'
+      : '<table><tr><th>Noche</th><th class="n">Valor</th></tr>' + filas +
+        '<tr class="tot"><td>Total</td><td class="n">' + plata_(total) + '</td></tr>' +
+        (pagado ? '<tr><td>Abonado</td><td class="n">' + plata_(pagado) + '</td></tr>' +
+                  '<tr><td><b>Saldo al llegar</b></td><td class="n"><b>' +
+                  plata_(total - pagado) + '</b></td></tr>' : '') +
+        '</table>') +
     '<h2>Condiciones de la estadía</h2><ul class="reglas">' +
     reglas.map(function (x) { return '<li>' + escapar_(x) + '</li>'; }).join('') +
     '</ul>';
@@ -2338,9 +2464,13 @@ function armarComprobante_(idReserva) {
 }
 
 /* ---------- Resumen de la noche, para el dueño ---------- */
+/* El cierre que se pide desde la pantalla se baja como archivo, igual que el
+   comprobante. El que sale solo por correo de madrugada sí se archiva en
+   Drive: ese es un archivo de verdad y nadie lo está esperando. */
 function pdfCierre(token, fecha) {
   sesion_(token);
-  return pdfCierre_(ymd_(fecha) || hoy_());
+  var dia = ymd_(fecha) || hoy_();
+  return pdfParaBajar_(armarCierre_(dia), 'Cierre ' + dia);
 }
 
 function pdfCierre_(dia) {
@@ -2411,14 +2541,15 @@ function enviarCierre_(dia, para) {
     to: para,
     subject: 'Casona Peumayén · cierre de la noche del ' + dia,
     body: 'Alojamiento ' + plata_(d.alojamiento) + ', consumos ' + plata_(d.consumos) +
-      ', cobrado ' + plata_(d.pagos) + '. ' + d.avisos.length + ' punto(s) por revisar.',
+      ', cobrado ' + plata_(d.pagos) + '. ' +
+      plural_(d.avisos.length, 'punto', 'puntos') + ' por revisar.',
     htmlBody: '<p>Resumen de la noche del <b>' + dia + '</b>:</p><ul>' +
       '<li>Alojamiento: ' + plata_(d.alojamiento) + '</li>' +
       '<li>Consumos: ' + plata_(d.consumos) + '</li>' +
       '<li>Cobrado en el día: ' + plata_(d.pagos) + '</li>' +
       '<li>Lodge ' + plata_((d.porCentro || {}).lodge || 0) +
       ' · restaurante ' + plata_((d.porCentro || {}).restaurante || 0) + '</li>' +
-      '<li>' + d.avisos.length + ' punto(s) por revisar</li></ul>' +
+      '<li>' + plural_(d.avisos.length, 'punto', 'puntos') + ' por revisar</li></ul>' +
       '<p>El detalle va adjunto.</p>',
     attachments: [DriveApp.getFileById(doc.id).getBlob()]
   });
@@ -3019,10 +3150,11 @@ function inventarioAdmin(token) {
         bano: x.bano, porCama: !!x.porCama, modo: modoDe_(x),
         categoria: String(x.categoria || '') || categoriaPorDefecto_(x),
         precioBase: Number(x.precioBase) || 0, precioAlta: Number(x.precioAlta) || 0,
-        // El mismo precio visto en dólares, al cambio de hoy: es lo que hay
-        // que cotizarle a un extranjero sin sacar la calculadora.
-        usdBase: aUsd_(x.precioBase, cambio.valor),
-        usdAlta: aUsd_(x.precioAlta, cambio.valor),
+        // El precio en dólares va SIN IVA: es lo que se le cotiza a un
+        // turista extranjero, que va exento. La tarifa de la casa lleva el
+        // impuesto incluido, así que primero se le descuenta.
+        usdBase: aUsd_(netoDe_(x.precioBase), cambio.valor),
+        usdAlta: aUsd_(netoDe_(x.precioAlta), cambio.valor),
         orden: Number(x.orden) || 0, activa: !!x.activa,
         camas: camas.filter(function (c) { return c.idUnidad === x.id; })
           .sort(function (a, b) { return Number(a.orden) - Number(b.orden); })
@@ -3030,13 +3162,13 @@ function inventarioAdmin(token) {
             return {
               id: c.id, nombre: c.nombre, precioBase: Number(c.precioBase) || 0,
               precioAlta: Number(c.precioAlta) || 0, activa: !!c.activa,
-              usdBase: aUsd_(c.precioBase, cambio.valor),
-              usdAlta: aUsd_(c.precioAlta, cambio.valor)
+              usdBase: aUsd_(netoDe_(c.precioBase), cambio.valor),
+              usdAlta: aUsd_(netoDe_(c.precioAlta), cambio.valor)
             };
           })
       };
     });
-  return { unidades: lista, dolar: cambio };
+  return { unidades: lista, dolar: cambio, iva: ivaPct_() };
 }
 
 function exigirAdmin_(u) {

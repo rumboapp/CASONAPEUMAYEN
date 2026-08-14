@@ -56,6 +56,9 @@
     display:grid;place-items:center;font-size:28px;margin:0 auto 16px}
   .listo h2{font-size:18px;margin-bottom:8px}
   .listo p{color:var(--tx2);font-size:14px}
+  /* Al mover la tarjeta de documentos adentro del "listo", el texto vuelve a
+     alinearse a la izquierda: centrado no se lee bien. */
+  .listo .card{text-align:left;margin-top:22px}
   .pie{text-align:center;color:var(--tx3);font-size:12px;margin-top:8px}
 
   /* "Cargar aquí": tiene que ser grande y evidente en un teléfono, y abrir
@@ -93,6 +96,8 @@
     <div class="tic">✓</div>
     <h2 data-t="listoTit">¡Registro completo!</h2>
     <p data-t="listoTxt">Gracias. Ya tenemos tus datos y tu firma; el día de tu llegada solo pasa a buscar la llave.</p>
+    <!-- La tarjeta de documentos se mueve acá desde el JS cuando la ficha ya
+         está firmada: el pasaporte se suele pedir DESPUÉS de firmar. -->
   </div>
 
   <form id="form" class="hide">
@@ -316,7 +321,16 @@ llamar('reglamento', [], function(g){
 llamar('fichaPublicaCargar', [TOKEN], function(d){
   DATOS = d;
   $('cargando').classList.add('hide');
-  if (d.firmada){ $('listo').classList.remove('hide'); return; }
+  // Aunque la ficha ya esté firmada hay que poder subir los documentos: el
+  // caso más común es justamente ese —el huésped firma al llegar y recién
+  // después se le piden el pasaporte y la tarjeta PDI—. Antes la página se
+  // cerraba con "¡Registro completo!" y no quedaba dónde subirlos.
+  if (d.firmada){
+    $('listo').classList.remove('hide');
+    pintarDocumentos();
+    aplicarIdioma();
+    return;
+  }
   $('form').classList.remove('hide');
   $('fNom').value = d.huesped || '';
   pintarAcompanantes();
@@ -390,8 +404,15 @@ function leerAcompanantes(){
 var DOC_TIPOS = [['pasaporte','docPasaporte'], ['pdi','docPdi']];
 
 function pintarDocumentos(){
-  if (!DATOS || !DATOS.extranjero){ $('cardDoc').classList.add('hide'); return; }
+  if (!DATOS){ $('cardDoc').classList.add('hide'); return; }
+  // Se le ofrece a cualquiera, no solo a quien venga marcado como extranjero:
+  // recepción escanea el QR para un walk-in que todavía no está marcado, y
+  // ahí no aparecía nada. Sigue siendo opcional.
   $('cardDoc').classList.remove('hide');
+  // Si ya firmó, la tarjeta se mueve dentro del bloque de "listo", que es lo
+  // único que queda en pantalla.
+  var destino = DATOS.firmada ? $('listo') : null;
+  if (destino && $('cardDoc').parentNode !== destino) destino.appendChild($('cardDoc'));
   var ya = {};
   (DATOS.documentos || []).forEach(function(d){ ya[d.tipo] = true; });
 

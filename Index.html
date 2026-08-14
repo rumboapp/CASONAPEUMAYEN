@@ -1315,7 +1315,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-16';
+var VERSION_ESPERADA = '2026-08-17';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
@@ -2203,13 +2203,19 @@ function pintarExtranjero(cambioFijado){
   $('rExtNota').classList.toggle('hide', !on);
   if(!on) return;
   var cambio = Number(cambioFijado) || Number(CAL.dolar && CAL.dolar.valor) || 0;
+  var iva = Number(CAL.cfg && CAL.cfg.iva) || 19;
   var total = Number($('rTot').value)||0;
-  var txt = cambio
-    ? (cambioFijado
-        ? 'Cambio fijado al reservar: $'+plataSimple(cambio)+'. '
-        : 'Al cambio de hoy ($'+plataSimple(cambio)+'), que le queda fijado. ')
-      + (total ? 'Total ≈ '+dolares(total/cambio)+'. ' : '')
-    : '';
+  // Las tarifas de la casa llevan IVA incluido. Al exento le corresponde el
+  // neto, así que el total BAJA al guardarlo: se avisa antes, con la cifra,
+  // para que nadie se lleve la sorpresa después.
+  var neto = RES && RES.extranjero ? total : Math.round(total/(1+iva/100));
+  var txt = '';
+  if(cambio && total){
+    txt = 'Se le cobra <b>'+plata(neto)+'</b> —el precio sin el IVA del '+iva+'%— '+
+          'que al cambio de $'+plataSimple(cambio)+
+          (cambioFijado ? ' fijado al reservar' : ', el de hoy, que le queda fijado')+
+          ' son <b>'+dolares(neto/cambio)+'</b>. ';
+  }
   $('rExtNota').innerHTML = txt +
     'El alojamiento sale <b>exento de IVA</b>. Ojo: la exención solo vale si '+
     'paga en dólares — si termina pagando en pesos, corresponde IVA y la Cuenta lo avisa.';
@@ -2627,22 +2633,32 @@ $('nchRepartir').onclick=function(){
 /* ==================================================================
    Comprobante de la reserva
    ================================================================== */
-/* Un solo botón: genera el PDF y lo abre. Antes había un modal con enlace,
-   WhatsApp, correo, copiar el texto y una vía alternativa para imprimir; para
-   mandarlo se hacía igual desde el PDF ya abierto, así que sobraba todo eso. */
+/* Baja un archivo que llegó del servidor en base64. No pasa por Drive: el
+   PDF se arma acá mismo y el navegador lo guarda como cualquier descarga.
+   Antes se abría una pestaña en blanco, había que esperar a que Drive
+   guardara y compartiera el archivo, y terminaba mostrándose en el visor de
+   Google. */
+function bajarArchivo(nombre, base64, tipo){
+  var bin = atob(base64);
+  var bytes = new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+  var url = URL.createObjectURL(new Blob([bytes], { type: tipo || 'application/pdf' }));
+  var a = document.createElement('a');
+  a.href = url; a.download = nombre;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // El enlace se suelta después, o el archivo se corta a medio bajar.
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 60000);
+}
+
+/* Un solo botón: genera el comprobante y lo baja. */
 $('rComprobante').onclick=function(){
   if(!RES) return;
-  // La pestaña se abre ANTES de llamar al servidor: si se abriera después,
-  // el navegador la trataría como emergente y la bloquearía.
-  var v = window.open('', '_blank');
   ocupado('rComprobante', srv('comprobante')(RES.id)).then(function(d){
-    if(v){ v.location.href = d.url; }
-    else { toast('Permite las ventanas emergentes para verlo', true); }
-    toast(d.aviso ? d.aviso : 'Comprobante generado');
-  }).catch(function(e){
-    if(v) v.close();
-    fallo(e);
-  });
+    bajarArchivo(d.nombre, d.datos);
+    toast(d.aviso ? d.aviso : 'Comprobante listo: ' + d.nombre);
+  }).catch(fallo);
 };
 
 /* ==================================================================
@@ -3347,15 +3363,12 @@ function verCierre(){
 $('cieVer').onclick=verCierre;
 $('cieF').onchange=function(){ $('cieDoc').classList.add('hide'); verCierre(); };
 
-/* Igual que el comprobante: genera el PDF y lo abre. La pestaña se pide
-   antes de llamar al servidor, o el navegador la bloquea por emergente. */
+/* Igual que el comprobante: se genera y se baja, sin pasar por Drive. */
 $('ciePdf').onclick=function(){
-  var v = window.open('', '_blank');
   ocupado('ciePdf', srv('pdfCierre')($('cieF').value)).then(function(d){
-    if(v){ v.location.href = d.url; }
-    else { toast('Permite las ventanas emergentes para verlo', true); }
-    toast(d.aviso ? d.aviso : 'PDF generado');
-  }).catch(function(e){ if(v) v.close(); fallo(e); });
+    bajarArchivo(d.nombre, d.datos);
+    toast(d.aviso ? d.aviso : 'Cierre listo: ' + d.nombre);
+  }).catch(fallo);
 };
 
 $('cieMail').onclick=function(){

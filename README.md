@@ -432,9 +432,19 @@ fiscalización. Por eso el sistema no se limita a la marca — registra en qué
 moneda entró cada peso.
 
 **Al hacer la reserva** hay una casilla *Turista extranjero*. Al marcarla pasan
-tres cosas de una vez: queda exenta de IVA, se le **fija el tipo de cambio del
-día** y el formulario muestra cuánto es en dólares. Ese cambio **se le respeta
-después**, aunque el dólar se mueva: si cotizaste en dólares, ese es el precio.
+tres cosas de una vez: se le **descuenta el IVA**, se le **fija el tipo de
+cambio del día** y el formulario muestra cuánto queda en dólares. Ese cambio
+**se le respeta después**, aunque el dólar se mueva.
+
+**El precio baja, y esa es la parte importante.** Las tarifas de la casa se
+escriben **con IVA incluido**, como se muestran en Chile. Al turista exento le
+corresponde el neto, así que una habitación de $55.000 se le cobra en $46.218
+—y son esos $46.218 los que se pasan a dólares, no los $55.000—. El formulario
+lo dice con la cifra antes de guardar, para que nadie se lleve la sorpresa
+después. Desmarcar la casilla devuelve el IVA y el precio vuelve a su valor.
+
+Lo mismo en la pestaña *Alojamiento*: el precio en dólares de cada pieza va
+**sin IVA**, porque es el que se le cotiza a alguien de afuera.
 
 **Al cobrar**, el pago se registra en pesos o en dólares. Si eligen dólares se
 escribe el monto en US$ y el sistema lo convierte al cambio de esa reserva,
@@ -472,15 +482,20 @@ para cotizarle a alguien de afuera sin sacar la calculadora.
 Los dos papeles que acreditan la exención se piden en el mostrador con el
 huésped esperando. Ahora se pueden tener antes:
 
-- **El huésped los sube desde su celular.** Si la reserva está marcada como
-  extranjera, su ficha muestra dos botones grandes de *Cargar aquí*, uno para
-  el pasaporte y otro para la tarjeta PDI. En un teléfono abren la cámara
-  directamente. **Es opcional a propósito**, y la propia página se lo dice: si
-  no lo hace, se le piden igual al llegar.
+- **El huésped los sube desde su celular.** Su ficha muestra dos botones
+  grandes de *Cargar aquí*, uno para el pasaporte y otro para la tarjeta PDI.
+  En un teléfono abren la cámara directamente. **Es opcional a propósito**, y
+  la propia página se lo dice: si no lo hace, se le piden igual al llegar.
 - **Recepción los sube en un walk-in.** En la reserva, *Más ▾ → Pasaporte y
   tarjeta PDI*: se arrastra el archivo, se elige del computador, o se le
   muestra al huésped un **código QR** que le abre su ficha en su propio
   teléfono, donde sí tiene cámara.
+
+Dos cosas que hacían que el QR no sirviera y ya están arregladas: la subida
+**aparece aunque la ficha ya esté firmada** —que es el caso normal, porque el
+pasaporte se pide después de firmar— y **aparece para cualquier huésped**, no
+solo para los marcados como extranjeros; recepción escanea el QR de un walk-in
+que todavía no está marcado y antes no encontraba dónde subir nada.
 
 La foto **se achica en el propio navegador antes de subirla**: una foto de
 celular pesa varios megas y con datos móviles no llegaría nunca. Queda en unos
@@ -615,46 +630,56 @@ nunca se usa, pero el día que Drive se cae es lo único que responde *por qué*
 
 ## Documentos en PDF
 
-El sistema arma dos documentos con el logo y los deja en Drive, **ordenados por
-fecha** para que la carpeta no se convierta en un basurero de archivos sueltos:
+El sistema arma dos documentos con el logo: el **comprobante** de una reserva
+y el **cierre** de una noche. Los dos se generan y **se bajan**, como cualquier
+archivo. No pasan por Drive.
+
+Lo que sí queda archivado en Drive es lo que es archivo de verdad y nadie está
+esperando: el cierre que sale por correo cada noche, las fichas firmadas y las
+fotos de pasaporte que suben los huéspedes. Eso va **ordenado por fecha**, para
+que la carpeta no se convierta en un basurero de archivos sueltos:
 
 ```
 Casona Peumayén — Documentos/
   2026/
     08 agosto/
-      Comprobantes/   comprobante-Perez-2026-08-14.pdf
-      Cierres/        cierre-2026-08-14.pdf
+      Cierres/                    cierre-2026-08-14.pdf
+      Documentos de huéspedes/    pasaporte-Perez-....jpg
     09 septiembre/
-      Comprobantes/
       Cierres/
 Casona Peumayén — Fichas/
   2026/
-    08 agosto/        ficha-Perez-....pdf
+    08 agosto/                    ficha-Perez-....pdf
 ```
 
 El año y el mes salen de **la fecha del documento, no del día en que se
-generó**: un comprobante de una reserva que llega en diciembre queda archivado
-en diciembre, aunque lo hayas emitido hoy; el cierre queda en el mes de la
-noche que cerró. Así, buscar "qué mandamos en marzo" es abrir una carpeta. Las
-carpetas se crean solas la primera vez y se reutilizan después.
+generó**: la foto del pasaporte de una reserva que llega en diciembre queda
+archivada en diciembre, aunque la haya subido hoy; el cierre queda en el mes de
+la noche que cerró. Las carpetas se crean solas la primera vez y se reutilizan
+después.
 
 **Comprobante de la reserva.** Botón *Comprobante* dentro de la reserva:
-**un solo botón que genera el PDF y lo abre**. Nada más. Trae el alojamiento,
-las fechas con sus horarios, las noches con su valor, quiénes se alojan, lo
-abonado, el saldo que queda para el día de llegada y las condiciones de la
-estadía. Desde el PDF ya abierto se manda por donde uno quiera.
+**se genera el PDF y se baja**, como cualquier archivo. Nada más. Trae el
+alojamiento, las fechas con sus horarios, las noches con su valor, quiénes se
+alojan, lo abonado, el saldo que queda para el día de llegada y las
+condiciones de la estadía. Desde ahí se adjunta a un WhatsApp o a un correo.
 
-Antes había un paso intermedio con el enlace, un botón de WhatsApp, otro de
-correo, el texto para copiar y una vía alternativa para imprimir. Se fue todo:
-para mandarlo había que abrir el PDF igual, así que esos cuatro caminos solo
-hacían más larga la misma tarea. El archivo queda compartido por enlace, así
-que el huésped lo abre sin tener cuenta de Google.
+**No pasa por Drive.** Antes se guardaba allá y se abría su visor: había una
+pestaña en blanco mientras Drive creaba y compartía el archivo, y el
+documento terminaba viviendo en una carpeta que nadie pidió. Ahora el PDF se
+arma y se entrega al navegador directamente.
 
 **Cierre de la noche.** En la pestaña *Cierre*, *Generar PDF* arma el resumen
-de esa noche y lo abre, igual que el comprobante. *Enviar al dueño* se lo manda
+de esa noche y lo baja, igual que el comprobante. *Enviar al dueño* se lo manda
 al correo configurado con el PDF adjunto — esa sí es otra acción, no otra forma
 de hacer lo mismo. Si además dejaste el cierre automático de madrugada, **el
 correo sale solo cada noche** apenas se cierra el día.
+
+**Qué sigue guardándose en Drive.** Solo lo que es archivo de verdad y nadie
+está esperando delante de la pantalla: el cierre que sale por correo cada
+noche, las fichas firmadas y las fotos de pasaporte que suben los huéspedes.
+Eso sí queda ordenado por año y mes. Lo que se pide desde la pantalla no deja
+copias sueltas.
 
 ### Si el PDF no se genera
 
