@@ -141,6 +141,14 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
   punto verde (limpia), rojo (sucia) o gris (fuera de servicio), y las sucias
   quedan con un tinte distinto. Sirve para decidir al vuelo dónde meter a
   alguien que llega sin reserva.
+- **Dentro de la reserva, al frente está lo del día a día**: guardar, el
+  check-in o el check-out según corresponda, la cuenta y el comprobante. Lo
+  demás —acompañantes, la ficha, cancelar, eliminar— vive en el menú
+  **Más ▾**, para que el pie del formulario no sea una hilera de ocho botones
+  donde hay que ir a buscar el que se usa siempre.
+- **En el teléfono** la columna de nombres se angosta y las pestañas se
+  deslizan de lado, así que la grilla se sigue leyendo sin tener que girar el
+  aparato.
 
 ## Huéspedes: buscador e historial
 
@@ -442,8 +450,28 @@ en el comprobante), las fechas de temporada alta, el precio del programa tinaja
 
 ## Documentos en PDF
 
-El sistema arma dos documentos con el logo y los deja en una carpeta de Drive
-llamada *Casona Peumayén — Documentos*.
+El sistema arma dos documentos con el logo y los deja en Drive, **ordenados por
+fecha** para que la carpeta no se convierta en un basurero de archivos sueltos:
+
+```
+Casona Peumayén — Documentos/
+  2026/
+    08 agosto/
+      Comprobantes/   comprobante-Perez-2026-08-14.pdf
+      Cierres/        cierre-2026-08-14.pdf
+    09 septiembre/
+      Comprobantes/
+      Cierres/
+Casona Peumayén — Fichas/
+  2026/
+    08 agosto/        ficha-Perez-....pdf
+```
+
+El año y el mes salen de **la fecha del documento, no del día en que se
+generó**: un comprobante de una reserva que llega en diciembre queda archivado
+en diciembre, aunque lo hayas emitido hoy; el cierre queda en el mes de la
+noche que cerró. Así, buscar "qué mandamos en marzo" es abrir una carpeta. Las
+carpetas se crean solas la primera vez y se reutilizan después.
 
 **Comprobante de la reserva.** Botón *Comprobante* dentro de la reserva. Trae
 el alojamiento, las fechas con sus horarios, las noches con su valor, quiénes
@@ -611,23 +639,50 @@ es una llamada remota. El sistema está armado para hacer las menos posibles.
 - **El logo viaja una sola vez y comprimido.** La página interna pasó de 232
   KB a 118 KB, y las de huésped y aseo de 79 KB a 31 KB: se abren mucho más
   rápido desde el teléfono.
+- **Las hojas que se cruzan entre sí se indexan una vez y se consultan por
+  llave.** Antes, para armar el historial de un huésped había que recorrer
+  todas las noches y todos los movimientos por cada reserva suya; ahora esas
+  hojas se agrupan una sola vez por reserva y después se buscan directo. Es la
+  diferencia entre trabajo que crece al cuadrado y trabajo que crece derecho:
+  es lo que hace que el sistema aguante años de datos y no solo un mes.
 
-Lecturas de planilla por operación, antes y ahora:
+Lecturas de planilla por operación, medidas sobre la planilla actual:
 
-| Operación | Antes | Ahora |
+| Operación | Lecturas | Escrituras |
 |---|---|---|
-| Abrir el calendario | 3 | **1** |
-| Pestaña Hoy | 2 | **1** |
-| Pestaña Aseo | 2 | 2 |
-| Guardar una reserva | 2 | **1** |
-| Cambiar de estado | 3 | **1** |
-| Ver disponibilidad | 1 | 1 |
-| Informes de un mes | 2 | **1** |
-| Reserva de grupo de 3 piezas | 6 lecturas y 5 escrituras | **1 lectura y 2 escrituras** |
-| **Total** | **21** | **10** |
+| Abrir el calendario | 1 | 0 |
+| Pestaña Hoy | 1 | 0 |
+| Pestaña Aseo | 2 | 0 |
+| Guardar una reserva | 2 | 2 |
+| Cambiar de estado | 2 | 2 |
+| Ver disponibilidad | 1 | 0 |
+| Informes de un mes | 2 | 0 |
+| Buscador de huéspedes | 4 | 0 |
+| Reserva de grupo de 3 piezas | 2 | 3 |
+| **Total de las 9** | **17** | |
 
 (La primera carga del día lee 6 veces mientras arma lo que va a guardar; de
-ahí en adelante son las cifras de la tabla.)
+ahí en adelante son las cifras de la tabla. El calendario, que es lo que más
+se abre, pasó de leer tres hojas a leer una.)
+
+### Con tres años de datos encima
+
+La prueba de carga arma 2.891 reservas, 5.782 noches y 5.782 movimientos —tres
+años de operación— y cronometra cada pantalla:
+
+| Pantalla | Tiempo |
+|---|---|
+| Abrir el calendario | 20 ms |
+| Pestaña Hoy | 19 ms |
+| Pestaña Aseo | 29 ms |
+| Informes de un mes | 31 ms |
+| Cierre de un día | 34 ms |
+| Buscador de huéspedes | 69 ms |
+| Buscar un nombre | 70 ms |
+
+El buscador de huéspedes con ese volumen tardaba **10,2 segundos** antes de
+los índices; ahora tarda **69 ms**, unas 140 veces menos. Ninguna pantalla
+pasa de la décima de segundo con tres años de historia.
 
 ## Reglas del modelo
 

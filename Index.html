@@ -173,6 +173,16 @@
     border-top:1px solid var(--line);flex-wrap:wrap}
   .mo footer .left{margin-right:auto;display:flex;gap:8px;flex-wrap:wrap}
   .mo.ancho{max-width:660px}
+  /* Menú de acciones secundarias del pie del modal. */
+  .menu{position:relative}
+  .menu-lista{position:absolute;bottom:calc(100% + 6px);left:0;min-width:210px;
+    background:var(--surface);border:1px solid var(--line);border-radius:9px;
+    box-shadow:0 10px 30px rgba(0,0,0,.16);padding:5px;z-index:10;
+    display:flex;flex-direction:column}
+  .menu-lista button{text-align:left;padding:9px 11px;border-radius:6px;
+    font-size:13px;color:var(--tx)}
+  .menu-lista button:hover{background:var(--bg)}
+  .menu-lista button.peligro{color:var(--dan)}
   .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .x{width:30px;height:30px;border-radius:6px;color:var(--tx2);font-size:20px;line-height:1}
   .x:hover{background:var(--line2)}
@@ -287,10 +297,19 @@
     z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:90vw;text-align:center}
   .toast.bad{background:var(--dan)}
 
-  @media(max-width:640px){
+  @media(max-width:700px){
     .g2{grid-template-columns:1fr}
     main{padding:12px}
     .hint{display:none}
+    /* En el teléfono la fila del alojamiento va apretada: se deja el nombre
+       y se sacan las etiquetas, que ocupan más de lo que aportan ahí. */
+    .rname{padding:0 8px;gap:5px;font-size:12.5px}
+    .rname .bano{display:none}
+    .rname .sub{font-size:11.5px}
+    /* La barra de pestañas se desliza en vez de cortarse. */
+    nav#tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    nav#tabs::-webkit-scrollbar{display:none}
+    .cbar{gap:6px}
   }
 
   /* ---------- Animaciones ----------
@@ -688,14 +707,21 @@
     </div>
     <footer>
       <div class="left">
+        <!-- Lo de todos los días queda a mano; el resto se guarda en el menú,
+             que si no el pie se llena de botones y no se encuentra nada. -->
         <button class="btn gh sm hide" id="rCuenta">Cuenta</button>
-        <button class="btn gh sm hide" id="rAcom">Acompañantes</button>
         <button class="btn gh sm hide" id="rComprobante">Comprobante</button>
-        <button class="btn gh sm hide" id="rVerFicha">Ver ficha firmada</button>
-        <button class="btn gh sm hide" id="rEnviar">Copiar enlace de la ficha</button>
-        <button class="btn gh sm hide" id="rFicha">Firmar aquí</button>
-        <button class="btn gh sm hide" id="rCancelar">Cancelar reserva</button>
-        <button class="btn gh sm hide" id="rBorrar">Eliminar</button>
+        <div class="menu hide" id="rMas">
+          <button class="btn gh sm" id="rMasBtn" type="button">Más ▾</button>
+          <div class="menu-lista hide" id="rMasLista">
+            <button class="hide" id="rAcom">Acompañantes</button>
+            <button class="hide" id="rVerFicha">Ver ficha firmada</button>
+            <button class="hide" id="rEnviar">Copiar enlace de la ficha</button>
+            <button class="hide" id="rFicha">Firmar aquí</button>
+            <button class="hide" id="rCancelar">Cancelar reserva</button>
+            <button class="hide peligro" id="rBorrar">Eliminar</button>
+          </div>
+        </div>
       </div>
       <button class="btn gh" data-cerrar="mRes">Cerrar</button>
       <button class="btn" id="rGuardar">Guardar</button>
@@ -1489,7 +1515,10 @@ function pintarCal(animar){
   $('cRng').textContent = corto(dias[0])+' – '+corto(dias[N-1]);
 
   var anchoDia = N>20 ? 58 : (N>10 ? 84 : 128);
-  cal.style.gridTemplateColumns = '252px repeat('+N+', minmax('+anchoDia+'px, 1fr))';
+  // En el teléfono la columna de nombres no puede comerse la pantalla: se
+  // achica para que quede espacio de calendario, que es lo que se viene a ver.
+  var anchoNom = window.innerWidth < 700 ? 132 : 252;
+  cal.style.gridTemplateColumns = anchoNom+'px repeat('+N+', minmax('+anchoDia+'px, 1fr))';
 
   // Encabezado
   var esq=document.createElement('div');
@@ -1806,8 +1835,9 @@ function opcionesRecurso(sel){
     if(r.grupo!==grupo){ grupo=r.grupo; og=document.createElement('optgroup'); og.label=grupo; s.appendChild(og); }
     var o=document.createElement('option');
     o.value=r.id;
+    var cupo=Number(r.capacidad)||0;
     o.textContent=r.unidad+(r.nombre?' — '+r.nombre:'')+'  ·  '+etiquetaBano(r)+
-                  '  ·  hasta '+r.capacidad+' pax';
+                  (cupo?'  ·  hasta '+cupo+' pax':'');
     if(r.id===sel) o.selected=true;
     og.appendChild(o);
   });
@@ -1872,6 +1902,7 @@ function nuevaReserva(rec, entrada, salida){
   $('rEnviar').classList.add('hide'); $('rVerFicha').classList.add('hide');
   $('rCuenta').classList.add('hide'); $('rAcom').classList.add('hide');
   $('rComprobante').classList.add('hide'); $('rVerNoches').classList.add('hide');
+  $('rMas').classList.add('hide'); $('rMasLista').classList.add('hide');
   $('rAnt').readOnly=false; $('rAntNota').classList.add('hide');
   TOTAL_TOCADO=false;
   $('rPaso').classList.add('hide'); $('rGrupoTodo').classList.add('hide');
@@ -1952,6 +1983,8 @@ function pintarPaso(r){
   $('rFicha').classList.toggle('hide', !!r.firmada);
   $('rEnviar').classList.toggle('hide', !!r.firmada);
   $('rCuenta').classList.remove('hide');
+  $('rMas').classList.remove('hide');
+  $('rMasLista').classList.add('hide');
 }
 
 /* ==================================================================
@@ -2419,6 +2452,18 @@ $('rBorrar').onclick=function(){
 };
 
 $('rFicha').onclick=function(){ if(RES) abrirFicha(RES); };
+
+/* El menú "Más" del pie: se cierra al elegir algo o al tocar fuera. */
+$('rMasBtn').onclick=function(e){
+  e.stopPropagation();
+  $('rMasLista').classList.toggle('hide');
+};
+$('rMasLista').addEventListener('click', function(){
+  $('rMasLista').classList.add('hide');
+});
+document.addEventListener('click', function(){
+  var l=$('rMasLista'); if(l) l.classList.add('hide');
+});
 
 /* ==================================================================
    Reserva de grupo: una familia en varios alojamientos, datos una sola vez

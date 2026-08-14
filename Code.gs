@@ -152,10 +152,29 @@ function leer_(nombre) {
   return out;
 }
 
+/* Filas agrupadas por el valor de una columna, armado una sola vez.
+   Sin esto, buscar en el historial recorría TODOS los movimientos por cada
+   reserva: con tres años de datos eran diez segundos de espera. Con el índice
+   es instantáneo, y el costo de armarlo se paga una vez por ejecución. */
+function agrupar_(nombre, campo) {
+  var clave = '__idx_' + nombre + '_' + campo;
+  if (MEMO[clave]) return MEMO[clave];
+  var idx = {};
+  leer_(nombre).forEach(function (fila) {
+    var k = String(fila[campo]);
+    (idx[k] || (idx[k] = [])).push(fila);
+  });
+  MEMO[clave] = idx;
+  return idx;
+}
+
 function olvidar_(nombre) {
   delete MEMO[nombre];
   delete MEMO['__raw_' + nombre];
   delete MEMO['__cab_' + nombre];
+  Object.keys(MEMO).forEach(function (k) {
+    if (k.indexOf('__idx_' + nombre + '_') === 0) delete MEMO[k];
+  });
   if (nombre === 'Unidades' || nombre === 'Camas') olvidarRecursos_();
   if (nombre === 'Config') olvidarConfig_();
   if (nombre === 'Fichas') olvidarFirmadas_();
@@ -1101,8 +1120,7 @@ function eliminarReserva(token, id) {
    respetarlo cuando después se mueva la reserva. */
 
 function planDe_(idReserva) {
-  return leer_('Noches')
-    .filter(function (n) { return String(n.idReserva) === String(idReserva); })
+  return (agrupar_('Noches', 'idReserva')[String(idReserva)] || [])
     .map(function (n) {
       return {
         idReserva: n.idReserva, fecha: ymd_(n.fecha),
@@ -1338,9 +1356,8 @@ function desglosarIva_(total, exento) {
 }
 
 function movimientosDe_(idReserva) {
-  return leer_('Cuenta').filter(function (m) {
-    return String(m.idReserva) === String(idReserva) && !m.anulado;
-  });
+  var suyos = agrupar_('Cuenta', 'idReserva')[String(idReserva)] || [];
+  return suyos.filter(function (m) { return !m.anulado; });
 }
 
 /* Cuánto del alojamiento todavía no se ha anotado en la cuenta: la suma de
@@ -1784,10 +1801,44 @@ function cierreAutomatico() {
    Quedan guardados en una carpeta de Drive y se comparten por enlace, que es
    lo que después se pega en un WhatsApp o en un correo. */
 
-function carpetaDocs_() {
-  var nombre = 'Casona Peumayén — Documentos';
-  var it = DriveApp.getFoldersByName(nombre);
-  return it.hasNext() ? it.next() : DriveApp.createFolder(nombre);
+/* Los documentos se guardan ordenados por fecha, no todos revueltos en una
+   carpeta que a los dos años tiene mil archivos:
+
+     Casona Peumayén — Documentos / 2026 / 08 agosto / Comprobantes
+                                                     / Cierres
+     Casona Peumayén — Fichas     / 2026 / 08 agosto
+
+   La fecha es la del documento, no la del día que se generó: el comprobante
+   se archiva por la llegada del huésped y el cierre por la noche que cierra,
+   que es como uno los busca después.
+
+   Buscar y crear carpetas en Drive cuesta una llamada cada vez, así que
+   dentro de una misma ejecución se recuerdan. */
+var MESES_ = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+              'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function subcarpeta_(padre, nombre) {
+  var clave = '__dir_' + (padre ? padre.getId() : 'raiz') + '/' + nombre;
+  if (MEMO[clave]) return MEMO[clave];
+  var it = padre ? padre.getFoldersByName(nombre) : DriveApp.getFoldersByName(nombre);
+  var f = it.hasNext() ? it.next()
+                       : (padre ? padre.createFolder(nombre) : DriveApp.createFolder(nombre));
+  MEMO[clave] = f;
+  return f;
+}
+
+function carpetaFecha_(raiz, fecha, sub) {
+  var d = ymd_(fecha) || hoy_();
+  var anio = d.slice(0, 4);
+  var mes = d.slice(5, 7) + ' ' + (MESES_[Number(d.slice(5, 7)) - 1] || '');
+  var f = subcarpeta_(null, raiz);
+  f = subcarpeta_(f, anio);
+  f = subcarpeta_(f, mes.trim());
+  return sub ? subcarpeta_(f, sub) : f;
+}
+
+function carpetaDocs_(fecha, sub) {
+  return carpetaFecha_('Casona Peumayén — Documentos', fecha, sub);
 }
 
 /* Convierte el HTML en PDF y lo deja en Drive. La conversión de Google a
@@ -1795,8 +1846,8 @@ function carpetaDocs_() {
    sin él; y si igual no se puede, se guarda el documento como página web
    para no dejar a nadie sin su comprobante. El motivo del fallo se devuelve,
    en vez de quedar en silencio. */
-function pdfDesdeHtml_(html, nombreArchivo, publico) {
-  var carpeta = carpetaDocs_();
+function pdfDesdeHtml_(html, nombreArchivo, publico, fecha, sub) {
+  var carpeta = carpetaDocs_(fecha, sub);
   var archivo = null, tipo = 'pdf', aviso = '';
 
   try {
@@ -1840,7 +1891,8 @@ function probarDocumentos(token) {
   var pasos = [];
   var anotar = function (paso, ok, detalle) { pasos.push({ paso: paso, ok: ok, detalle: detalle || '' }); };
 
-  try { carpetaDocs_(); anotar('Acceso a Drive', true, 'La carpeta de documentos está disponible.'); }
+  try { carpetaDocs_(hoy_(), 'Comprobantes');
+        anotar('Acceso a Drive', true, 'La carpeta del mes está disponible.'); }
   catch (e) {
     anotar('Acceso a Drive', false, String(e.message || e));
     return { ok: false, pasos: pasos,
@@ -1930,7 +1982,8 @@ function cierreHtml(token, fecha) {
 function comprobante(token, idReserva) {
   var u = sesion_(token);
   var d = armarComprobante_(idReserva);
-  var doc = pdfDesdeHtml_(d.html, 'Reserva ' + d.huesped + ' ' + d.checkIn, true);
+  var doc = pdfDesdeHtml_(d.html, 'Reserva ' + d.huesped + ' ' + d.checkIn, true,
+                          d.checkIn, 'Comprobantes');
   logCambio_(u.nombre, 'comprobante', idReserva);
   return {
     url: doc.url, tipo: doc.tipo, aviso: doc.aviso,
@@ -2010,7 +2063,8 @@ function enviarComprobante(token, idReserva, correo) {
   if (!para) throw new Error('Esa reserva no tiene correo. Escríbelo en la reserva o pásalo por WhatsApp.');
 
   var d = armarComprobante_(idReserva);
-  var doc = pdfDesdeHtml_(d.html, 'Reserva ' + d.huesped + ' ' + d.checkIn, true);
+  var doc = pdfDesdeHtml_(d.html, 'Reserva ' + d.huesped + ' ' + d.checkIn, true,
+                          d.checkIn, 'Comprobantes');
   MailApp.sendEmail({
     to: para,
     subject: 'Casona Peumayén · confirmación de tu reserva',
@@ -2034,7 +2088,7 @@ function pdfCierre(token, fecha) {
 }
 
 function pdfCierre_(dia) {
-  return pdfDesdeHtml_(armarCierre_(dia), 'Cierre ' + dia, false);
+  return pdfDesdeHtml_(armarCierre_(dia), 'Cierre ' + dia, false, dia, 'Cierres');
 }
 
 function armarCierre_(dia) {
@@ -2163,12 +2217,16 @@ function panelHoy(token, fecha) {
    y no la pieza completa. */
 function situacionAseo_() {
   var dia = hoy_();
-  var estados = leer_('Aseo');
-  var reservas = leer_('Reservas').filter(function (r) { return r.estado !== 'cancelada'; });
+  // Agrupado por recurso una sola vez: si no, cada habitación recorría la
+  // lista completa de reservas, y esta pantalla se refresca sola cada minuto.
+  var porRecurso = agrupar_('Reservas', 'recurso');
+  var porUnidad = agrupar_('Aseo', 'idUnidad');
 
   return recursos_().map(function (rec) {
-    var e = estados.filter(function (x) { return x.idUnidad === rec.id; })[0];
-    var suyas = reservas.filter(function (r) { return r.recurso === rec.id; });
+    var e = (porUnidad[rec.id] || [])[0];
+    var suyas = (porRecurso[rec.id] || []).filter(function (r) {
+      return r.estado !== 'cancelada';
+    });
 
     var sale = suyas.filter(function (r) { return ymd_(r.checkOut) === dia; })[0];
     var llega = suyas.filter(function (r) { return ymd_(r.checkIn) === dia; })[0];
@@ -2289,9 +2347,9 @@ function guardarFicha_(idReserva, d) {
 
   var m = /^data:(image\/\w+);base64,(.+)$/.exec(d.firma);
   if (!m) throw new Error('Firma inválida.');
-  var carpeta;
-  var it = DriveApp.getFoldersByName('Casona Peumayén — Fichas');
-  carpeta = it.hasNext() ? it.next() : DriveApp.createFolder('Casona Peumayén — Fichas');
+  // La firma se archiva por el día en que se firmó, que es la fecha que pide
+  // el registro de huéspedes.
+  var carpeta = carpetaFecha_('Casona Peumayén — Fichas', hoy_(), '');
   var archivo = carpeta.createFile(Utilities.newBlob(
     Utilities.base64Decode(m[2]), m[1], 'firma_' + idReserva + '.png'));
 
@@ -2331,8 +2389,7 @@ function fichaDe(token, idReserva) {
    es el nombre; el resto se pide por si se necesita, no para trabar. */
 
 function acompanantesDe_(idReserva) {
-  return leer_('Acompanantes')
-    .filter(function (a) { return String(a.idReserva) === String(idReserva); })
+  return (agrupar_('Acompanantes', 'idReserva')[String(idReserva)] || [])
     .map(function (a) {
       return {
         id: a.id, nombre: String(a.nombre || ''), documento: String(a.documento || ''),
