@@ -146,6 +146,13 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
 
 ## Cómo se usa el calendario
 
+**Las barras van de media mañana a media mañana**, como en cualquier tablero
+de hotel: la de una reserva del 14 al 15 empieza a la mitad del día 14 y
+termina a la mitad del 15. No es adorno — es lo que hace legible el recambio.
+El día en que alguien se va, la mitad izquierda es suya y la derecha queda
+libre, así que la reserva que entra ese mismo día se dibuja al lado, en la
+misma fila, sin pisarse ni parecer que hay dos personas en la pieza.
+
 - **Crear**: haz clic en un día libre, o mantén apretado y arrastra sobre
   varios días para elegir el rango de una vez. La selección se detiene sola
   al topar con una reserva existente. Si prefieres no buscar el día en la
@@ -432,7 +439,12 @@ fiscalización. Por eso el sistema no se limita a la marca — registra en qué
 moneda entró cada peso.
 
 **Marcada la casilla *Turista extranjero*, esa reserva pasa a ser una reserva
-en dólares.** No es una etiqueta: le cambia la moneda. De ahí en adelante **no
+en dólares.** La casilla está **justo debajo del precio**, a la vista: es la
+que decide en qué moneda se escriben esas dos cifras, así que tenerla plegada
+dentro de *Más datos* obligaba a abrir un panel para entender por qué el total
+decía pesos.
+
+No es una etiqueta: le cambia la moneda. De ahí en adelante **no
 vuelve a aparecer un peso chileno en ninguna parte suya** —ni en el formulario,
 ni en el detalle noche a noche, ni en su cuenta, ni en el comprobante que se le
 manda— y **nada lleva impuesto**.
@@ -448,7 +460,13 @@ Al marcarla, de una vez:
   ya convertido a dólares.
 
 Desmarcarla hace el camino de vuelta: las casillas vuelven a decir pesos y el
-precio recupera su IVA.
+precio recupera su IVA. Marcarla **no recotiza** un precio que hayas
+conversado: solo lo pasa a dólares y le quita el impuesto.
+
+Si por lo que sea no hay un valor del dólar cargado, la casilla lo dice y la
+reserva **se queda en pesos** en vez de cotizar mal. Poner "US$" encima de una
+cifra que son pesos sería lo peor que podría pasar: se le cobraría al huésped
+casi mil veces de más.
 
 > **Por qué la casilla es de dólares y no de pesos.** Antes decía pesos y el
 > equivalente en dólares se calculaba en una nota abajo. El problema es que

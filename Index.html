@@ -856,6 +856,17 @@
         </div>
       </div>
 
+      <!-- Turista extranjero va acá, pegado al precio, y no plegado dentro de
+           "Más datos": es lo que decide en qué moneda se escriben esas dos
+           casillas de arriba, así que tenerlo escondido obligaba a abrir un
+           panel para entender por qué el total decía pesos. Fija además el
+           cambio del día y deja el alojamiento exento de IVA: los tres van
+           juntos porque la ley los amarra. -->
+      <div class="fld">
+        <label class="chk"><input type="checkbox" id="rExtranjero"> Turista extranjero · cobra en dólares, sin IVA</label>
+        <div class="muted hide" id="rExtNota" style="font-size:11.5px;margin-top:6px"></div>
+      </div>
+
       <!-- Lo que casi nunca se toca queda plegado: una reserva de mostrador
            se guarda sin abrir esto. Se abre solo si la reserva ya trae algo
            adentro, para que nada quede escondido sin avisar. -->
@@ -876,12 +887,6 @@
               <option value="directo">Directo / walk-in</option>
             </select>
           </div>
-        </div>
-        <!-- Turista extranjero: fija el cambio del día y deja el alojamiento
-             exento de IVA. Los dos van juntos porque la ley los amarra. -->
-        <div class="fld">
-          <label class="chk"><input type="checkbox" id="rExtranjero"> Turista extranjero · exento de IVA</label>
-          <div class="muted hide" id="rExtNota" style="font-size:11.5px;margin-top:6px"></div>
         </div>
         <div class="fld hide" id="rAddonBox">
           <label class="chk"><input type="checkbox" id="rAddon"> Programa tinaja + tabla de sushi</label>
@@ -1352,7 +1357,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-19';
+var VERSION_ESPERADA = '2026-08-20';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
@@ -1870,6 +1875,32 @@ function libre(mapa, recurso, desde, hasta, ignorar){
   return true;
 }
 
+/* Dónde va la barra de una reserva dentro de la grilla.
+
+   No ocupa los días enteros: arranca a la MITAD del día de llegada y termina
+   a la MITAD del día de salida. Es como se lee un tablero de hotel — la
+   barra dice "entra el 14, sale el 15" en vez de "ocupa el 14"—, y sobre
+   todo deja ver el recambio: el día 15 tiene la mitad izquierda del que se
+   va y la derecha libre para el que llega, así que la reserva del 15 al 16
+   se dibuja al lado sin pisarse.
+
+   Para conseguirlo la barra se estira UN día de más y se le quitan media
+   columna por cada lado con los márgenes. El truco es que un margen en
+   porcentaje dentro de una grilla se mide contra el ancho del área que ocupa
+   la barra: si el área son 'ncols' columnas, media columna es 50%/ncols. Se
+   calcula solo cuando cambia el ancho de la pantalla, sin volver a medir
+   nada desde JavaScript.
+
+   Los extremos que se salen de la ventana visible van a ras: ahí no hay
+   media columna que mostrar, porque ese día no está en pantalla. */
+function ubicarBarra(b, fila, col, span, recortaIzq, recortaDer){
+  var ncols = span + (recortaDer ? 0 : 1);
+  var media = 'calc(50% / ' + ncols + ' + 2px)';
+  b.style.gridArea = fila+' / '+col+' / '+(Number(fila)+1)+' / '+(col+ncols);
+  b.style.marginLeft  = recortaIzq ? '2px' : media;
+  b.style.marginRight = recortaDer ? '2px' : media;
+}
+
 function pintarCal(animar){
   var cal=$('cal'), N=CAL.dias;
   // Al repintar por un cambio propio no se re-animan las barras: si no,
@@ -1976,6 +2007,7 @@ function pintarCal(animar){
 
   // Barras de reserva
   var finVentana = mas(CAL.inicio, N);
+
   CAL.reservas.forEach(function(r){
     var fila=filaDe[r.recurso];
     if(!fila) return;
@@ -1985,7 +2017,10 @@ function pintarCal(animar){
     var col = noches(CAL.inicio, ini)+2, span = noches(ini, fin);
     var b=document.createElement('div');
     b.className='bar '+r.estado+(r._guardando?' guardando':'');
-    b.style.gridArea = fila+' / '+col+' / '+(fila+1)+' / '+(col+span);
+    // 'finVentana' es el día SIGUIENTE al último visible, así que una salida
+    // que caiga ahí tampoco tiene columna donde dibujar su media: va a ras.
+    ubicarBarra(b, fila, col, span,
+                r.checkIn < CAL.inicio, r.checkOut >= finVentana);
     b.title = r.huesped+'  ·  '+largo(r.checkIn)+' → '+largo(r.checkOut)+
               '  ·  '+(r.pax||1)+' pax  ·  '+plataDe(r, r.total)+
               (r.docs && r.docs.exige
@@ -2110,8 +2145,10 @@ function dibujarEstirado(){
   var fin = ESTIRA.checkOut > finVentana ? finVentana : ESTIRA.checkOut;
   if(fin<=ini) return;
   var col = noches(CAL.inicio, ini)+2, span = noches(ini, fin);
-  var f = ESTIRA.fila;
-  ESTIRA.barra.style.gridArea = f+' / '+col+' / '+(Number(f)+1)+' / '+(col+span);
+  // La misma cuenta que al pintar: si acá se olvidaran las medias columnas,
+  // la barra daría un salto al soltarla.
+  ubicarBarra(ESTIRA.barra, ESTIRA.fila, col, span,
+              ESTIRA.checkIn < CAL.inicio, ESTIRA.checkOut >= finVentana);
 }
 
 $('cal').addEventListener('pointermove', function(e){
@@ -2287,8 +2324,15 @@ $('rAddon').addEventListener('change', function(){ $('rAddonF').classList.toggle
    el formulario devolvía la cifra que estuviera mostrando, así que el
    impuesto se colaba de vuelta. Con la casilla en dólares no hay nada que
    adivinar: lo que se escribe es lo que el huésped paga. */
-function monedaRes(){ return $('rExtranjero').checked ? 'USD' : 'CLP'; }
 function cambioRes(){ return Number(RES && RES.dolar) || dolarDelDia(); }
+/* Sin un valor del dólar no hay forma de cotizar en dólares, así que la
+   reserva se sigue escribiendo en pesos aunque la casilla esté marcada. Es
+   preferible eso a poner el rótulo "US$" encima de una cifra que son pesos:
+   el servidor la multiplicaría por el cambio y le cobraría al huésped casi
+   mil veces de más. */
+function monedaRes(){
+  return ($('rExtranjero').checked && cambioRes() > 0) ? 'USD' : 'CLP';
+}
 function ivaPct(){ return Number(CAL && CAL.cfg && CAL.cfg.iva) || 0; }
 /* De una TARIFA DE LISTA (pesos, con IVA incluido) a lo que va en la casilla:
    al extranjero le corresponde el neto, y en dólares. */
@@ -2303,19 +2347,27 @@ function deGuardado(clp){
 }
 
 function pintarMoneda(){
+  var marcado = $('rExtranjero').checked;
   var usd = monedaRes()==='USD';
   $('rTotMon').textContent = usd ? '(US$)' : '($)';
   $('rAntMon').textContent = usd ? '(US$)' : '($)';
   $('rTot').step = usd ? '1' : '1000';
   $('rAnt').step = usd ? '1' : '1000';
-  $('rExtNota').classList.toggle('hide', !usd);
-  if(!usd) return;
+  $('rExtNota').classList.toggle('hide', !marcado);
+  if(!marcado) return;
+  if(!usd){
+    // Marcado pero sin cambio: se dice qué falta en vez de cotizar mal.
+    $('rExtNota').innerHTML =
+      '<b>No hay un valor del dólar cargado</b>, así que esta reserva se sigue '+
+      'escribiendo en pesos. Ponlo en <b>Configuración</b> y vuelve a marcar la casilla.';
+    return;
+  }
   var c = cambioRes();
   $('rExtNota').innerHTML =
     'Esta reserva se cotiza y se cobra <b>en dólares y sin impuestos</b>: el alojamiento '+
     'a turistas extranjeros sin domicilio en Chile va exento de IVA. '+
-    (c ? 'Cambio '+(RES && RES.dolar ? 'fijado al reservar' : 'de hoy, que le queda fijado')+
-         ': <b>$'+plataSimple(c)+' por US$1</b>. ' : '')+
+    'Cambio '+(RES && RES.dolar ? 'fijado al reservar' : 'de hoy, que le queda fijado')+
+    ': <b>$'+plataSimple(c)+' por US$1</b>. '+
     'Para que la exención valga, el pago tiene que entrar en dólares.';
 }
 
@@ -2380,7 +2432,9 @@ function plegarExtra(abierto){
   var partes=[];
   if($('rMail').value.trim()) partes.push('correo');
   if($('rCan').value && $('rCan').value!=='whatsapp') partes.push($('rCan').value);
-  if($('rExtranjero').checked) partes.push('extranjero');
+  // 'extranjero' ya no se cuenta acá: la casilla se subió junto al precio y
+  // está siempre a la vista, así que anunciarla dentro de este resumen haría
+  // pensar que está escondida adentro.
   if($('rAddon').checked) partes.push('tinaja + sushi');
   if($('rNot').value.trim()) partes.push('notas');
   $('rMasResumen').textContent = abierto ? ''
@@ -2429,8 +2483,9 @@ function abrirReserva(r){
   $('rAnt').readOnly = conPagos;
   $('rAntNota').classList.toggle('hide', !conPagos);
   // Si la reserva ya trae algo de lo plegado, se abre: si no, esos datos
-  // quedarían escondidos y parecerían no existir.
-  plegarExtra(!!(r.email || r.notas || r.extranjero || r.addon ||
+  // quedarían escondidos y parecerían no existir. Ser extranjero ya no obliga
+  // a abrirlo: esa casilla está arriba, a la vista.
+  plegarExtra(!!(r.email || r.notas || r.addon ||
                  (r.canal && r.canal!=='whatsapp') ||
                  (r.estado!=='confirmada' && r.estado!=='en_casa')));
   pintarPaso(r);
