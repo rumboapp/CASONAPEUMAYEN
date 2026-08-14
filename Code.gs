@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-14b';
+var VERSION = '2026-08-15';
 
 function version() { return VERSION; }
 
@@ -473,9 +473,13 @@ function esAlta_(fechaYmd) {
 }
 
 /* ===================== TIPO DE CAMBIO =====================
-   El dólar observado se busca una vez al día en mindicador.cl y queda
-   guardado. Si el servicio no contesta —o si prefieren fijarlo a mano— vale
-   lo que diga 'dolarManual' en Config, y si tampoco hay eso, el último valor
+   El cambio lo fijan ellos: 'dolarManual' en Config manda por sobre todo lo
+   demás, y viene con un valor puesto desde la instalación. Mientras haya uno,
+   el sistema NO consulta nada afuera — así no depende de internet ni pide el
+   permiso de consultas externas.
+
+   Solo si lo dejan en 0 se busca el dólar observado del día en mindicador.cl,
+   y aun así, si el servicio no contesta, se sigue con el último valor
    conocido. Nunca queda en cero: un cero convertiría cualquier precio en
    infinito y eso sí sería un problema. */
 var DOLAR_RESPALDO = 950;
@@ -539,12 +543,6 @@ function aUsd_(pesos, cambio) {
   return Math.round((Number(pesos) || 0) / c * 100) / 100;
 }
 
-/* Lo que ve la pantalla: el valor de hoy y de dónde salió. */
-function tipoDeCambio(token) {
-  sesion_(token);
-  return dolarHoy_();
-}
-
 /* ===================== SETUP ===================== */
 
 function setup() {
@@ -579,10 +577,18 @@ function setup() {
       // Porcentaje del programa tinaja + sushi que se anota al restaurante.
       // Cámbialo acá cuando definan el reparto con la cocina.
       addonParteRestaurante: 50,
-      iva: 19
+      iva: 19,
+      // El cambio lo fijan ellos desde Configuración. Viene con un valor
+      // puesto a propósito: mientras haya uno, el sistema NO sale a internet
+      // a buscar el dólar, y así no hace falta el permiso de consultas
+      // externas. Poniéndolo en 0 se activa la búsqueda automática.
+      dolarManual: DOLAR_RESPALDO
     };
     Object.keys(cfg).forEach(function (k) { insertar_('Config', { clave: k, valor: cfg[k] }); });
   }
+  // Una instalación que viene de antes no tiene la clave: se le pone el
+  // respaldo, para que tampoco salga a internet sin que nadie lo pida.
+  if (config_('dolarManual', null) === null) actualizarConfig_('dolarManual', DOLAR_RESPALDO);
 
   if (!leer_('Unidades').length) {
     // La distribución real de la casa. Todas se venden como habitación
@@ -632,6 +638,12 @@ function setup() {
     insertar_('Usuarios', { nombre: 'admin', rol: 'admin', pinHash: pin_('1234'), activo: true });
   }
 
+  // Las reservas cargadas antes de que existiera el plan por noche no tienen
+  // filas en la hoja Noches, y por eso el comprobante decía "0 noches".
+  // Acá se les arma el plan a partir de sus fechas y su total.
+  var reparadas = repararNoches_();
+  if (reparadas) Logger.log('Se repusieron ' + plural_(reparadas, 'noche', 'noches') + ' que faltaban.');
+
   return ss.getUrl();
 }
 
@@ -652,7 +664,7 @@ function repararReservas(borrar) {
     return { revisadas: 0, borradas: 0 };
   }
 
-  Logger.log(malas.length + ' reserva(s) con fechas ilegibles:');
+  Logger.log(plural_(malas.length, 'reserva', 'reservas') + ' con fechas ilegibles:');
   malas.forEach(function (r) {
     Logger.log('  · ' + r.id + '  huésped="' + r.huesped + '"  checkIn="' + r.checkIn + '"');
   });
@@ -975,13 +987,18 @@ function guardarReserva(token, datos) {
     // y se le respeta después, aunque el dólar se mueva. La exención de IVA
     // viene de la mano, pero solo vale si termina pagando en moneda
     // extranjera: eso se comprueba al cobrar, no acá.
+    // Cambiar la casilla desde el formulario tiene que hacer exactamente lo
+    // mismo que marcarla desde la cuenta, incluido arrastrar los cargos de
+    // alojamiento ya anotados. Si no, la reserva diría una cosa y su cuenta
+    // otra distinta.
+    var cambiaExento = false;
     if (datos.extranjero !== undefined) {
       campos.extranjero = !!datos.extranjero;
-      if (datos.extranjero) {
-        campos.exentoIva = true;
-        if (!datos.id) campos.dolar = dolarHoy_().valor;
-      } else {
-        campos.exentoIva = false;
+      campos.exentoIva = !!datos.extranjero;
+      if (datos.extranjero && !datos.id) campos.dolar = dolarHoy_().valor;
+      if (datos.id) {
+        var antes = leer_('Reservas').filter(function (x) { return x.id === datos.id; })[0];
+        cambiaExento = antes && (!!antes.exentoIva !== !!datos.extranjero);
       }
     }
 
@@ -996,7 +1013,12 @@ function guardarReserva(token, datos) {
       delete campos.total;                     // el total lo fija el plan de noches
       actualizar_('Reservas', 'id', datos.id, campos);
       campos.id = datos.id;
-      return { id: datos.id, total: ajustarPlan_(campos, pedido, u.nombre) };
+      var totalNuevo = ajustarPlan_(campos, pedido, u.nombre);
+      if (cambiaExento) {
+        marcarExentoIva(token, datos.id, !!datos.extranjero,
+                        antes ? String(antes.docTurismo || '') : '');
+      }
+      return { id: datos.id, total: totalNuevo };
     }
 
     var id = uid_('R');
@@ -1156,7 +1178,7 @@ function cambiarEstadoGrupo(token, grupo, estado) {
 
 /* Mover o extender arrastrando en el calendario. */
 function moverReserva(token, id, recurso, checkIn, checkOut) {
-  sesion_(token);
+  var u = sesion_(token);
   var f = validarFechas_(checkIn, checkOut);
   if (!recursos_().some(function (x) { return x.id === recurso; })) {
     throw new Error('Ese alojamiento no está disponible para reservar.');
@@ -1165,6 +1187,9 @@ function moverReserva(token, id, recurso, checkIn, checkOut) {
   lock.waitLock(20000);
   try {
     verificarLibre_(recurso, f.checkIn, f.checkOut, id);
+    // Primero se le repone el plan si le faltaba: después de cambiarle las
+    // fechas ya no se sabría por qué noches se acordó su precio.
+    asegurarPlan_(id);
     var unidad = recursos_().filter(function (x) { return x.id === recurso; })[0];
     actualizar_('Reservas', 'id', id, {
       recurso: recurso, idUnidad: unidad ? unidad.idUnidad : '',
@@ -1173,7 +1198,7 @@ function moverReserva(token, id, recurso, checkIn, checkOut) {
     // Alargar la reserva agrega esas noches al precio, y acortarla las quita:
     // el total nunca se queda pegado en lo que valía antes.
     var r = sincronizarNoches_({ id: id, recurso: recurso, checkIn: f.checkIn, checkOut: f.checkOut },
-                               sesion_(token).nombre);
+                               u.nombre);
     return { total: r.total, agregadas: r.agregadas, quitadas: r.quitadas };
   } finally {
     lock.releaseLock();
@@ -1310,6 +1335,66 @@ function totalDelPlan_(idReserva) {
   return Math.round(t);
 }
 
+/* El plan que se puede MOSTRAR, exista o no en la planilla.
+
+   Las reservas cargadas antes de que existiera el plan por noche no tienen
+   filas en la hoja Noches. Leerlas tal cual daba "0 noches" en el
+   comprobante y un alojamiento pendiente de cero en la cuenta, aunque la
+   reserva tuviera fechas y total correctos. Acá se arma uno en memoria a
+   partir de las fechas, repartiendo el total de la reserva, para que nada se
+   vea vacío mientras setup() no haya reparado los datos. */
+function planEfectivo_(reserva) {
+  var guardado = planDe_(reserva.id);
+  if (guardado.length) return guardado;
+
+  var ci = ymd_(reserva.checkIn), co = ymd_(reserva.checkOut);
+  if (!ci || !co || co <= ci) return [];
+
+  var dias = [];
+  for (var f = ci; f < co; f = sumarDias_(f, 1)) {
+    dias.push({ fecha: f, valor: tarifaDe_(reserva.recurso, f) });
+  }
+  var total = Math.round(Number(reserva.total) || 0);
+  var valores = total > 0 ? repartir_(total, dias) : null;
+  return dias.map(function (d) {
+    return {
+      idReserva: reserva.id, fecha: d.fecha,
+      valor: valores ? valores[d.fecha] : d.valor,
+      ajustada: false, nota: ''
+    };
+  });
+}
+
+/* Le repone el plan a UNA reserva, si le falta, usando las fechas y el total
+   que tiene guardados en ese momento. Hay que llamarlo ANTES de tocarle las
+   fechas: si se mueve primero, ya no hay forma de saber por qué noches se
+   acordó el precio, y la reserva terminaría recotizada a tarifa de lista. */
+function asegurarPlan_(idReserva) {
+  if (planDe_(idReserva).length) return 0;
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) return 0;
+  var plan = planEfectivo_(r);
+  if (!plan.length) return 0;
+  insertarVarias_('Noches', plan);
+  return plan.length;
+}
+
+/* Le devuelve sus noches a las reservas que quedaron sin plan. Lo llama
+   setup(), así que se arregla solo la próxima vez que alguien lo ejecute.
+   Es idempotente: una reserva que ya tiene noches no se toca. */
+function repararNoches_() {
+  var conPlan = agrupar_('Noches', 'idReserva');
+  var faltan = [];
+  leer_('Reservas').forEach(function (r) {
+    if (r.estado === 'cancelada') return;
+    if ((conPlan[String(r.id)] || []).length) return;
+    planEfectivo_(r).forEach(function (n) { faltan.push(n); });
+  });
+  if (!faltan.length) return 0;
+  insertarVarias_('Noches', faltan);
+  return faltan.length;
+}
+
 /* El detalle noche a noche, para verlo y editarlo desde la reserva. */
 function nochesDe(token, idReserva) {
   sesion_(token);
@@ -1320,13 +1405,14 @@ function nochesDe(token, idReserva) {
   movs.forEach(function (m) {
     if (m.clase === 'cargo' && m.tipo === 'alojamiento') posteadas[ymd_(m.fecha)] = true;
   });
-  var plan = planDe_(idReserva).map(function (n) {
+  var plan = planEfectivo_(r).map(function (n) {
     n.posteada = !!posteadas[n.fecha];
     n.tarifa = tarifaDe_(r.recurso, n.fecha);
     return n;
   });
+  var total = plan.reduce(function (a, n) { return a + n.valor; }, 0);
   return {
-    idReserva: idReserva, noches: plan, total: totalDelPlan_(idReserva),
+    idReserva: idReserva, noches: plan, total: Math.round(total),
     checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut)
   };
 }
@@ -1474,8 +1560,10 @@ function alojamientoPendiente_(reserva, movs) {
   movs.forEach(function (m) {
     if (m.clase === 'cargo' && m.tipo === 'alojamiento') puestas[ymd_(m.fecha)] = true;
   });
+  // Con planEfectivo_ una reserva sin plan guardado no aparece como si no
+  // debiera nada: lo que falta se calcula desde sus propias fechas.
   var pend = 0;
-  planDe_(reserva.id).forEach(function (n) { if (!puestas[n.fecha]) pend += n.valor; });
+  planEfectivo_(reserva).forEach(function (n) { if (!puestas[n.fecha]) pend += n.valor; });
   return pend > 0 ? pend : 0;
 }
 
@@ -1550,6 +1638,11 @@ function cuentaDe(token, idReserva) {
     saldoProyectado: saldo + pendiente,
     saldoProyectadoUsd: aUsd_(saldo + pendiente, cambio)
   };
+}
+
+/* "1 noche" y "2 noches", no "1 noche(s)": estos textos los lee gente. */
+function plural_(n, uno, varios) {
+  return n + ' ' + (Number(n) === 1 ? uno : varios);
 }
 
 function plataTxt_(n) {
@@ -1705,7 +1798,7 @@ function postearNoche_(reserva, fecha, quien) {
   });
   if (yaEsta) return false;
 
-  var noche = planDe_(reserva.id).filter(function (n) { return n.fecha === fecha; })[0];
+  var noche = planEfectivo_(reserva).filter(function (n) { return n.fecha === fecha; })[0];
   var monto = noche ? noche.valor : 0;
   if (monto <= 0) return false;
 
@@ -1767,6 +1860,11 @@ function marcarExentoIva(token, idReserva, exento, docTurismo) {
   if (!r) throw new Error('No se encontró la reserva.');
   actualizar_('Reservas', 'id', idReserva, {
     exentoIva: !!exento, docTurismo: String(docTurismo || ''),
+    // 'extranjero' es la casilla del formulario de reserva y 'exentoIva' la
+    // marca de la cuenta: son el MISMO dato mirado desde dos pantallas. Si no
+    // se mueven juntos, guardar la reserva después de marcarla en la cuenta
+    // la desmarca sin avisar.
+    extranjero: !!exento,
     // Si nunca se le fijó un tipo de cambio, se le fija ahora.
     dolar: Number(r.dolar) || (exento ? dolarHoy_().valor : 0)
   });
@@ -1897,8 +1995,8 @@ function resumenDia_(dia, reservas) {
       var anotados = acompanantesDe_(r.id).length;
       if (esperados > anotados) {
         avisos.push({ tipo: 'sin_acompanantes', idReserva: r.id, huesped: r.huesped,
-          texto: 'Faltan ' + (esperados - anotados) + ' de ' + esperados +
-                 ' acompañante(s) por registrar.' });
+          texto: 'Faltan ' + (esperados - anotados) + ' de ' +
+                 plural_(esperados, 'acompañante', 'acompañantes') + ' por registrar.' });
       }
     }
     // Un exento que pagó en pesos pierde la exención. Mejor saberlo mientras
@@ -2150,19 +2248,6 @@ function hojaHtml_(titulo, cuerpo) {
 
 /* ---------- Comprobante de la reserva, para mandarle al huésped ---------- */
 
-/* Devuelve el documento como página, sin pasar por Drive. Sirve para abrirlo
-   en el navegador e imprimirlo o guardarlo como PDF desde ahí: es el camino
-   que funciona siempre, sin permisos ni conversiones. */
-function comprobanteHtml(token, idReserva) {
-  sesion_(token);
-  return armarComprobante_(idReserva).html;
-}
-
-function cierreHtml(token, fecha) {
-  sesion_(token);
-  return armarCierre_(ymd_(fecha) || hoy_());
-}
-
 function comprobante(token, idReserva) {
   var u = sesion_(token);
   var d = armarComprobante_(idReserva);
@@ -2183,7 +2268,9 @@ function armarComprobante_(idReserva) {
   if (!r) throw new Error('No se encontró la reserva.');
 
   var rec = recursos_().filter(function (x) { return x.id === r.recurso; })[0];
-  var plan = planDe_(idReserva);
+  // planEfectivo_ y no planDe_: una reserva vieja sin filas en Noches salía
+  // con "0 noches" y sin el detalle, aunque su total estuviera bien.
+  var plan = planEfectivo_(r);
   var entrada = hora_(config_('checkIn'), '15:00');
   var salida = hora_(config_('checkOut'), '11:00');
   var reglas = reglamento().es;
@@ -2248,32 +2335,6 @@ function armarComprobante_(idReserva) {
     texto: 'Hola ' + r.huesped + ', te confirmamos tu reserva en Casona Peumayén del ' +
       ymd_(r.checkIn) + ' al ' + ymd_(r.checkOut) + '. Acá va el comprobante: {url}'
   };
-}
-
-function enviarComprobante(token, idReserva, correo) {
-  var u = sesion_(token);
-  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
-  if (!r) throw new Error('No se encontró la reserva.');
-  var para = String(correo || r.email || '').trim();
-  if (!para) throw new Error('Esa reserva no tiene correo. Escríbelo en la reserva o pásalo por WhatsApp.');
-
-  var d = armarComprobante_(idReserva);
-  var doc = pdfDesdeHtml_(d.html, 'Reserva ' + d.huesped + ' ' + d.checkIn, true,
-                          d.checkIn, 'Comprobantes');
-  MailApp.sendEmail({
-    to: para,
-    subject: 'Casona Peumayén · confirmación de tu reserva',
-    body: d.texto.replace('{url}', doc.url),
-    htmlBody: 'Hola ' + escapar_(r.huesped) + ',<br><br>Te confirmamos tu reserva del ' +
-      ymd_(r.checkIn) + ' al ' + ymd_(r.checkOut) + '.<br>' +
-      'Adjuntamos el comprobante, y también lo puedes ver acá: ' +
-      '<a href="' + doc.url + '">' + doc.url + '</a><br><br>Te esperamos.',
-    // Si la conversión falló, el adjunto va como página web: es preferible
-    // eso a que el huésped no reciba nada.
-    attachments: [DriveApp.getFileById(doc.id).getBlob()]
-  });
-  logCambio_(u.nombre, 'comprobante_enviado', idReserva + ' → ' + para);
-  return { enviado: para, url: doc.url, tipo: doc.tipo, aviso: doc.aviso };
 }
 
 /* ---------- Resumen de la noche, para el dueño ---------- */
@@ -2641,8 +2702,8 @@ function guardarAcompanantes(token, idReserva, lista) {
   var adultos = (lista || []).filter(function (a) { return a && !a.menor; }).length;
   var tope = Math.max((Number(r.pax) || 1) - 1, 0);
   if (adultos > tope) {
-    throw new Error('La reserva es para ' + (Number(r.pax) || 1) + ' persona(s): ' +
-      'caben ' + tope + ' acompañante(s) además del titular. ' +
+    throw new Error('La reserva es para ' + plural_(Number(r.pax) || 1, 'persona', 'personas') +
+      ': caben ' + plural_(tope, 'acompañante', 'acompañantes') + ' además del titular. ' +
       'Sube el número de personas de la reserva si van más.');
   }
   var n = guardarAcompanantes_(idReserva, lista);
@@ -2821,6 +2882,9 @@ function reglamentoPorDefecto_(entrada, salida) {
    escriben tal como se van a leer. El resto casi nunca se toca, así que va
    guardado detrás de "ajustes que casi nunca se tocan". */
 var CONFIG_EDITABLE = [
+  // El cambio lo deciden ellos, así que el campo va al frente y no escondido.
+  // En 0 se busca el dólar observado del día; con un valor puesto, manda ese.
+  { clave: 'dolarManual', rotulo: 'Nuestro valor del dólar ($ por US$1)', tipo: 'numero', grupo: 'dolar' },
   { clave: 'reglasEs', rotulo: 'Normas de convivencia', tipo: 'texto_largo', grupo: 'normas' },
   { clave: 'reglasEn', rotulo: 'House rules (las mismas, en inglés)', tipo: 'texto_largo', grupo: 'normas' },
   { clave: 'correoDueno', rotulo: 'Correo para el cierre de cada noche', tipo: 'texto', grupo: 'avanzado' },
@@ -2831,10 +2895,7 @@ var CONFIG_EDITABLE = [
   { clave: 'addonBase', rotulo: 'Programa tinaja + sushi (baja)', tipo: 'numero', grupo: 'avanzado' },
   { clave: 'addonAlta', rotulo: 'Programa tinaja + sushi (alta)', tipo: 'numero', grupo: 'avanzado' },
   { clave: 'addonParteRestaurante', rotulo: '% del programa que va al restaurante', tipo: 'numero', grupo: 'avanzado' },
-  { clave: 'iva', rotulo: 'IVA (%)', tipo: 'numero', grupo: 'avanzado' },
-  // El dólar se busca solo cada día; esto es para fijarlo a mano cuando se
-  // quiere trabajar con un valor propio. En 0 vuelve al automático.
-  { clave: 'dolarManual', rotulo: 'Dólar fijado a mano (0 = automático)', tipo: 'numero', grupo: 'avanzado' }
+  { clave: 'iva', rotulo: 'IVA (%)', tipo: 'numero', grupo: 'avanzado' }
 ];
 
 function configuracion(token) {
@@ -3122,12 +3183,14 @@ function diagnostico() {
     out.ilegibles = reservas.filter(function (r) { return !ymd_(r.checkIn) || !ymd_(r.checkOut); }).length;
     if (out.ilegibles) {
       out.ok = false;
-      out.mensaje = out.ilegibles + ' reserva(s) tienen fechas ilegibles y por eso no aparecen ' +
+      out.mensaje = plural_(out.ilegibles, 'reserva tiene', 'reservas tienen') +
+        ' fechas ilegibles y por eso no ' + (out.ilegibles === 1 ? 'aparece' : 'aparecen') + ' ' +
         'en el calendario. Ejecuta repararReservas() desde el editor para revisarlas.';
       return out;
     }
-    out.mensaje = 'Todo en orden: ' + out.usuarios + ' usuario(s), ' + out.unidades +
-      ' unidades y ' + out.reservas + ' reserva(s).';
+    out.mensaje = 'Todo en orden: ' + plural_(out.usuarios, 'usuario', 'usuarios') + ', ' +
+      plural_(out.unidades, 'unidad', 'unidades') + ' y ' +
+      plural_(out.reservas, 'reserva', 'reservas') + '.';
   } catch (e) {
     out.ok = false;
     out.mensaje = 'Error: ' + e.message + '. Lo más probable es que falte ejecutar setup().';

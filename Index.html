@@ -219,6 +219,15 @@
   .aviso{background:#fdf3e3;border:1px solid #f0d9a8;color:#7a5312;
     border-radius:8px;padding:10px 12px;font-size:12.5px;line-height:1.5;margin:0 0 14px}
 
+  /* "Más datos": lo que casi nunca se llena vive plegado, para que el
+     formulario de reserva quepa de una mirada. */
+  .mas{display:flex;align-items:center;gap:7px;width:100%;padding:9px 2px;
+    font-size:13px;color:var(--tx2);text-align:left;margin:2px 0 10px}
+  .mas:hover{color:var(--tx)}
+  .mas .flecha{display:inline-block;transition:transform .15s;color:var(--tx3)}
+  .mas.abierto .flecha{transform:rotate(90deg)}
+  .mas .muted{font-size:12px;margin-left:auto;text-align:right}
+
   /* Soltar un archivo encima. En el celular no se usa —ahí se aprieta el
      botón y se abre la cámara—, pero en el mostrador es lo más rápido. */
   .zonaSoltar{margin-top:10px;padding:16px;text-align:center;font-size:12.5px;
@@ -559,7 +568,6 @@
           <button class="btn gh sm" id="cieVer">Ver el día</button>
           <button class="btn sm" id="cieCerrar">Cerrar el día</button>
           <span style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
-            <button class="btn gh sm" id="cieImprimir">Abrir para imprimir</button>
             <button class="btn gh sm" id="ciePdf">Generar PDF</button>
             <button class="btn gh sm" id="cieMail">Enviar al dueño</button>
           </span>
@@ -595,6 +603,23 @@
 
     <!-- ---------- Configuración ---------- -->
     <section id="v-cfg" class="hide">
+      <!-- El cambio lo fijan ellos, así que va primero y no escondido. -->
+      <div class="card">
+        <h2>Valor del dólar</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          El que usamos para cotizarle a un huésped extranjero y para convertir sus pagos.
+          Cada reserva se queda con el valor que estaba puesto el día en que se hizo,
+          así que cambiarlo acá <b>no altera las reservas ya cotizadas</b>.
+        </p>
+        <div id="cfgDolarCampo" style="max-width:280px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+          <button class="btn sm" id="cfgDolarGuardar">Guardar el valor</button>
+          <span class="muted" id="cfgDolarAhora" style="font-size:12.5px"></span>
+        </div>
+        <p class="muted" style="font-size:12px;margin-top:10px">
+          Si lo dejas en <b>0</b>, el sistema consulta solo el dólar observado del día.
+        </p>
+      </div>
       <div class="card">
         <h2>Normas de convivencia</h2>
         <p class="muted" style="font-size:13px;margin-bottom:12px">
@@ -679,6 +704,7 @@
           </label>
         </span>
       </div>
+      <!-- Lo que se llena SIEMPRE. Con esto ya se guarda una reserva. -->
       <div class="fld">
         <label>Fechas</label>
         <div class="daterow" id="rFechas">
@@ -689,28 +715,7 @@
       <div class="fld"><label>Alojamiento</label><select id="rRec"></select></div>
       <div class="g2">
         <div class="fld"><label>Huésped</label><input id="rNom" required></div>
-        <div class="fld"><label>Teléfono (con código país)</label><input id="rTel" inputmode="tel" placeholder="+56 9 1234 5678"></div>
-      </div>
-      <div class="fld"><label>Correo</label><input id="rMail" type="email" placeholder="opcional"></div>
-      <div class="g2">
-        <div class="fld"><label>Canal</label>
-          <select id="rCan">
-            <option value="whatsapp">WhatsApp</option>
-            <option value="booking">Booking</option>
-            <option value="airbnb">Airbnb</option>
-            <option value="instagram">Instagram</option>
-            <option value="directo">Directo / walk-in</option>
-          </select>
-        </div>
-        <div class="fld"><label>Estado</label>
-          <select id="rEst">
-            <option value="tentativa">Tentativa (sin confirmar)</option>
-            <option value="confirmada">Confirmada (aún no llega)</option>
-            <option value="en_casa">Check-in hecho (alojado)</option>
-            <option value="checkout">Check-out hecho (se fue)</option>
-            <option value="no_show">No-show (no llegó)</option>
-          </select>
-        </div>
+        <div class="fld"><label>Teléfono</label><input id="rTel" inputmode="tel" placeholder="+56 9 1234 5678"></div>
       </div>
       <div class="g2">
         <div class="fld">
@@ -718,15 +723,9 @@
           <input id="rPax" type="number" min="1" value="1">
         </div>
         <div class="fld">
-          <label>Niños <span class="muted">· menores de 6, no pagan</span></label>
+          <label>Niños <span class="muted">· menores de 6</span></label>
           <input id="rNinos" type="number" min="0" value="0">
         </div>
-      </div>
-      <!-- Turista extranjero: fija el cambio del día y deja el alojamiento
-           exento de IVA. Los dos van juntos porque la ley los amarra. -->
-      <div class="fld">
-        <label class="chk"><input type="checkbox" id="rExtranjero"> Turista extranjero (paga en dólares, alojamiento exento de IVA)</label>
-        <div class="muted hide" id="rExtNota" style="font-size:11.5px;margin-top:6px"></div>
       </div>
       <div class="g2">
         <div class="fld">
@@ -746,11 +745,49 @@
           </div>
         </div>
       </div>
-      <div class="fld hide" id="rAddonBox">
-        <label class="chk"><input type="checkbox" id="rAddon"> Programa tinaja + tabla de sushi</label>
-        <input type="datetime-local" id="rAddonF" class="hide" style="margin-top:8px">
+
+      <!-- Lo que casi nunca se toca queda plegado: una reserva de mostrador
+           se guarda sin abrir esto. Se abre solo si la reserva ya trae algo
+           adentro, para que nada quede escondido sin avisar. -->
+      <button type="button" class="mas" id="rMasDatos">
+        <span class="flecha">▸</span> Más datos
+        <span class="muted" id="rMasResumen"></span>
+      </button>
+      <div id="rExtra" class="hide" style="border-left:2px solid var(--line2);
+           padding-left:12px;margin:2px 0 4px">
+        <div class="g2">
+          <div class="fld"><label>Correo</label><input id="rMail" type="email" placeholder="opcional"></div>
+          <div class="fld"><label>Canal</label>
+            <select id="rCan">
+              <option value="whatsapp">WhatsApp</option>
+              <option value="booking">Booking</option>
+              <option value="airbnb">Airbnb</option>
+              <option value="instagram">Instagram</option>
+              <option value="directo">Directo / walk-in</option>
+            </select>
+          </div>
+        </div>
+        <!-- Turista extranjero: fija el cambio del día y deja el alojamiento
+             exento de IVA. Los dos van juntos porque la ley los amarra. -->
+        <div class="fld">
+          <label class="chk"><input type="checkbox" id="rExtranjero"> Turista extranjero · exento de IVA</label>
+          <div class="muted hide" id="rExtNota" style="font-size:11.5px;margin-top:6px"></div>
+        </div>
+        <div class="fld hide" id="rAddonBox">
+          <label class="chk"><input type="checkbox" id="rAddon"> Programa tinaja + tabla de sushi</label>
+          <input type="datetime-local" id="rAddonF" class="hide" style="margin-top:8px">
+        </div>
+        <div class="fld"><label>Estado</label>
+          <select id="rEst">
+            <option value="tentativa">Tentativa (sin confirmar)</option>
+            <option value="confirmada">Confirmada (aún no llega)</option>
+            <option value="en_casa">Check-in hecho (alojado)</option>
+            <option value="checkout">Check-out hecho (se fue)</option>
+            <option value="no_show">No-show (no llegó)</option>
+          </select>
+        </div>
+        <div class="fld"><label>Notas</label><textarea id="rNot" rows="2" placeholder="Alergias, hora estimada de llegada, pedidos especiales…"></textarea></div>
       </div>
-      <div class="fld"><label>Notas</label><textarea id="rNot" rows="2" placeholder="Alergias, hora estimada de llegada, pedidos especiales…"></textarea></div>
       <div class="err hide" id="rErr"></div>
     </div>
     <footer>
@@ -784,28 +821,6 @@
     <header><h3 id="hueTit">Huésped</h3><button class="x" data-cerrar="mHue">×</button></header>
     <div class="body"><div id="hueCuerpo"></div></div>
     <footer><button class="btn gh" data-cerrar="mHue">Cerrar</button></footer>
-  </div>
-</div>
-
-<!-- ==================== COMPROBANTE ==================== -->
-<div class="ov hide" id="mComp">
-  <div class="mo" style="max-width:480px">
-    <header><h3>Comprobante de la reserva</h3><button class="x" data-cerrar="mComp">×</button></header>
-    <div class="body">
-      <p class="muted" style="font-size:13px;margin-bottom:14px">
-        Un PDF con el logo, las fechas, el detalle de las noches y las condiciones
-        de la estadía. Queda guardado en Drive y se abre con el enlace.
-      </p>
-      <div id="compCuerpo"></div>
-      <div class="err hide" id="compErr"></div>
-    </div>
-    <footer>
-      <div class="left">
-        <button class="btn gh sm" id="compImprimir">Abrir para imprimir</button>
-      </div>
-      <button class="btn gh" data-cerrar="mComp">Cerrar</button>
-      <button class="btn" id="compGenerar">Generar PDF</button>
-    </footer>
   </div>
 </div>
 
@@ -1031,43 +1046,57 @@
     <header><h3>Reserva de grupo</h3><button class="x" data-cerrar="mGrupo">×</button></header>
     <div class="body">
       <p class="muted" style="font-size:13px;margin-bottom:14px">
-        Los datos se escriben una sola vez y se crea una reserva por cada
-        alojamiento elegido, todas unidas bajo el mismo grupo.
+        Escribe los datos una vez y elige las piezas: se crea una reserva por
+        cada una, todas unidas bajo el mismo grupo.
       </p>
+      <!-- El orden es el de la conversación real: cuándo vienen, quién es,
+           qué piezas toman y cuánto. -->
       <div class="fld">
-        <label>Fechas</label>
+        <label>1 · Fechas</label>
         <div class="daterow" id="gFechas">
           <span class="d1" id="gFtxt">—</span>
           <span class="n" id="gFn"></span>
         </div>
       </div>
       <div class="g2">
-        <div class="fld"><label>Huésped a cargo</label><input id="gNom" required></div>
+        <div class="fld"><label>2 · Huésped a cargo</label><input id="gNom" required></div>
         <div class="fld"><label>Teléfono</label><input id="gTel" inputmode="tel"></div>
       </div>
-      <div class="g2">
-        <div class="fld"><label>Correo</label><input id="gMail" type="email" placeholder="opcional"></div>
-        <div class="fld"><label>Canal</label>
-          <select id="gCan">
-            <option value="whatsapp">WhatsApp</option>
-            <option value="booking">Booking</option>
-            <option value="airbnb">Airbnb</option>
-            <option value="instagram">Instagram</option>
-            <option value="directo">Directo / walk-in</option>
-          </select>
-        </div>
-      </div>
       <div class="fld">
-        <label>Alojamientos <span class="muted" id="gCuenta"></span></label>
+        <label>3 · Qué piezas toman <span class="muted" id="gCuenta"></span></label>
         <div id="gLista" style="border:1px solid var(--line);border-radius:8px;
              max-height:250px;overflow-y:auto"></div>
       </div>
       <div class="g2">
-        <div class="fld"><label>Total del grupo ($)</label><input id="gTot" type="number" min="0" step="1000"></div>
-        <div class="fld"><label>Abonado ($)</label><input id="gAnt" type="number" min="0" step="1000" value="0"></div>
+        <div class="fld"><label>4 · Total del grupo ($)</label><input id="gTot" type="number" min="0" step="1000">
+          <div class="muted" style="font-size:11.5px;margin-top:5px">Se reparte entre las piezas elegidas.</div>
+        </div>
+        <div class="fld"><label>Abonado ($)</label><input id="gAnt" type="number" min="0" step="1000" value="0">
+          <div class="muted" style="font-size:11.5px;margin-top:5px">Se anota una sola vez, no por pieza.</div>
+        </div>
       </div>
-      <div class="fld"><label>Notas</label><textarea id="gNot" rows="2"
-        placeholder="Vienen juntos, alergias, hora estimada de llegada…"></textarea></div>
+
+      <button type="button" class="mas" id="gMasDatos">
+        <span class="flecha">▸</span> Más datos
+        <span class="muted">correo, canal, notas</span>
+      </button>
+      <div id="gExtra" class="hide" style="border-left:2px solid var(--line2);
+           padding-left:12px;margin:2px 0 4px">
+        <div class="g2">
+          <div class="fld"><label>Correo</label><input id="gMail" type="email" placeholder="opcional"></div>
+          <div class="fld"><label>Canal</label>
+            <select id="gCan">
+              <option value="whatsapp">WhatsApp</option>
+              <option value="booking">Booking</option>
+              <option value="airbnb">Airbnb</option>
+              <option value="instagram">Instagram</option>
+              <option value="directo">Directo / walk-in</option>
+            </select>
+          </div>
+        </div>
+        <div class="fld"><label>Notas</label><textarea id="gNot" rows="2"
+          placeholder="Vienen juntos, alergias, hora estimada de llegada…"></textarea></div>
+      </div>
       <div class="err hide" id="gErr"></div>
     </div>
     <footer>
@@ -1209,7 +1238,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-14b';
+var VERSION_ESPERADA = '2026-08-15';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
@@ -1254,6 +1283,9 @@ function noches(a,b){ return Math.round((aDate(b)-aDate(a))/86400000); }
 function corto(s){ var d=aDate(s); return d.getDate()+' '+MESES[d.getMonth()].slice(0,3); }
 function largo(s){ var d=aDate(s); return DIAS[d.getDay()]+' '+d.getDate()+' '+MESES[d.getMonth()].slice(0,3); }
 function plata(n){ return '$'+(Number(n)||0).toLocaleString('es-CL'); }
+/* "1 noche" y "2 noches", no "1 noche(s)": son textos que lee gente, no
+   plantillas de formulario. */
+function plural(n, uno, varios){ return n+' '+(Number(n)===1 ? uno : varios); }
 function plataSimple(n){ return (Number(n)||0).toLocaleString('es-CL'); }
 function dolares(n){ return 'US$'+(Number(n)||0).toLocaleString('en-US',
   { minimumFractionDigits:2, maximumFractionDigits:2 }); }
@@ -1526,9 +1558,10 @@ function aplicarTablero(d){
 
   var av=$('avisoIleg');
   if(d.ilegibles){
-    av.textContent = d.ilegibles+' reserva(s) están guardadas en la planilla pero no se '+
-      'pueden mostrar porque su fecha quedó ilegible. Ejecuta repararReservas() desde el '+
-      'editor de Apps Script para revisarlas.';
+    av.textContent = plural(d.ilegibles,'reserva está guardada','reservas están guardadas')+
+      ' en la planilla pero no se '+
+      (d.ilegibles===1?'puede':'pueden')+' mostrar porque su fecha quedó ilegible. '+
+      'Ejecuta repararReservas() desde el editor de Apps Script para revisarlas.';
     av.classList.remove('hide');
   } else av.classList.add('hide');
 }
@@ -1897,8 +1930,8 @@ function aplicarYGuardar(reserva, cambios, aviso){
       // tener que abrir la reserva a mirarlo.
       if(d && d.total !== undefined){
         reserva.total = d.total;
-        if(d.agregadas)      aviso += ' · +'+d.agregadas+' noche(s) · total '+plata(d.total);
-        else if(d.quitadas)  aviso += ' · −'+d.quitadas+' noche(s) · total '+plata(d.total);
+        if(d.agregadas)      aviso += ' · +'+plural(d.agregadas,'noche','noches')+' · total '+plata(d.total);
+        else if(d.quitadas)  aviso += ' · −'+plural(d.quitadas,'noche','noches')+' · total '+plata(d.total);
       }
       pintarCal();
       toast(aviso);
@@ -1998,8 +2031,8 @@ function recalcularTotal(){
   for(var f=RANGO.in; f<RANGO.out; f=mas(f,1)){ t += esAlta(f)? r.precioAlta : r.precioBase; n++; }
   if(!TOTAL_TOCADO) $('rTot').value=t;
   $('rTotNota').textContent = TOTAL_TOCADO
-    ? 'Se reparte entre las '+n+' noche(s) al guardar'
-    : 'Suma de '+n+' noche(s)';
+    ? 'Se reparte entre las '+plural(n,'noche','noches')+' al guardar'
+    : 'Suma de '+plural(n,'noche','noches');
   var esGlamping = r.grupo==='Glamping';
   $('rAddonBox').classList.toggle('hide', !esGlamping);
   if(!esGlamping){ $('rAddon').checked=false; $('rAddonF').classList.add('hide'); }
@@ -2055,10 +2088,33 @@ function nuevaReserva(rec, entrada, salida){
   TOTAL_TOCADO=false;
   $('rPaso').classList.add('hide'); $('rGrupoTodo').classList.add('hide');
   $('rGrupoChk').checked=false;
+  plegarExtra(false);
   pintarFechas(); recalcularTotal();
   abrir('mRes');
   setTimeout(function(){ $('rNom').focus(); }, 60);
 }
+
+/* Abre o cierra el bloque de "Más datos" y resume qué hay adentro, para que
+   nadie tenga que abrirlo solo para averiguar si está vacío. */
+function plegarExtra(abierto){
+  $('rExtra').classList.toggle('hide', !abierto);
+  $('rMasDatos').classList.toggle('abierto', !!abierto);
+  var partes=[];
+  if($('rMail').value.trim()) partes.push('correo');
+  if($('rCan').value && $('rCan').value!=='whatsapp') partes.push($('rCan').value);
+  if($('rExtranjero').checked) partes.push('extranjero');
+  if($('rAddon').checked) partes.push('tinaja + sushi');
+  if($('rNot').value.trim()) partes.push('notas');
+  $('rMasResumen').textContent = abierto ? ''
+    : (partes.length ? partes.join(' · ') : 'correo, canal, notas…');
+}
+
+$('rMasDatos').onclick=function(){ plegarExtra($('rExtra').classList.contains('hide')); };
+['rMail','rNot'].forEach(function(id){
+  $(id).addEventListener('input', function(){
+    if($('rExtra').classList.contains('hide')) plegarExtra(false);
+  });
+});
 
 function abrirReserva(r){
   RES=r;
@@ -2070,7 +2126,7 @@ function abrirReserva(r){
   $('rEst').value=r.estado; $('rTot').value=r.total; $('rAnt').value=r.anticipo;
   TOTAL_TOCADO=false;
   $('rVerNoches').classList.remove('hide');
-  $('rTotNota').textContent='Suma de '+noches(r.checkIn,r.checkOut)+' noche(s)';
+  $('rTotNota').textContent='Suma de '+plural(noches(r.checkIn,r.checkOut),'noche','noches');
   $('rAcom').classList.remove('hide');
   $('rDocs').classList.remove('hide');
   $('rComprobante').classList.remove('hide');
@@ -2090,6 +2146,11 @@ function abrirReserva(r){
   var conPagos = (Number(r.anticipo)||0) > 0;
   $('rAnt').readOnly = conPagos;
   $('rAntNota').classList.toggle('hide', !conPagos);
+  // Si la reserva ya trae algo de lo plegado, se abre: si no, esos datos
+  // quedarían escondidos y parecerían no existir.
+  plegarExtra(!!(r.email || r.notas || r.extranjero || r.addon ||
+                 (r.canal && r.canal!=='whatsapp') ||
+                 (r.estado!=='confirmada' && r.estado!=='en_casa')));
   pintarPaso(r);
   pintarFechas();
   abrir('mRes');
@@ -2323,7 +2384,7 @@ $('ctaPostear').onclick=function(){
   ocupado('ctaPostear', srv('postearAlojamiento')(CTA.idReserva))
     .then(function(d){
       return refrescarCuenta(CTA.idReserva).then(function(){
-        toast(d.noches ? d.noches+' noche(s) cargada(s) a la cuenta'
+        toast(d.noches ? plural(d.noches,'noche cargada','noches cargadas')+' a la cuenta'
                        : 'No quedaban noches por cargar');
       });
     }).catch(fallo);
@@ -2412,79 +2473,21 @@ $('nchRepartir').onclick=function(){
 /* ==================================================================
    Comprobante de la reserva
    ================================================================== */
+/* Un solo botón: genera el PDF y lo abre. Antes había un modal con enlace,
+   WhatsApp, correo, copiar el texto y una vía alternativa para imprimir; para
+   mandarlo se hacía igual desde el PDF ya abierto, así que sobraba todo eso. */
 $('rComprobante').onclick=function(){
   if(!RES) return;
-  $('compErr').classList.add('hide');
-  $('compCuerpo').innerHTML='<div class="empty">Con <b>Abrir para imprimir</b> lo ves al tiro '+
-    'en el navegador y desde ahí lo guardas como PDF. Con <b>Generar PDF</b> queda guardado '+
-    'en Drive y se puede mandar por correo.</div>';
-  abrir('mComp');
-};
-
-/* Abrir el documento en una pestaña e imprimirlo desde el navegador. Es el
-   camino que funciona siempre: no pasa por Drive ni por la conversión de
-   Google, así que no depende de permisos ni de que la conversión ande. */
-function abrirParaImprimir(html, titulo){
+  // La pestaña se abre ANTES de llamar al servidor: si se abriera después,
+  // el navegador la trataría como emergente y la bloquearía.
   var v = window.open('', '_blank');
-  if(!v){ toast('El navegador bloqueó la ventana. Permite las ventanas emergentes.', true); return; }
-  v.document.open();
-  v.document.write(html);
-  v.document.close();
-  v.document.title = titulo || 'Documento';
-  setTimeout(function(){ try{ v.focus(); v.print(); }catch(_){} }, 400);
-}
-
-$('compImprimir').onclick=function(){
-  if(!RES) return;
-  ocupado('compImprimir', srv('comprobanteHtml')(RES.id))
-    .then(function(html){ abrirParaImprimir(html, 'Comprobante · '+RES.huesped); })
-    .catch(function(e){ $('compErr').textContent=e.message||String(e);
-                        $('compErr').classList.remove('hide'); });
-};
-
-$('compGenerar').onclick=function(){
-  if(!RES) return;
-  $('compErr').classList.add('hide');
-  $('compCuerpo').innerHTML='<div class="esqueleto"></div>';
-  ocupado('compGenerar', srv('comprobante')(RES.id)).then(function(d){
-    $('compCuerpo').innerHTML =
-      (d.aviso ? '<div class="aviso" style="background:#fff7e6;border:1px solid #f0d9a8;'+
-        'border-radius:8px;padding:10px 12px;font-size:12.5px;margin-bottom:12px">'+d.aviso+'</div>' : '')+
-      '<div class="ctaCaja"><div class="ctaTit">'+
-        (d.tipo==='pdf'?'El PDF':'El documento (como página web)')+'</div>'+
-        '<a href="'+d.url+'" target="_blank" style="color:var(--ac);text-decoration:underline">'+
-        'Abrir el comprobante</a></div>'+
-      '<div class="ctaCaja"><div class="ctaTit">Mandarlo</div>'+
-        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-        (d.whatsapp && d.whatsapp.indexOf('wa.me/?') === -1
-          ? '<a class="btn sm" style="text-decoration:none" target="_blank" href="'+d.whatsapp+'">Por WhatsApp</a>'
-          : '<span class="muted" style="font-size:12.5px">Sin teléfono en la reserva</span>')+
-        (d.correo
-          ? '<button class="btn gh sm" id="compMail">Por correo a '+d.correo+'</button>'
-          : '<span class="muted" style="font-size:12.5px">Sin correo en la reserva</span>')+
-        '</div></div>'+
-      '<div class="ctaCaja"><div class="ctaTit">O copiar el texto</div>'+
-        '<textarea id="compTxt" rows="4" style="font:inherit;width:100%;padding:10px;'+
-        'border:1px solid var(--line);border-radius:8px;resize:vertical">'+d.texto+'</textarea>'+
-        '<button class="btn gh sm" id="compCopiar" style="margin-top:8px">Copiar</button></div>';
-
-    var bm=$('compMail');
-    if(bm) bm.onclick=function(){
-      ocupado('compMail', srv('enviarComprobante')(RES.id, '')).then(function(e){
-        toast('Comprobante enviado a '+e.enviado);
-      }).catch(function(e){
-        $('compErr').textContent=e.message||String(e); $('compErr').classList.remove('hide');
-      });
-    };
-    $('compCopiar').onclick=function(){
-      var t=$('compTxt'); t.select();
-      try{ document.execCommand('copy'); toast('Texto copiado'); }
-      catch(_){ toast('Cópialo a mano desde el cuadro', true); }
-    };
-    toast('Comprobante generado');
+  ocupado('rComprobante', srv('comprobante')(RES.id)).then(function(d){
+    if(v){ v.location.href = d.url; }
+    else { toast('Permite las ventanas emergentes para verlo', true); }
+    toast(d.aviso ? d.aviso : 'Comprobante generado');
   }).catch(function(e){
-    $('compCuerpo').innerHTML='';
-    $('compErr').textContent=e.message||String(e); $('compErr').classList.remove('hide');
+    if(v) v.close();
+    fallo(e);
   });
 };
 
@@ -2507,7 +2510,8 @@ function pintarAcompanantes(){
   $('acoTit').textContent='Quiénes se alojan · '+ACO.huesped;
   var cupos=Math.max(ACO.pax-1, 0);
   $('acoCuenta').textContent = cupos
-    ? 'Reserva para '+ACO.pax+' persona(s): el titular y '+cupos+' acompañante(s)'
+    ? 'Reserva para '+plural(ACO.pax,'persona','personas')+': el titular y '+
+      plural(cupos,'acompañante','acompañantes')
     : 'Reserva para 1 persona: no lleva acompañantes';
 
   if(!cupos){
@@ -2670,9 +2674,17 @@ $('cGrupo').onclick=function(){
   $('gNom').value=''; $('gTel').value=''; $('gMail').value='';
   $('gCan').value='whatsapp'; $('gAnt').value=0; $('gNot').value='';
   $('gErr').classList.add('hide');
+  $('gExtra').classList.add('hide');
+  $('gMasDatos').classList.remove('abierto');
   pintarFechasGrupo();
   cargarDisponibles();
   abrir('mGrupo');
+  setTimeout(function(){ $('gNom').focus(); }, 60);
+};
+
+$('gMasDatos').onclick=function(){
+  var abierto = $('gExtra').classList.toggle('hide');
+  this.classList.toggle('abierto', !abierto);
 };
 
 function pintarFechasGrupo(){
@@ -3053,7 +3065,7 @@ $('genAnio').onclick=function(){
 function pintarHuespedes(){
   if(!GENTE) return;
   $('genCuenta').textContent = GENTE.total
-    ? GENTE.total+' persona(s)'+(GENTE.total>GENTE.huespedes.length
+    ? plural(GENTE.total,'persona','personas')+(GENTE.total>GENTE.huespedes.length
         ? ' · se muestran las primeras '+GENTE.huespedes.length : '')
     : '';
   var c=$('genLista'); c.innerHTML='';
@@ -3076,7 +3088,7 @@ function pintarHuespedes(){
       '</div>'+
       (contacto?'<div class="muted" style="font-size:12.5px;margin-top:3px">'+contacto+'</div>':'')+
       '<div class="muted" style="font-size:12.5px;margin-top:6px">'+
-        g.noches+' noche(s) · '+plata(g.gastado)+' consumido'+
+        plural(g.noches,'noche','noches')+' · '+plata(g.gastado)+' consumido'+
         (g.ultima?' · última salida '+corto(g.ultima):'')+
         (g.canal?' · llega por '+g.canal:'')+
       '</div>';
@@ -3126,7 +3138,7 @@ function pintarHuesped(g){
                   :'<span class="tag tentativa">sin firmar</span>')+
       '</div>'+
       '<div class="muted" style="font-size:12.5px;margin:4px 0 8px">'+
-        r.alojamiento+' · '+r.noches+' noche(s) · '+r.pax+' pax'+
+        r.alojamiento+' · '+plural(r.noches,'noche','noches')+' · '+r.pax+' pax'+
         (r.canal?' · '+r.canal:'')+
       '</div>'+
       (r.notas?'<div class="muted" style="font-size:12.5px;margin-bottom:8px">'+
@@ -3181,21 +3193,15 @@ function verCierre(){
 $('cieVer').onclick=verCierre;
 $('cieF').onchange=function(){ $('cieDoc').classList.add('hide'); verCierre(); };
 
-$('cieImprimir').onclick=function(){
-  ocupado('cieImprimir', srv('cierreHtml')($('cieF').value))
-    .then(function(html){ abrirParaImprimir(html, 'Cierre '+$('cieF').value); })
-    .catch(fallo);
-};
-
+/* Igual que el comprobante: genera el PDF y lo abre. La pestaña se pide
+   antes de llamar al servidor, o el navegador la bloquea por emergente. */
 $('ciePdf').onclick=function(){
+  var v = window.open('', '_blank');
   ocupado('ciePdf', srv('pdfCierre')($('cieF').value)).then(function(d){
-    var c=$('cieDoc'); c.classList.remove('hide');
-    c.innerHTML=(d.tipo==='pdf'?'PDF listo: ':'Documento listo (como página web): ')+
-      '<a href="'+d.url+'" target="_blank" '+
-      'style="color:var(--ac);text-decoration:underline">'+d.nombre+'</a>'+
-      (d.aviso?'<div style="margin-top:6px;color:var(--warn)">'+d.aviso+'</div>':'');
-    toast(d.tipo==='pdf'?'PDF generado':'Documento generado');
-  }).catch(fallo);
+    if(v){ v.location.href = d.url; }
+    else { toast('Permite las ventanas emergentes para verlo', true); }
+    toast(d.aviso ? d.aviso : 'PDF generado');
+  }).catch(function(e){ if(v) v.close(); fallo(e); });
 };
 
 $('cieMail').onclick=function(){
@@ -3210,7 +3216,7 @@ $('cieCerrar').onclick=function(){
   ocupado('cieCerrar', srv('cierreDia')($('cieF').value)).then(function(d){
     pintarCierre(d);
     toast(d.nochesPosteadas
-      ? 'Día cerrado · '+d.nochesPosteadas+' noche(s) anotada(s) en las cuentas'
+      ? 'Día cerrado · '+plural(d.nochesPosteadas,'noche anotada','noches anotadas')+' en las cuentas'
       : 'Día cerrado · no quedaban noches por anotar');
     recargarCal();
   }).catch(fallo);
@@ -3325,7 +3331,7 @@ function cargarInformes(){
 function tarjetasInforme(d){
   var kpis=[
     ['Ocupación', d.ocupacion+'%', d.nochesVendidas+' de '+d.nochesDisponibles+' noches'],
-    ['Ingresos', plata(d.ingresos), d.reservas+' reserva(s)'],
+    ['Ingresos', plata(d.ingresos), plural(d.reservas,'reserva','reservas')],
     ['Tarifa media por noche', plata(d.tarifaMedia), 'sobre las noches vendidas'],
     ['Ingreso por alojamiento', plata(d.ingresoPorUnidad), 'incluye los que quedaron vacíos'],
     ['Por cobrar', plata(d.porCobrar), plata(d.abonado)+' ya abonado'],
@@ -3569,7 +3575,7 @@ function cambiarModo(u, modo){
       alert('"'+u.nombre+'" todavía no tiene camas cargadas. Pásala a por cama y '+
             'después agrégalas con "+ Cama".');
     } else if(!u.camas.some(function(c){ return c.activa; })){
-      if(!confirm('"'+u.nombre+'" tiene '+u.camas.length+' cama(s), todas archivadas. '+
+      if(!confirm('"'+u.nombre+'" tiene '+plural(u.camas.length,'cama','camas')+', todas archivadas. '+
                   'Se van a volver a poner en venta. ¿Seguir?')) return;
     }
   } else if(!confirm('"'+u.nombre+'" pasará a venderse como habitación completa. '+
@@ -3644,22 +3650,39 @@ function pintarConfiguracion(){
       (c.tipo==='hora'?' placeholder="15:00"':'')+'></div>';
   };
 
-  $('cfgCampos').innerHTML =
-    CFG.campos.filter(function(c){ return c.grupo!=='avanzado'; }).map(campo).join('');
+  var deGrupo=function(g){ return CFG.campos.filter(function(c){ return c.grupo===g; }); };
 
-  var avanzados=CFG.campos.filter(function(c){ return c.grupo==='avanzado'; });
+  $('cfgDolarCampo').innerHTML = deGrupo('dolar').map(campo).join('');
+  if(CFG.dolar){
+    $('cfgDolarAhora').textContent = CFG.dolar.fuente==='manual'
+      ? 'Rigiendo: $'+plataSimple(CFG.dolar.valor)+', el que ustedes fijaron.'
+      : 'Rigiendo: $'+plataSimple(CFG.dolar.valor)+' ('+CFG.dolar.fuente+').';
+  }
+
+  $('cfgCampos').innerHTML = deGrupo('normas').map(campo).join('');
+
   $('cfgAvCampos').innerHTML =
     '<p class="muted" style="font-size:12.5px;margin-bottom:12px">Estos no cambian el '+
     'texto de las normas: son datos que el sistema usa por dentro. El horario aparece '+
     'en la pantalla de aseo y en el comprobante; el correo es al que llega el cierre '+
-    'de cada noche.'+
-    (CFG.dolar ? ' El dólar de hoy es <b>$'+plataSimple(CFG.dolar.valor)+'</b> ('+
-                 CFG.dolar.fuente+'): se busca solo cada día, y solo hay que fijarlo '+
-                 'a mano si prefieren usar otro valor.' : '')+
-    '</p>' + avanzados.map(campo).join('');
+    'de cada noche.</p>' + deGrupo('avanzado').map(campo).join('');
 
   pintarVistaPrevia(CFG.vistaPrevia);
 }
+
+/* El dólar se guarda solo, sin arrastrar las normas: son dos cosas distintas
+   y guardar una no tiene por qué tocar la otra. */
+$('cfgDolarGuardar').onclick=function(){
+  var el=document.querySelector('#cfgDolarCampo [data-c="dolarManual"]');
+  if(!el) return;
+  ocupado('cfgDolarGuardar', srv('guardarConfiguracion')({ dolarManual: el.value }))
+    .then(function(d){
+      CFG=d; pintarConfiguracion();
+      toast(Number(el.value) > 0 ? 'Dólar fijado en $'+plataSimple(el.value)
+                                 : 'Vuelve al dólar del día');
+      recargarCal();
+    }).catch(fallo);
+};
 
 $('cfgAvanzado').onclick=function(){
   var c=$('cfgAvanzados');
@@ -4153,7 +4176,7 @@ function refrescarDocumentos(){
   return srv('documentosDe')(DOCS.id).then(function(lista){
     var c=$('docLista'); c.innerHTML='';
     $('docCuenta').textContent = lista.length
-      ? lista.length+' documento(s)' : '';
+      ? plural(lista.length,'documento','documentos') : '';
     if(!lista.length){
       c.innerHTML='<div class="empty">Todavía no ha subido ninguno. '+
                   'Se le piden igual en el check-in.</div>';

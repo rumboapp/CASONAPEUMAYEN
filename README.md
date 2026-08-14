@@ -103,11 +103,15 @@ permiso para usar Drive y Gmail. Es normal: los documentos se guardan en tu
 Drive y los correos salen desde tu cuenta. Acepta una vez y no vuelve a
 preguntar.
 
-También va a pedir permiso para **crear carpetas en Drive** (los documentos se
-archivan por año y mes) y para **hacer consultas a internet** (el dólar del día
-sale de mindicador.cl). Es la misma pantalla de autorización de siempre, solo
-que con dos líneas más. Si prefieres no dar el permiso de internet, fija el
-dólar a mano en *Configuración* y el sistema no consulta nada.
+También va a pedir permiso para **crear carpetas en Drive**, porque los
+documentos se archivan por año y mes. Es la misma pantalla de siempre con una
+línea más.
+
+**El sistema no sale a internet.** El valor del dólar lo fijan ustedes en
+*Configuración* y viene con uno puesto de fábrica, así que en el uso normal no
+se consulta nada externo. Solo si dejan ese campo en **0** el sistema busca el
+dólar observado del día, y recién ahí Google pediría el permiso de consultas
+externas.
 
 ### Si no ves el logo
 
@@ -177,11 +181,20 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
   punto verde (limpia), rojo (sucia) o gris (fuera de servicio), y las sucias
   quedan con un tinte distinto. Sirve para decidir al vuelo dónde meter a
   alguien que llega sin reserva.
+- **El formulario pide solo lo que se llena siempre**: fechas, alojamiento,
+  huésped, teléfono, personas, niños, total y abonado. Con eso ya se guarda
+  una reserva. Correo, canal, estado, turista extranjero y notas viven detrás
+  de **Más datos**, plegado — antes eran trece campos y una reserva de
+  mostrador quedaba a mitad de pantalla. Si la reserva que abres ya trae algo
+  ahí adentro, se despliega sola: nada queda escondido sin avisar.
+- **La reserva de grupo va numerada 1-2-3-4**, en el orden de la conversación
+  real: cuándo vienen, quién es, qué piezas toman y cuánto. Correo, canal y
+  notas también quedan en *Más datos*.
 - **Dentro de la reserva, al frente está lo del día a día**: guardar, el
   check-in o el check-out según corresponda, la cuenta y el comprobante. Lo
-  demás —acompañantes, la ficha, cancelar, eliminar— vive en el menú
-  **Más ▾**, para que el pie del formulario no sea una hilera de ocho botones
-  donde hay que ir a buscar el que se usa siempre.
+  demás —acompañantes, documentos, la ficha, cancelar, eliminar— vive en el
+  menú **Más ▾**, para que el pie del formulario no sea una hilera de ocho
+  botones donde hay que ir a buscar el que se usa siempre.
 - **En el teléfono** la columna de nombres se angosta y las pestañas se
   deslizan de lado, así que la grilla se sigue leyendo sin tener que girar el
   aparato.
@@ -407,11 +420,15 @@ vuelve todo atrás.
 > Esto es cómo está programado, no una asesoría tributaria. Confirmen el
 > criterio con su contador; si deciden otra cosa, se cambia.
 
-**De dónde sale el dólar.** Se consulta solo una vez al día a mindicador.cl
-(el dólar observado). Si el servicio no contesta, se sigue trabajando con el
-último valor que sí llegó, y la pantalla dice cuál de los dos está usando. En
-*Configuración → ajustes que casi nunca se tocan* hay un campo para **fijarlo a
-mano**; en 0 vuelve al automático.
+**De dónde sale el dólar.** Lo fijan ustedes. Es la primera tarjeta de
+*Configuración*, con su propio botón de guardar, y viene con un valor puesto
+desde la instalación. Cambiarlo **no altera las reservas ya cotizadas**: cada
+una se quedó con el valor que regía el día en que se hizo.
+
+Si alguna vez prefieren el automático, dejen ese campo en **0** y el sistema
+consulta el dólar observado del día una vez por jornada; si el servicio no
+contesta, sigue con el último valor conocido y la pantalla dice cuál está
+usando.
 
 En **Alojamiento**, cada precio se muestra también en dólares al cambio de hoy,
 para cotizarle a alguien de afuera sin sacar la calculadora.
@@ -535,10 +552,14 @@ reintenta solo hasta tres veces y, si aun así falla, aparece un botón
 
 ## Configuración
 
-Pestaña **Configuración** (solo administración). Lo principal es un **cuadro de
-texto con las normas de convivencia**: es lo que el huésped lee y acepta al
-firmar su ficha, y lo que sale en el comprobante. Se escribe tal como se va a
-leer, **una norma por línea**, y se edita a mano.
+Pestaña **Configuración** (solo administración). Arriba de todo está el
+**valor del dólar**, porque es lo que más se toca y lo deciden ustedes: se
+escribe, se aprieta *Guardar el valor* y listo. Tiene su propio botón a
+propósito, para que guardarlo no arrastre las normas.
+
+Debajo va el **cuadro de texto con las normas de convivencia**: es lo que el
+huésped lee y acepta al firmar su ficha, y lo que sale en el comprobante. Se
+escribe tal como se va a leer, **una norma por línea**, y se edita a mano.
 
 Viene lleno con las normas que rigen hoy, así que se corrige encima en vez de
 escribirlo de cero. Hay un botón para volver al texto original, y abajo una
@@ -552,8 +573,7 @@ Detrás de *Ajustes que casi nunca se tocan* quedan los datos que el sistema usa
 por dentro y que casi nunca hay que mover: el correo al que llega el cierre de
 cada noche, las horas de check-in y check-out (aparecen en la pantalla de aseo y
 en el comprobante), las fechas de temporada alta, el precio del programa tinaja
-+ sushi, el porcentaje que va al restaurante, el IVA y el **dólar fijado a
-mano** (en 0 se busca solo cada día).
++ sushi, el porcentaje que va al restaurante y el IVA.
 
 Ahí mismo está también **Probar la generación de documentos**, que dice en qué
 paso falla un PDF: el permiso de Drive, la conversión, el logo o el correo. Casi
@@ -584,19 +604,23 @@ en diciembre, aunque lo hayas emitido hoy; el cierre queda en el mes de la
 noche que cerró. Así, buscar "qué mandamos en marzo" es abrir una carpeta. Las
 carpetas se crean solas la primera vez y se reutilizan después.
 
-**Comprobante de la reserva.** Botón *Comprobante* dentro de la reserva. Trae
-el alojamiento, las fechas con sus horarios, las noches con su valor, quiénes
-se alojan, lo abonado, el saldo que queda para el día de llegada y las
-condiciones de la estadía. Después se manda de tres formas: un botón que abre
-**WhatsApp** con el mensaje y el enlace ya escritos, un botón que lo **envía
-por correo** con el PDF adjunto, o el texto listo para copiar y pegar donde
-sea. El archivo queda compartido por enlace, así que el huésped lo abre sin
-tener cuenta de Google.
+**Comprobante de la reserva.** Botón *Comprobante* dentro de la reserva:
+**un solo botón que genera el PDF y lo abre**. Nada más. Trae el alojamiento,
+las fechas con sus horarios, las noches con su valor, quiénes se alojan, lo
+abonado, el saldo que queda para el día de llegada y las condiciones de la
+estadía. Desde el PDF ya abierto se manda por donde uno quiera.
 
-**Cierre de la noche.** En la pestaña *Cierre*, *Generar PDF* baja el resumen
-de esa noche y *Enviar al dueño* se lo manda al correo configurado, con el PDF
-adjunto. Si además dejaste el cierre automático de madrugada, **el correo sale
-solo cada noche** apenas se cierra el día.
+Antes había un paso intermedio con el enlace, un botón de WhatsApp, otro de
+correo, el texto para copiar y una vía alternativa para imprimir. Se fue todo:
+para mandarlo había que abrir el PDF igual, así que esos cuatro caminos solo
+hacían más larga la misma tarea. El archivo queda compartido por enlace, así
+que el huésped lo abre sin tener cuenta de Google.
+
+**Cierre de la noche.** En la pestaña *Cierre*, *Generar PDF* arma el resumen
+de esa noche y lo abre, igual que el comprobante. *Enviar al dueño* se lo manda
+al correo configurado con el PDF adjunto — esa sí es otra acción, no otra forma
+de hacer lo mismo. Si además dejaste el cierre automático de madrugada, **el
+correo sale solo cada noche** apenas se cierra el día.
 
 ### Si el PDF no se genera
 
@@ -610,11 +634,6 @@ con el logo incrustado. El sistema no se queda callado:
 3. En *Configuración → Revisar los documentos* hay una prueba que dice en qué
    paso se cae: el permiso de Drive, la conversión, el logo o el correo, con el
    error textual de Google.
-
-Y en los dos documentos hay un botón **Abrir para imprimir** que no pasa por
-Drive ni por la conversión: abre el documento en una pestaña y lanza la
-impresión del navegador, desde donde se guarda como PDF. Ese camino funciona
-siempre, aunque Drive esté con problemas.
 
 ## Informes
 
@@ -853,6 +872,7 @@ editor la función `crearUsuario("nombre", "pin", "admin")`.
 - La política de cancelación está escrita en el reglamento pero no se calcula
   sola.
 - No cobra en línea: no genera enlaces de pago.
-- El comprobante sí se manda por correo desde el sistema; el de WhatsApp abre
-  el chat con el mensaje escrito, pero el envío lo aprietas tú.
+- **El comprobante no se manda solo.** El botón genera el PDF y lo abre;
+  mandarlo por WhatsApp o correo lo haces tú desde ahí. Era a propósito: los
+  cuatro caminos que había antes terminaban igual, abriendo el PDF.
 - La app interna está solo en español; la página del huésped sí es bilingüe.
