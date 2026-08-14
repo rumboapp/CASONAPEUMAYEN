@@ -195,9 +195,43 @@ filas tampoco aparecen en la pestaña *Hoy*, por la misma razón.
   demás —acompañantes, documentos, la ficha, cancelar, eliminar— vive en el
   menú **Más ▾**, para que el pie del formulario no sea una hilera de ocho
   botones donde hay que ir a buscar el que se usa siempre.
-- **En el teléfono** la columna de nombres se angosta y las pestañas se
-  deslizan de lado, así que la grilla se sigue leyendo sin tener que girar el
-  aparato.
+- **En el teléfono el calendario muestra los días que caben** (unos cinco en
+  vertical, el doble si lo giras), y se avanza con las flechas. Ver más — ver
+  *Desde el teléfono*.
+
+## Desde el teléfono
+
+No hay una app aparte ni una dirección distinta: **es la misma pantalla, que
+se acomoda al ancho que tenga**. Se abre el mismo enlace y listo. Al girar el
+aparato se reacomoda sola, sin recargar.
+
+Lo que cambia cuando la pantalla es angosta:
+
+- **El calendario muestra los días que caben enteros** —unos cinco en un
+  teléfono de pie, el doble acostado— y se avanza con ‹ ›. El selector de
+  días solo ofrece lo que se puede mostrar completo.
+
+  Es a propósito y vale la pena explicarlo: antes se apretaban catorce días y
+  había que deslizar de lado, pero **al deslizar se iban los nombres de las
+  habitaciones** y quedaba un tablero de casillas vacías sin saber qué fila
+  era cuál. Preferimos ver menos días y saber siempre de qué pieza se trata.
+- **El nombre de cada fila va en dos líneas**: arriba la habitación, abajo el
+  tipo o la cama. En una sola quedaba "Hab. 1 · Mat…" o, peor, "H… · Litera
+  superior", que no dice de qué habitación es.
+- **La fila de días queda pegada arriba** al bajar por la lista, para no
+  perder de vista qué día es cada columna. Y se desplaza **una sola cosa**, la
+  página: antes había dos barras peleando y el dedo no sabía cuál iba a mover.
+- **Los formularios suben desde abajo** ocupando el ancho completo, como una
+  hoja, con los botones al alcance del pulgar.
+- **Los campos son de 16px**, que es el tamaño mínimo para que el teléfono no
+  haga zoom solo cada vez que tocas uno. Los botones se agrandan para poder
+  tocarlos sin apuntar.
+- **Las pestañas se deslizan** y la que abres se trae a la vista sola, aunque
+  estuviera fuera de pantalla.
+
+Para el trabajo de mostrador —ver quién llega hoy, hacer un check-in, cobrar,
+marcar una habitación como limpia— el teléfono alcanza de sobra. Para mirar
+dos semanas de ocupación de una vez, conviene el computador.
 
 ## Huéspedes: buscador e historial
 

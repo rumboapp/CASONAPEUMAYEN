@@ -325,19 +325,95 @@
     z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.25);max-width:90vw;text-align:center}
   .toast.bad{background:var(--dan)}
 
+  /* ==================== EN EL TELÉFONO ====================
+     No es una versión aparte: es la misma app midiendo el ancho. Lo que
+     cambia es lo que de verdad estorba en una pantalla angosta. */
   @media(max-width:700px){
     .g2{grid-template-columns:1fr}
-    main{padding:12px}
+    main{padding:10px}
     .hint{display:none}
-    /* En el teléfono la fila del alojamiento va apretada: se deja el nombre
-       y se sacan las etiquetas, que ocupan más de lo que aportan ahí. */
-    .rname{padding:0 8px;gap:5px;font-size:12.5px}
+    .card{padding:14px;border-radius:12px}
+
+    /* El nombre del alojamiento se apila en dos líneas. En una sola quedaba
+       "H… · Litera superior", que no dice de qué habitación es. */
+    .rname{padding:5px 8px;gap:6px;font-size:12.5px;white-space:normal}
     .rname .bano{display:none}
-    .rname .sub{font-size:11.5px}
+    .rname .apilado{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+    .rname .apilado b{font-weight:600;font-size:12.5px;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .rname .apilado em{font-style:normal;color:var(--tx2);font-size:11px;
+      overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .cal > *{min-height:50px}
+    /* En el teléfono la grilla no lleva su propio desplazamiento vertical:
+       si no, quedaban dos barras peleando —la de la página y la de la
+       grilla— y el dedo nunca sabía cuál iba a mover. Se desplaza la
+       página y punto. */
+    .calwrap{max-height:none;overflow:visible;border-radius:12px}
+    /* La fila de días queda pegada arriba mientras se recorre hacia abajo,
+       para no perder de vista de qué día es cada columna. */
+    .hd{position:sticky;top:0}
+    .bar{font-size:11.5px;padding:0 6px}
+
     /* La barra de pestañas se desliza en vez de cortarse. */
     nav#tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
     nav#tabs::-webkit-scrollbar{display:none}
-    .cbar{gap:6px}
+    nav button{padding:12px 13px}
+
+    /* La barra del calendario en dos filas ordenadas, no en tres sueltas. */
+    .cbar{gap:6px;display:grid;grid-template-columns:auto auto 1fr auto;
+      grid-template-areas:"prev next rango dias" "nueva nueva grupo grupo";
+      align-items:center}
+    .cbar .rng{grid-area:rango;min-width:0;font-size:13px;text-align:center}
+    #cPrev{grid-area:prev} #cNext{grid-area:next}
+    #cHoy{display:none}            /* el rango ya parte en hoy */
+    #cDias{grid-area:dias}
+    #cNueva{grid-area:nueva} #cGrupo{grid-area:grupo}
+    #cNueva,#cGrupo{width:100%;justify-content:center}
+
+    /* Los formularios pasan a ser una hoja que sube desde abajo: ocupan el
+       ancho completo y el pulgar llega a los botones. Sin quitar el relleno
+       del fondo oscuro quedaban 16px de aire a cada lado y la hoja no
+       llegaba ni a los bordes ni al borde inferior. */
+    .ov{align-items:end;padding:0}
+    .mo{max-width:100%!important;width:100%;max-height:92vh;
+      border-radius:16px 16px 0 0;margin:0}
+    .mo header{padding:14px 16px}
+    .mo .body{padding:14px 16px}
+    .mo footer{padding:12px 16px;padding-bottom:max(12px, env(safe-area-inset-bottom))}
+
+    /* Todo lo que se toca tiene que ser tocable: 44px es el mínimo cómodo. */
+    .btn{padding:12px 16px;font-size:14px}
+    .btn.sm{padding:10px 13px;font-size:13px}
+    .nav-ico{width:38px;height:38px}
+    input,select,textarea{font-size:16px;padding:11px 12px}
+    .fld label{font-size:12.5px}
+
+    /* Una tabla ancha se desliza dentro de su tarjeta, no empuja la página. */
+    .card table{display:block;overflow-x:auto;white-space:nowrap}
+    .ctaMov{white-space:normal}
+  }
+
+  /* Filtro por fechas de la pestaña Huéspedes: en una línea si cabe, y
+     apilado en el teléfono, donde "y" quedaba solo en su propio renglón. */
+  .filtroFechas{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+  .filtroFechas .rot{font-size:12.5px}
+  .filtroFechas .par{display:flex;gap:8px;align-items:center;flex:1 1 260px}
+  .filtroFechas .par input{flex:1 1 0;min-width:0}
+  .filtroFechas .par span{font-size:12.5px;flex:none}
+  .filtroFechas .atajos{display:flex;gap:8px;flex-wrap:wrap}
+  @media(max-width:700px){
+    /* Al apilar, el flex-basis de 260px pasa a medir ALTO y dejaba huecos
+       enormes entre las filas: por eso se anula. */
+    .filtroFechas{flex-direction:column;align-items:stretch}
+    .filtroFechas .par{flex:none}
+    .filtroFechas .atajos{flex:none}
+    .filtroFechas .atajos button{flex:1 1 0}
+  }
+
+  /* Ventanas muy angostas: se aprieta un poco más. */
+  @media(max-width:380px){
+    .cbar .rng{font-size:12px}
+    nav button{padding:12px 10px;font-size:13px}
   }
 
   /* ---------- Animaciones ----------
@@ -453,11 +529,8 @@
         <button class="btn sm" id="cNueva">+ Nueva reserva</button>
         <button class="btn gh sm" id="cGrupo">+ Reserva de grupo</button>
         <div class="rng" id="cRng"></div>
-        <select id="cDias" style="width:auto">
-          <option value="14">14 días</option>
-          <option value="7">7 días</option>
-          <option value="30">30 días</option>
-        </select>
+        <!-- Las opciones las arma opcionesDias() según lo que quepa en pantalla. -->
+        <select id="cDias" style="width:auto"><option value="14">14 días</option></select>
         <div class="hint">Haz clic y arrastra sobre los días libres para crear una reserva</div>
       </div>
       <div id="avisoCarga" class="hide"
@@ -540,14 +613,18 @@
         </div>
         <!-- Filtro por fechas: "quiénes se alojaron en febrero". Cuenta una
              estadía si toca el período, aunque haya empezado antes. -->
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
-          <span class="muted" style="font-size:12.5px">Se alojaron entre</span>
-          <input id="genDesde" type="date" style="flex:0 1 155px">
-          <span class="muted" style="font-size:12.5px">y</span>
-          <input id="genHasta" type="date" style="flex:0 1 155px">
-          <button class="btn gh sm" id="genMes">Este mes</button>
-          <button class="btn gh sm" id="genAnio">Este año</button>
-          <button class="btn gh sm hide" id="genLimpiar">Quitar el filtro</button>
+        <div class="filtroFechas">
+          <span class="muted rot">Se alojaron entre</span>
+          <div class="par">
+            <input id="genDesde" type="date">
+            <span class="muted">y</span>
+            <input id="genHasta" type="date">
+          </div>
+          <div class="atajos">
+            <button class="btn gh sm" id="genMes">Este mes</button>
+            <button class="btn gh sm" id="genAnio">Este año</button>
+            <button class="btn gh sm hide" id="genLimpiar">Quitar el filtro</button>
+          </div>
         </div>
       </div>
       <div id="genLista"></div>
@@ -1238,10 +1315,55 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-15';
+var VERSION_ESPERADA = '2026-08-16';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
+
+/* ¿Estamos en un teléfono? No se pregunta por el aparato sino por el ancho,
+   que es lo que de verdad importa: una tablet apaisada se comporta como un
+   computador y una ventana angosta en el escritorio, como un teléfono.
+   Se recalcula al girar el aparato. */
+var ESTRECHO = window.innerWidth < 700;
+
+/* Cuántos días caben SIN que la grilla se desborde a lo ancho.
+
+   Esto no es un detalle estético. La columna de nombres se mantenía fija con
+   position:sticky, pero un elemento sticky solo puede moverse dentro de su
+   propia celda de la grilla: al deslizar de lado en el teléfono, los nombres
+   se iban de la pantalla y quedaba un tablero de casillas vacías sin saber
+   qué fila era cuál. Así que en el teléfono la grilla no se desliza: se
+   muestran los días que caben y se avanza con las flechas. */
+var ANCHO_NOM_ESTRECHO = 112, ANCHO_DIA_MIN = 44;
+
+function diasQueCaben(){
+  var util = (document.querySelector('main') || document.body).clientWidth;
+  util -= 22;                                   // el margen de la tarjeta
+  return Math.max(3, Math.floor((util - ANCHO_NOM_ESTRECHO) / ANCHO_DIA_MIN));
+}
+
+/* El selector solo ofrece lo que se puede mostrar entero. Girando el teléfono
+   caben más, así que se rehace al cambiar el ancho. */
+function opcionesDias(){
+  var sel = $('cDias'); if(!sel) return;
+  var opciones = ESTRECHO
+    ? [3, 5, 7, 10, 14].filter(function(n){ return n <= diasQueCaben(); })
+    : [7, 14, 30];
+  if(!opciones.length) opciones = [3];
+  if(opciones.indexOf(CAL.dias) === -1) CAL.dias = opciones[opciones.length - 1];
+  sel.innerHTML = opciones.map(function(n){
+    return '<option value="'+n+'"'+(n===CAL.dias?' selected':'')+'>'+n+' días</option>';
+  }).join('');
+}
+
+window.addEventListener('resize', function(){
+  var antes = ESTRECHO, antesDias = CAL.dias;
+  ESTRECHO = window.innerWidth < 700;
+  if(!CAL.inicio) return;
+  opcionesDias();
+  // Se repinta si cambió el modo o la cantidad de días que caben.
+  if(antes !== ESTRECHO || antesDias !== CAL.dias) pintarCal();
+});
 var RES = null;               // reserva abierta en el modal
 var SEL = null;               // selección en curso sobre el calendario
 var RANGO = { in:null, out:null };
@@ -1453,6 +1575,9 @@ function iniciar(){
     nav.appendChild(b);
   });
   CAL.inicio = ymd(new Date());
+  // En el teléfono se parte con los días que caben, no con catorce apretados.
+  if(ESTRECHO) CAL.dias = Math.min(CAL.dias, diasQueCaben());
+  opcionesDias();
   ver(mias[0].id);
   autoRefresco();
 }
@@ -1460,7 +1585,18 @@ function iniciar(){
 function ver(id){
   TABS.forEach(function(t){ $('v-'+t.id).classList.add('hide'); });
   $('v-'+id).classList.remove('hide');
-  [].forEach.call($('tabs').children, function(b){ b.classList.toggle('on', b.dataset.v===id); });
+  [].forEach.call($('tabs').children, function(b){
+    var suya = b.dataset.v===id;
+    b.classList.toggle('on', suya);
+    // En el teléfono la barra de pestañas se desliza y varias quedan fuera
+    // de la pantalla: la que se abre se trae a la vista sola.
+    if(suya && ESTRECHO && b.scrollIntoView){
+      try{ b.scrollIntoView({ inline:'center', block:'nearest', behavior:'smooth' }); }
+      catch(_){ b.scrollIntoView(); }
+    }
+  });
+  // Al cambiar de pestaña se vuelve arriba: si no, se abre a media página.
+  var m=document.querySelector('main'); if(m) m.scrollTop=0;
   if(id==='cal')  cargarCal();
   if(id==='hoy')  cargarHoy();
   if(id==='aseo') cargarAseo();
@@ -1667,11 +1803,16 @@ function pintarCal(animar){
   var dias=[]; for(var i=0;i<N;i++) dias.push(mas(CAL.inicio,i));
   $('cRng').textContent = corto(dias[0])+' – '+corto(dias[N-1]);
 
-  var anchoDia = N>20 ? 58 : (N>10 ? 84 : 128);
-  // En el teléfono la columna de nombres no puede comerse la pantalla: se
-  // achica para que quede espacio de calendario, que es lo que se viene a ver.
-  var anchoNom = window.innerWidth < 700 ? 132 : 252;
-  cal.style.gridTemplateColumns = anchoNom+'px repeat('+N+', minmax('+anchoDia+'px, 1fr))';
+  // En el teléfono los días se reparten el ancho disponible: la grilla cabe
+  // entera y así los nombres nunca se van de la pantalla. En el computador
+  // se usan anchos cómodos y, si sobran días, la grilla sí se desliza.
+  var anchoNom = ESTRECHO ? ANCHO_NOM_ESTRECHO : 252;
+  if(ESTRECHO){
+    cal.style.gridTemplateColumns = anchoNom+'px repeat('+N+', minmax(0, 1fr))';
+  } else {
+    var anchoDia = N>20 ? 58 : (N>10 ? 84 : 128);
+    cal.style.gridTemplateColumns = anchoNom+'px repeat('+N+', minmax('+anchoDia+'px, 1fr))';
+  }
 
   // Encabezado
   var esq=document.createElement('div');
@@ -1724,9 +1865,22 @@ function pintarCal(animar){
     var bano = f.r.bano==='privado'
       ? '<span class="bano priv" title="Baño privado">priv</span>'
       : '<span class="bano comp" title="Baño compartido">comp</span>';
-    nm.innerHTML='<i class="pa '+aseo+'" title="'+(rotulo[aseo]||aseo)+'"></i>'+
-                 '<span>'+etiq+'</span>'+
-                 (f.r.nombre?'<span class="sub">· '+f.r.nombre+'</span>':'')+bano;
+    // En el teléfono el nombre se apila en dos líneas: en una sola quedaba
+    // "Hab. 1 · Mat…" o "H… · Litera superior", que no dicen nada. Arriba va
+    // la pieza y abajo el detalle —el tipo de habitación, o la cama—, que es
+    // justo lo que se pierde al cortar.
+    if(ESTRECHO){
+      var partes = etiq.split(' · ');
+      var arriba = partes[0];
+      var abajo  = f.r.nombre || partes.slice(1).join(' · ');
+      nm.innerHTML='<i class="pa '+aseo+'" title="'+(rotulo[aseo]||aseo)+'"></i>'+
+        '<span class="apilado"><b>'+arriba+'</b>'+
+        (abajo?'<em>'+abajo+'</em>':'')+'</span>';
+    } else {
+      nm.innerHTML='<i class="pa '+aseo+'" title="'+(rotulo[aseo]||aseo)+'"></i>'+
+        '<span>'+etiq+'</span>'+
+        (f.r.nombre?'<span class="sub">· '+f.r.nombre+'</span>':'')+bano;
+    }
     if(aseo!=='limpia') nm.classList.add('aseo-'+aseo);
     frag.appendChild(nm);
 
