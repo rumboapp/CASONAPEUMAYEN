@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-22';
+var VERSION = '2026-08-23';
 
 function version() { return VERSION; }
 
@@ -3017,8 +3017,24 @@ function guardarAcompanantes(token, idReserva, lista) {
 var TIPOS_DOC = {
   pasaporte: 'Pasaporte',
   pdi: 'Tarjeta de turismo PDI',
+  cedula: 'Cédula de identidad',
   otro: 'Otro documento'
 };
+
+/* Qué papeles se le piden a este huésped.
+
+   No es lo mismo un extranjero que un chileno, y mezclarlos confundía a los
+   dos: al chileno se le ofrecía subir un pasaporte y una tarjeta PDI que no
+   tiene, y en la reserva le quedaba una advertencia de que "faltaban
+   documentos" que nunca iba a poder completar.
+
+   - Al turista extranjero exento se le piden pasaporte Y tarjeta PDI. No es
+     opcional: sin los dos, la exención de IVA no se sostiene ante el SII.
+   - Al chileno no se le exige nada. Puede dejar una foto de su cédula si
+     quiere, y sirve para tenerla a mano, pero es un gusto y no un trámite. */
+function tiposDoc_(extranjero) {
+  return extranjero ? ['pasaporte', 'pdi'] : ['cedula'];
+}
 
 /* Límite del archivo ya decodificado. Una foto de celular redimensionada
    pesa unos 300 KB; 8 MB deja aire de sobra y frena un video subido por
@@ -3093,14 +3109,21 @@ function estadoDocs_(filas, extranjero) {
   var tiene = {};
   (filas || []).forEach(function (d) { tiene[String(d.tipo)] = true; });
   var n = (filas || []).length;
+  // Lo que falta se calcula contra lo que se le PIDE a este huésped, no
+  // contra una lista fija: a un chileno no le puede faltar un pasaporte.
+  var pedidos = tiposDoc_(!!extranjero);
+  var faltan = pedidos.filter(function (t) { return !tiene[t]; });
   return {
     total: n,
     pasaporte: !!tiene.pasaporte,
     pdi: !!tiene.pdi,
-    // 'exige' es lo que decide si vale la pena avisar; 'completo' es si ya
-    // está todo lo que se exige.
+    cedula: !!tiene.cedula,
+    // 'exige' decide si vale la pena advertir que falta algo: solo al
+    // extranjero exento se le exigen. Al chileno la cédula es opcional, así
+    // que su reserva nunca muestra una advertencia.
     exige: !!extranjero,
-    completo: extranjero ? (!!tiene.pasaporte && !!tiene.pdi) : n > 0
+    faltan: faltan,
+    completo: extranjero ? faltan.length === 0 : n > 0
   };
 }
 
@@ -3612,6 +3635,10 @@ function configuracion(token) {
     reglasPorDefecto: porDefecto,
     vistaPrevia: reglamento(),
     dolar: dolarHoy_(),
+    // La dirección de la planilla se pregunta en vivo y no va escrita a mano:
+    // así siempre apunta a la que el sistema está usando de verdad, aunque
+    // algún día se cambie de planilla.
+    planillaUrl: (function () { try { return ss_().getUrl(); } catch (e) { return ''; } })(),
     // El token NO viaja de vuelta a la pantalla: se manda una vez y se queda
     // en la planilla. Lo que la pantalla necesita saber es si ya hay uno
     // puesto y a qué grupo está apuntando.

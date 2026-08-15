@@ -218,6 +218,12 @@ var T = {
              'la tarjeta de turismo que te entregó la PDI al entrar al país. Es opcional: '+
              'si prefieres, te los pedimos al llegar.',
     docPasaporte:'Foto del pasaporte', docPdi:'Foto de la tarjeta PDI',
+    // Para el huésped chileno. Es del todo opcional: no se le exige nada.
+    cedTit:'Tu cédula de identidad',
+    cedAyuda:'Si quieres, puedes dejar acá una foto de tu cédula y así el registro '+
+             'queda listo antes de llegar. Es completamente opcional: no hace ninguna '+
+             'falta y nadie te la va a pedir si prefieres no dejarla.',
+    docCedula:'Foto de la cédula',
     docCargar:'Cargar aquí', docSubiendo:'Subiendo…', docListo:'Recibido',
     docError:'No se pudo subir. Puedes intentarlo de nuevo o traerlo al llegar.',
     firma:'Firma', firmaAyuda:'Firma con el dedo dentro del recuadro.',
@@ -260,6 +266,11 @@ var T = {
              'and of the tourist card the police gave you on arrival. This is optional: '+
              'if you prefer, we will ask for them at check-in.',
     docPasaporte:'Photo of your passport', docPdi:'Photo of the tourist card',
+    cedTit:'Your ID card',
+    cedAyuda:'If you like, you can leave a photo of your ID card here so the check-in '+
+             'is ready before you arrive. It is entirely optional: it is not needed and '+
+             'nobody will ask for it if you would rather not.',
+    docCedula:'Photo of your ID card',
     docCargar:'Upload here', docSubiendo:'Uploading…', docListo:'Received',
     docError:'Upload failed. You can try again or bring it with you.',
     firma:'Signature', firmaAyuda:'Sign with your finger inside the box.',
@@ -471,14 +482,28 @@ function leerAcompanantes(){
    La foto se achica en el propio teléfono antes de subirla — una foto de
    celular pesa varios megas y con datos móviles eso no llega nunca.
    ------------------------------------------------------------------ */
-var DOC_TIPOS = [['pasaporte','docPasaporte'], ['pdi','docPdi']];
+/* Los papeles que se le piden a cada uno. A un chileno no se le pide un
+   pasaporte ni una tarjeta de la PDI —no los tiene—, así que ofrecérselos
+   solo confundía; lo suyo es la cédula, y es del todo opcional. Al turista
+   extranjero sí se le piden los dos, porque de eso depende que su exención de
+   IVA se sostenga. */
+function tiposDoc(){
+  return (DATOS && DATOS.extranjero)
+    ? [['pasaporte','docPasaporte'], ['pdi','docPdi']]
+    : [['cedula','docCedula']];
+}
 
 function pintarDocumentos(){
   if (!DATOS){ $('cardDoc').classList.add('hide'); return; }
-  // Se le ofrece a cualquiera, no solo a quien venga marcado como extranjero:
-  // recepción escanea el QR para un walk-in que todavía no está marcado, y
-  // ahí no aparecía nada. Sigue siendo opcional.
   $('cardDoc').classList.remove('hide');
+  // El título y la explicación cambian según a quién se le esté pidiendo. En
+  // la pantalla de recepción no se tocan: ahí ya dicen lo suyo, y el que lee
+  // es el recepcionista, no el huésped.
+  if (!SOLO_DOCS){
+    var extranjero = !!DATOS.extranjero;
+    $('cardDoc').querySelector('h2').setAttribute('data-t', extranjero ? 'docTit' : 'cedTit');
+    $('cardDoc').querySelector('p').setAttribute('data-t', extranjero ? 'docAyuda' : 'cedAyuda');
+  }
   // Si ya firmó, la tarjeta se mueve dentro del bloque de "listo", que es lo
   // único que queda en pantalla.
   var destino = DATOS.firmada ? $('listo') : null;
@@ -488,7 +513,7 @@ function pintarDocumentos(){
 
   var c = $('docCajas');
   c.innerHTML = '';
-  DOC_TIPOS.forEach(function(par){
+  tiposDoc().forEach(function(par){
     var caja = document.createElement('button');
     caja.type = 'button';
     caja.className = 'subir' + (ya[par[0]] ? ' listo' : '');

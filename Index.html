@@ -715,6 +715,27 @@
         </p>
       </div>
 
+      <!-- ---------- La planilla ----------
+           Casi todo se hace desde acá, pero a veces hay que mirar los datos en
+           crudo o corregir algo a mano, y buscar la planilla en Drive es una
+           lata. La dirección se pregunta en vivo al servidor: así siempre
+           apunta a la que el sistema está usando de verdad, sin quedar escrita
+           a mano en el código. -->
+      <div class="card">
+        <h2>La planilla de datos</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Todo lo que ves en la app vive acá: reservas, cuentas, noches, fichas y
+          configuración, cada cosa en su hoja. Sirve para mirar los datos en crudo,
+          sacar una copia de respaldo o corregir algo puntual a mano.
+        </p>
+        <a class="btn sm" id="cfgPlanilla" target="_blank" rel="noopener"
+           style="text-decoration:none;display:inline-block">Abrir la planilla</a>
+        <p class="muted" style="font-size:12px;margin-top:10px">
+          Ojo al editar a mano: la app busca cada dato por el nombre de su columna.
+          Agregar columnas nuevas no molesta; renombrar o borrar las que ya están, sí.
+        </p>
+      </div>
+
       <!-- ---------- El bot del grupo de Telegram ---------- -->
       <div class="card">
         <h2>Avisos al grupo de Telegram</h2>
@@ -1010,9 +1031,7 @@
   <div class="mo" style="max-width:520px">
     <header><h3 id="docTit">Pasaporte y tarjeta PDI</h3><button class="x" data-cerrar="mDoc">×</button></header>
     <div class="body">
-      <p class="muted" style="font-size:12.5px;margin-bottom:12px">
-        Son los dos papeles que acreditan la exención de IVA a turistas extranjeros.
-      </p>
+      <p class="muted" id="docIntro" style="font-size:12.5px;margin-bottom:12px"></p>
 
       <div id="docLista" style="margin-bottom:14px"></div>
 
@@ -1021,8 +1040,8 @@
         <p class="muted" style="font-size:12.5px;margin-bottom:10px">
           Para cuando el huésped está en el mostrador y no subió nada. Escanea este
           código <b>con tu propio teléfono</b>: se abre una pantalla que solo saca las
-          dos fotos y las guarda en esta reserva. No se lo muestres al huésped, no es
-          para él.
+          fotos que le corresponden y las guarda en esta reserva. No se lo muestres al
+          huésped, no es para él.
         </p>
         <div id="docQr" style="text-align:center"></div>
       </div>
@@ -1030,11 +1049,10 @@
       <div class="ctaCaja">
         <div class="ctaTit">O subirlo desde este equipo</div>
         <div class="ctaForm">
-          <select id="docTipo">
-            <option value="pasaporte">Pasaporte</option>
-            <option value="pdi">Tarjeta de turismo PDI</option>
-            <option value="otro">Otro documento</option>
-          </select>
+          <!-- Las opciones las arma abrirDocumentos() según a quién se le
+               esté pidiendo: pasaporte y PDI al extranjero, cédula al
+               chileno. -->
+          <select id="docTipo"></select>
           <button class="btn sm" id="docElegir">Elegir foto o PDF</button>
         </div>
         <input type="file" id="docArchivo" accept="image/*,application/pdf" class="hide">
@@ -1400,7 +1418,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-22';
+var VERSION_ESPERADA = '2026-08-23';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
@@ -2541,26 +2559,30 @@ function abrirReserva(r){
    tener el pasaporte Y la tarjeta PDI antes de que se vaya: sin los dos, la
    exención de IVA no se sostiene. Al huésped chileno no se le pide nada, así
    que su reserva solo muestra la franja si alguien subió algo. */
+var ROTULO_DOC = { pasaporte:'pasaporte', pdi:'tarjeta PDI', cedula:'cédula',
+                   otro:'otro documento' };
+
 function pintarDocsReserva(r){
   var caja=$('rDocEstado'), d = r && r.docs;
   caja.classList.remove('falta','listo');
+  // Al huésped chileno no se le exige nada, así que si no subió nada la
+  // franja no aparece: no tiene sentido advertir de algo que no se pide.
   if(!d || (!d.exige && !d.total)){ caja.classList.add('hide'); return; }
   caja.classList.remove('hide');
-  var partes=[];
-  if(d.pasaporte) partes.push('pasaporte');
-  if(d.pdi) partes.push('tarjeta PDI');
+  var hay=[];
+  ['pasaporte','pdi','cedula'].forEach(function(t){ if(d[t]) hay.push(ROTULO_DOC[t]); });
   if(d.exige){
     caja.classList.add(d.completo ? 'listo' : 'falta');
+    var faltan=(d.faltan||[]).map(function(t){ return ROTULO_DOC[t]||t; });
     $('rDocEstadoTxt').innerHTML = d.completo
-      ? '<b>Documentos escaneados</b> · pasaporte y tarjeta PDI'
+      ? '<b>Documentos escaneados</b> · '+hay.join(' y ')
       : '<b>Faltan documentos por escanear</b> · '+
-        (partes.length ? 'está el '+partes.join(' y el ')+', falta '+
-                         (d.pasaporte?'la tarjeta PDI':'el pasaporte')
-                       : 'no hay ninguno todavía');
+        (hay.length ? 'está el '+hay.join(' y el ')+', falta '+faltan.join(' y ')
+                    : 'no hay ninguno todavía');
   } else {
     caja.classList.add('listo');
     $('rDocEstadoTxt').innerHTML = '<b>'+plural(d.total,'documento escaneado','documentos escaneados')+
-      '</b>'+(partes.length ? ' · '+partes.join(' y ') : '');
+      '</b>'+(hay.length ? ' · '+hay.join(' y ') : '');
   }
 }
 $('rDocEstado').onclick=function(){ if(RES) abrirDocumentos(RES); };
@@ -4172,6 +4194,12 @@ function pintarConfiguracion(){
       : 'Rigiendo: $'+plataSimple(CFG.dolar.valor)+' ('+CFG.dolar.fuente+').';
   }
 
+  // El enlace a la planilla. Si el servidor no la pudo resolver, el botón se
+  // esconde en vez de quedar apuntando a ninguna parte.
+  var pl=$('cfgPlanilla');
+  if(CFG.planillaUrl){ pl.href=CFG.planillaUrl; pl.classList.remove('hide'); }
+  else pl.classList.add('hide');
+
   $('cfgTgCampos').innerHTML = deGrupo('telegram').map(campo).join('');
   pintarEstadoTelegram();
 
@@ -4757,12 +4785,35 @@ var DOCS = null;                 // reserva cuyos documentos están abiertos
 
 $('rDocs').onclick=function(){ if(RES) abrirDocumentos(RES); };
 
+/* Los papeles que se le piden a este huésped. Al extranjero, pasaporte y
+   tarjeta PDI —de eso depende que su exención de IVA se sostenga—. Al
+   chileno, la cédula y nada más, del todo opcional: ofrecerle un pasaporte
+   que no tiene solo confundía, y le dejaba en la reserva una advertencia que
+   nunca iba a poder completar. */
+function opcionesDoc(extranjero){
+  return extranjero
+    ? [['pasaporte','Pasaporte'], ['pdi','Tarjeta de turismo PDI'], ['otro','Otro documento']]
+    : [['cedula','Cédula de identidad'], ['otro','Otro documento']];
+}
+
 function abrirDocumentos(r){
   DOCS = r;
   $('docTit').textContent='Documentos de '+r.huesped;
   $('docErr').classList.add('hide');
   $('docLista').innerHTML='<div class="esqueleto"></div>';
   $('docQr').innerHTML='';
+
+  var sel=$('docTipo'); sel.innerHTML='';
+  opcionesDoc(!!r.extranjero).forEach(function(o){
+    var op=document.createElement('option');
+    op.value=o[0]; op.textContent=o[1]; sel.appendChild(op);
+  });
+  $('docIntro').innerHTML = r.extranjero
+    ? 'Son los dos papeles que acreditan la exención de IVA a turistas extranjeros: '+
+      '<b>hacen falta los dos</b> antes de que se vaya.'
+    : 'Una foto de la cédula, si la quieren tener a mano. <b>Es opcional</b>: a un '+
+      'huésped chileno no se le exige ningún documento.';
+
   abrir('mDoc');
   refrescarDocumentos();
   // El enlace del QR es propio de recepción y va aparte del de la ficha del
@@ -4815,12 +4866,17 @@ function ampliarQr(url, huesped){
 /* El mismo resumen que arma el servidor, pero acá: así la franja de la
    reserva se pone al día en cuanto se sube o se borra un documento, sin
    tener que recargar el calendario entero. */
-function estadoDocsDe(lista, exige){
+function estadoDocsDe(lista, extranjero){
   var t={};
   (lista||[]).forEach(function(d){ t[d.tipo]=true; });
   var n=(lista||[]).length;
-  return { total:n, pasaporte:!!t.pasaporte, pdi:!!t.pdi, exige:!!exige,
-           completo: exige ? (!!t.pasaporte && !!t.pdi) : n>0 };
+  // Lo mismo que hace el servidor: lo que falta se mide contra lo que se le
+  // PIDE a este huésped. A un chileno no le puede faltar un pasaporte.
+  var pedidos = extranjero ? ['pasaporte','pdi'] : ['cedula'];
+  var faltan = pedidos.filter(function(x){ return !t[x]; });
+  return { total:n, pasaporte:!!t.pasaporte, pdi:!!t.pdi, cedula:!!t.cedula,
+           exige:!!extranjero, faltan:faltan,
+           completo: extranjero ? faltan.length===0 : n>0 };
 }
 
 function refrescarDocumentos(){
@@ -4832,8 +4888,8 @@ function refrescarDocumentos(){
     DOCS.docs = estadoDocsDe(lista, DOCS.extranjero);
     if(RES && RES.id===DOCS.id){ RES.docs=DOCS.docs; pintarDocsReserva(RES); }
     if(!lista.length){
-      c.innerHTML='<div class="empty">Todavía no ha subido ninguno. '+
-                  'Se le piden igual en el check-in.</div>';
+      c.innerHTML='<div class="empty">Todavía no ha subido ninguno.'+
+        (DOCS && DOCS.extranjero ? ' Se le piden igual en el check-in.' : '')+'</div>';
       return;
     }
     lista.forEach(function(d){

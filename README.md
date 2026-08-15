@@ -523,24 +523,36 @@ usando.
 En **Alojamiento**, cada precio se muestra también en dólares al cambio de hoy,
 para cotizarle a alguien de afuera sin sacar la calculadora.
 
-### Pasaporte y tarjeta PDI
+### Documentos: pasaporte, tarjeta PDI y cédula
 
-Los dos papeles que acreditan la exención se piden en el mostrador con el
-huésped esperando. Hay **dos caminos, y son de dos personas distintas**:
+**A cada huésped se le pide lo que le corresponde, y nada más:**
+
+| | Qué se le pide | ¿Es obligatorio? |
+|---|---|---|
+| **Turista extranjero** | Pasaporte **y** tarjeta de turismo PDI | Sí — de eso depende la exención de IVA |
+| **Huésped chileno** | Cédula de identidad | **No**, es del todo opcional |
+
+Antes se le ofrecían pasaporte y PDI a todo el mundo. A un chileno eso no le
+sirve de nada —no los tiene— y además le dejaba en la reserva una advertencia
+de "faltan documentos" que nunca iba a poder completarse. Ahora la reserva de
+un chileno **no muestra ninguna advertencia**: si deja su cédula, queda
+registrada; si no, no pasa nada.
+
+Hay **dos caminos, y son de dos personas distintas**:
 
 **1. El huésped, desde su celular, antes de llegar.** En el enlace de su ficha
-—el que se le manda por WhatsApp— hay dos botones grandes de *Cargar aquí*, uno
-para el pasaporte y otro para la tarjeta PDI. En un teléfono abren la cámara
-directamente. **Es opcional a propósito**, y la propia página se lo dice: si no
-lo hace, se le piden igual al llegar. Funciona **aunque la ficha ya esté
-firmada** —que es el caso normal, porque el pasaporte se pide después de
-firmar— y **para cualquier huésped**, no solo los marcados como extranjeros.
+—el que se le manda por WhatsApp— hay botones grandes de *Cargar aquí* que en
+un teléfono abren la cámara directamente. Al extranjero le aparecen dos, uno
+por cada papel; al chileno, uno solo para su cédula, diciéndole en la misma
+página que es opcional. Funciona **aunque la ficha ya esté firmada**, que es el
+caso normal, porque los papeles se piden después de firmar.
 
 **2. Recepción, con el huésped enfrente.** Es para cuando no subió nada, o
 llegó sin reserva. En la reserva: *Más ▾ → Pasaporte y tarjeta PDI*. Ahí hay un
 **código QR** que **es una herramienta de recepción, no del huésped**: el
 recepcionista lo escanea **con su propio teléfono** y se le abre una pantalla
-que **no hace nada más que sacar las dos fotos** y guardarlas en esa reserva.
+que **no hace nada más que sacar las fotos que corresponden** —pasaporte y PDI
+si es extranjero, cédula si es chileno— y guardarlas en esa reserva.
 No muestra la ficha, ni el reglamento, ni la firma, ni datos personales — solo
 de quién son los documentos, para no guardárselos a la reserva equivocada. Al
 huésped no se le muestra este código en ningún momento.
@@ -591,9 +603,9 @@ Aparte de eso, tres cosas que ayudan a que la cámara lo agarre rápido:
   hay caso.
 
 **Y la reserva avisa si están o no.** Arriba del todo, apenas se abre: verde si
-el pasaporte y la tarjeta PDI ya están escaneados, ámbar si falta alguno —
-diciendo cuál—. A un huésped chileno no se le exige ninguno, así que su reserva
-no muestra la advertencia. La franja se aprieta y lleva derecho a subirlos.
+está todo lo que se le pide, ámbar si falta algo —diciendo qué—. A un huésped
+chileno no se le exige nada, así que su reserva solo muestra la franja, en
+verde, si dejó su cédula. La franja se aprieta y lleva derecho a subirlos.
 
 El archivo se guarda con **la fecha de llegada** del huésped, no la del día en
 que se subió: es de esa estadía y es así como se busca después.
@@ -781,6 +793,19 @@ en inglés.
 
 Ojo con una cosa: **el texto manda**. Si cambias el horario de check-in, hay que
 cambiarlo también en el texto de las normas; no se actualiza solo.
+
+También está ahí el **enlace directo a la planilla de datos**, para no andar
+buscándola en Drive. Todo lo que ves en la app vive ahí: reservas, cuentas,
+noches, fichas y configuración, cada cosa en su hoja. Sirve para mirar los datos
+en crudo, sacar una copia de respaldo o corregir algo puntual a mano. La
+dirección se le pregunta al servidor en el momento, así que siempre apunta a la
+planilla que el sistema está usando de verdad.
+
+> Si editas a mano: la app busca cada dato **por el nombre de su columna**.
+> Agregar columnas nuevas no molesta; renombrar o borrar las que ya están, sí.
+
+Y el **bot de Telegram**, con su propia tarjeta y los cuatro pasos para
+conectarlo.
 
 Detrás de *Ajustes que casi nunca se tocan* quedan los datos que el sistema usa
 por dentro y que casi nunca hay que mover: el correo al que llega el cierre de
