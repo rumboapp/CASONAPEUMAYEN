@@ -1187,12 +1187,22 @@
              max-height:250px;overflow-y:auto"></div>
       </div>
       <div class="g2">
-        <div class="fld"><label>4 · Total del grupo ($)</label><input id="gTot" type="number" min="0" step="1000">
+        <div class="fld"><label>4 · Total del grupo <span id="gTotMon">($)</span></label>
+          <input id="gTot" type="number" min="0" step="1000">
           <div class="muted" style="font-size:11.5px;margin-top:5px">Se reparte entre las piezas elegidas.</div>
         </div>
-        <div class="fld"><label>Abonado ($)</label><input id="gAnt" type="number" min="0" step="1000" value="0">
+        <div class="fld"><label>Abonado <span id="gAntMon">($)</span></label>
+          <input id="gAnt" type="number" min="0" step="1000" value="0">
           <div class="muted" style="font-size:11.5px;margin-top:5px">Se anota una sola vez, no por pieza.</div>
         </div>
+      </div>
+
+      <!-- Igual que en la reserva suelta: una familia de afuera que toma tres
+           piezas es UNA familia de afuera. Sin esto había que crear el grupo
+           y después entrar pieza por pieza a marcarlas. -->
+      <div class="fld">
+        <label class="chk"><input type="checkbox" id="gExtranjero"> Turistas extranjeros · cobra en dólares, sin IVA</label>
+        <div class="muted hide" id="gExtNota" style="font-size:11.5px;margin-top:6px"></div>
       </div>
 
       <button type="button" class="mas" id="gMasDatos">
@@ -2573,6 +2583,9 @@ function pintarPaso(r){
    postear: si no, el saldo engañaría.
    ================================================================== */
 var CTA = null;                  // última cuenta traída del servidor
+/* Solo al abrir la cuenta se le pone la moneda por defecto; después manda lo
+   que haya elegido quien está cobrando. */
+var CTA_RECIEN_ABIERTA = false;
 
 var TIPOS_CARGO = [
   ['restaurante','Restaurante'], ['bar','Bar'], ['tinaja','Tinaja'], ['sushi','Sushi'],
@@ -2588,6 +2601,7 @@ var RAPIDOS = [
 $('rCuenta').onclick=function(){ if(RES) abrirCuenta(RES.id, RES.huesped); };
 
 function abrirCuenta(id, huesped){
+  CTA_RECIEN_ABIERTA = true;
   $('ctaTit').textContent = 'Cuenta de ' + (huesped||'');
   $('ctaErr').classList.add('hide');
   $('ctaMovs').innerHTML='<div class="esqueleto"></div>';
@@ -2636,11 +2650,15 @@ function pintarCuenta(){
   $('ctaDoc').value = c.docTurismo || '';
   $('ctaDocBox').classList.toggle('hide', !c.exentoIva);
 
-  // A un extranjero se le cobra en dólares y punto: la moneda del pago ya
-  // viene puesta y las casillas de monto dicen US$.
+  // A un extranjero se le cobra en dólares, así que la moneda del pago viene
+  // puesta en dólares. Pero solo al ABRIR la cuenta: si se forzara en cada
+  // repintado, elegir "Pesos" volvería solo a "Dólares" al instante y no
+  // habría forma de anotar un pago que de verdad entró en pesos —que pasa, y
+  // es justamente lo que el aviso de más arriba necesita poder mostrar.
   $('ctaMonto').placeholder = usd ? 'US$ c/u' : 'Monto c/u';
   $('ctaMonto').step = usd ? '1' : '500';
-  if(usd) $('ctaMoneda').value='USD';
+  if(usd && CTA_RECIEN_ABIERTA) $('ctaMoneda').value='USD';
+  CTA_RECIEN_ABIERTA = false;
   var enUsd = $('ctaMoneda').value==='USD';
   $('ctaPago').placeholder = enUsd ? 'Monto en US$' : 'Monto en $';
   $('ctaPago').step = enUsd ? '1' : '1000';
@@ -3087,6 +3105,7 @@ $('cGrupo').onclick=function(){
   GRUPO={ in:hoy, out:mas(hoy,1), elegidos:{} };
   $('gNom').value=''; $('gTel').value=''; $('gMail').value='';
   $('gCan').value='whatsapp'; $('gAnt').value=0; $('gNot').value='';
+  $('gExtranjero').checked=false; pintarMonedaGrupo();
   $('gErr').classList.add('hide');
   $('gExtra').classList.add('hide');
   $('gMasDatos').classList.remove('abierto');
@@ -3171,13 +3190,48 @@ function cargarDisponibles(){
   });
 }
 
+/* La moneda del grupo, con las mismas reglas que la de una reserva suelta:
+   el precio de lista lleva IVA incluido y al extranjero le corresponde el
+   neto, en dólares. GRUPO.elegidos guarda siempre pesos con IVA —es lo que
+   viene de las tarifas—, así que la conversión se hace solo al escribir en
+   la casilla y al mandar. */
+function monedaGrupo(){
+  return ($('gExtranjero').checked && dolarDelDia() > 0) ? 'USD' : 'CLP';
+}
+
+function pintarMonedaGrupo(){
+  var marcado = $('gExtranjero').checked, usd = monedaGrupo()==='USD';
+  $('gTotMon').textContent = usd ? '(US$)' : '($)';
+  $('gAntMon').textContent = usd ? '(US$)' : '($)';
+  $('gTot').step = usd ? '1' : '1000';
+  $('gAnt').step = usd ? '1' : '1000';
+  $('gExtNota').classList.toggle('hide', !marcado);
+  if(!marcado) return;
+  $('gExtNota').innerHTML = usd
+    ? 'Las '+Object.keys(GRUPO.elegidos).length+' piezas se cotizan <b>en dólares y sin '+
+      'impuestos</b>, al cambio de hoy ($'+plataSimple(dolarDelDia())+' por US$1), que les '+
+      'queda fijado.'
+    : '<b>No hay un valor del dólar cargado</b>, así que el grupo se sigue cotizando en '+
+      'pesos. Ponlo en <b>Configuración</b>.';
+}
+
+$('gExtranjero').addEventListener('change', function(){
+  pintarMonedaGrupo();
+  recalcularGrupo();
+});
+
 function recalcularGrupo(){
   var ids=Object.keys(GRUPO.elegidos);
   var total=ids.reduce(function(a,k){ return a + (Number(GRUPO.elegidos[k].precio)||0); }, 0);
-  $('gTot').value=total;
+  // El total sale de las tarifas de lista, así que se convierte igual que en
+  // la reserva suelta: primero se le saca el IVA y después se pasa a dólares.
+  $('gTot').value = monedaGrupo()==='USD'
+    ? aUsd(Math.round(total/(1+ivaPct()/100)), dolarDelDia())
+    : total;
   $('gCuenta').textContent = ids.length
     ? '· '+ids.length+' elegido'+(ids.length>1?'s':'')
     : '· elige uno o más';
+  pintarMonedaGrupo();
 }
 
 $('gGuardar').onclick=function(){
@@ -3199,7 +3253,9 @@ $('gGuardar').onclick=function(){
   ocupado('gGuardar', srv('guardarReservaGrupo')({
     huesped:$('gNom').value.trim(), telefono:$('gTel').value, email:$('gMail').value,
     canal:$('gCan').value, checkIn:GRUPO.in, checkOut:GRUPO.out,
-    anticipo:+$('gAnt').value||0, notas:$('gNot').value, recursos:recursos
+    anticipo:+$('gAnt').value||0, notas:$('gNot').value, recursos:recursos,
+    // Los precios de arriba ya vienen en la moneda que dice la casilla.
+    extranjero:$('gExtranjero').checked, moneda:monedaGrupo()
   })).then(function(res){
     cerrar('mGrupo');
     toast('Grupo creado: '+res.ids.length+' reservas');
@@ -3304,18 +3360,23 @@ function pintarHoy(d){
     ['Pax',     function(r){ return r.pax||1; }],
     ['Estado',  function(r){ return '<span class="tag '+r.estado+'">'+etq(r.estado)+'</span>'; }]
   ];
+  // El saldo se escribe en la moneda de esa reserva: es el número que
+  // recepción le va a decir al huésped en el mostrador, y decírselo en pesos
+  // a alguien que reservó en dólares es justamente la confusión que no puede
+  // pasar.
+  var colSaldo = ['Saldo', function(r){
+    return r.saldo>0 ? '<b>'+plataDe(r, r.saldo)+'</b>'
+                     : '<span class="muted">pagado</span>'; }];
   tabla('tLleg', d.llegadas, comunes.concat([
-    ['Saldo', function(r){ return r.saldo>0? '<b>'+plata(r.saldo)+'</b>' : '<span class="muted">pagado</span>'; }],
+    colSaldo,
     ['Notas', function(r){ return '<span class="muted">'+(r.notas||'')+'</span>'; }]
   ]), 'Sin llegadas hoy.');
-  tabla('tSal', d.salidas, comunes.concat([
-    ['Saldo', function(r){ return r.saldo>0? '<b>'+plata(r.saldo)+'</b>' : '<span class="muted">pagado</span>'; }]
-  ]), 'Sin salidas hoy.');
+  tabla('tSal', d.salidas, comunes.concat([colSaldo]), 'Sin salidas hoy.');
   tabla('tCasa', d.enCasa, comunes.concat([
     ['Sale', function(r){ return largo(r.checkOut); }],
     ['Cuenta', function(r){
       return '<button class="btn gh sm" data-cta="'+r.id+'" data-nom="'+r.huesped+'">'+
-             (r.saldo>0 ? plata(r.saldo) : 'Ver')+'</button>';
+             (r.saldo>0 ? plataDe(r, r.saldo) : 'Ver')+'</button>';
     }]
   ]), 'No hay huéspedes alojados.');
   tabla('tAdd', d.addons, [
@@ -3560,15 +3621,17 @@ function pintarHuesped(g){
       ((r.acompanantes||[]).length
         ? '<div class="muted" style="font-size:12.5px;margin-bottom:8px">Con: '+
           r.acompanantes.map(function(a){ return a.nombre; }).join(', ')+'</div>' : '')+
+      // Su cuenta se lee en la moneda en que se le cobró esa estadía, igual
+      // que en la pestaña Cuenta: es la misma plata mirada desde otra parte.
       (cta.movimientos && cta.movimientos.length
         ? '<table class="ctaMov"><tbody>'+cta.movimientos.map(function(m){
             return '<tr class="'+m.clase+'"><td class="muted">'+corto(m.fecha)+'</td>'+
               '<td>'+m.descripcion+(m.centro?'<span class="cen '+m.centro+'">'+m.centro+'</span>':'')+'</td>'+
-              '<td class="n">'+(m.clase==='pago'?'− ':'')+plata(m.total)+'</td></tr>';
+              '<td class="n">'+(m.clase==='pago'?'− ':'')+plataDe(r, m.total)+'</td></tr>';
           }).join('')+'</tbody></table>'
         : '<div class="muted" style="font-size:12.5px">Sin movimientos en la cuenta.</div>')+
       '<div style="display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;align-items:center">'+
-        '<span class="muted" style="font-size:12.5px">Saldo '+plata(cta.saldoProyectado||0)+'</span>'+
+        '<span class="muted" style="font-size:12.5px">Saldo '+plataDe(r, cta.saldoProyectado||0)+'</span>'+
         '<button class="btn gh sm" data-ir="'+r.id+'" style="margin-left:auto">Ver la reserva</button>'+
         (r.ficha && r.ficha.firmaUrl
           ? '<a class="btn gh sm" style="text-decoration:none" target="_blank" href="'+

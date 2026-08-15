@@ -1200,6 +1200,18 @@ function guardarReservaGrupo(token, datos) {
       verificarLibre_(id, f.checkIn, f.checkOut, null);
     });
 
+    // Un grupo de turistas extranjeros es UN grupo de turistas extranjeros:
+    // las piezas se cotizan todas en dólares y sin IVA, con el mismo cambio.
+    // Los precios llegan ya en esa moneda; acá se pasan a pesos, que es como
+    // se guarda la planilla.
+    var extranjero = !!datos.extranjero;
+    var enUsd = String(datos.moneda || '') === 'USD';
+    var cambio = dolarHoy_().valor;
+    var aPesos = function (n) {
+      var v = Number(n) || 0;
+      return enUsd ? Math.round(v * cambio) : Math.round(v);
+    };
+
     var grupo = uid_('G');
     var filas = lista.map(function (item, i) {
       var id = item.recurso || item;
@@ -1211,11 +1223,16 @@ function guardarReservaGrupo(token, datos) {
         huesped: datos.huesped, telefono: datos.telefono || '', email: datos.email || '',
         canal: datos.canal || 'whatsapp',
         checkIn: f.checkIn, checkOut: f.checkOut, estado: datos.estado || 'confirmada',
-        total: Number(item.precio) || 0,
+        total: aPesos(item.precio),
         // El abono se anota una sola vez, en la primera del grupo.
-        anticipo: i === 0 ? (Number(datos.anticipo) || 0) : 0,
+        anticipo: i === 0 ? aPesos(datos.anticipo) : 0,
         addon: !!datos.addon, addonFecha: datos.addonFecha || '',
         notas: datos.notas || '', grupo: grupo,
+        extranjero: extranjero, exentoIva: extranjero,
+        dolar: extranjero ? cambio : 0,
+        // Un precio que llegó en dólares YA viene sin impuesto; uno que salió
+        // de las tarifas de la casa todavía lo lleva y hay que sacárselo.
+        sinIva: extranjero && enUsd,
         creado: ahora_(), creadoPor: u.nombre
       };
     });
@@ -1235,6 +1252,13 @@ function guardarReservaGrupo(token, datos) {
     insertarVarias_('Reservas', filas);
     insertarVarias_('Noches', noches);
     var ids = filas.map(function (x) { return x.id; });
+    // Grupo de extranjeros cotizado con las tarifas de la casa —porque no
+    // había cambio con qué convertir—: esas tarifas llevan IVA incluido y al
+    // exento le corresponde el neto.
+    if (extranjero && !enUsd) {
+      olvidar_('Noches');
+      ids.forEach(function (id) { convertirAlojamiento_(id, true); });
+    }
     logCambio_(u.nombre, 'grupo_creado', grupo + ' · ' + ids.length + ' alojamientos · ' + datos.huesped);
     return { grupo: grupo, ids: ids };
   } finally {
@@ -1325,10 +1349,18 @@ function cambiarEstado(token, id, estado) {
 function eliminarReserva(token, id) {
   var u = sesion_(token);
   if (u.rol !== 'admin') throw new Error('Solo administración puede eliminar reservas.');
+  // Los documentos van PRIMERO y con su archivo: son fotos del pasaporte y de
+  // la tarjeta PDI de una persona. Si solo se borrara la reserva quedarían
+  // sueltos en la planilla y en Drive, sin nadie a quien pertenecer y sin
+  // forma de encontrarlos para borrarlos después.
+  documentosDe_(id).forEach(function (d) {
+    try { borrarDocumento(token, d.id); } catch (e) {}
+  });
   borrar_('Reservas', 'id', id);
   borrar_('Cuenta', 'idReserva', id);
   borrar_('Noches', 'idReserva', id);
   borrar_('Acompanantes', 'idReserva', id);
+  logCambio_(u.nombre, 'reserva_eliminada', id);
   return true;
 }
 
@@ -2686,6 +2718,10 @@ function panelHoy(token, fecha) {
       firmada: !!firmadas[r.id],
       addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
       saldo: (Number(r.total) || 0) - (Number(r.anticipo) || 0),
+      // Con qué moneda se le habla a este huésped. Es la pantalla que mira
+      // recepción cuando alguien llega o se va, así que es JUSTO donde el
+      // saldo tiene que estar en la moneda en que se le va a cobrar.
+      extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
       checkIn: ymd_(r.checkIn), checkOut: ymd_(r.checkOut)
     };
   };
@@ -3121,9 +3157,10 @@ function codigoDocDe_(idReserva) {
   return c;
 }
 
-/* Diez caracteres al azar de un alfabeto sin letras que se confundan: son
-   36^10 combinaciones (más de tres mil billones), de sobra para que nadie
-   dé con uno probando, y bastante más corto que un UUID. */
+/* Diez caracteres al azar de un alfabeto de 32 sin letras que se confundan
+   —no van la l, la ñ, la o ni el 0 ni el 1—: son 32^10 combinaciones, más de
+   mil billones, de sobra para que nadie dé con uno probando, y bastante más
+   corto que un UUID. */
 function codigoCorto_() {
   var abc = 'abcdefghijkmnpqrstuvwxyz23456789';
   var c = '';
@@ -3793,6 +3830,9 @@ function huespedes(token, texto, desde, hasta) {
       estado: r.estado, canal: String(r.canal || ''), pax: Number(r.pax) || 1,
       total: Math.round(Number(r.total) || 0),
       cargos: cargos, pagos: pagos,
+      // La misma cuenta vista desde el historial es la misma cuenta: si esa
+      // estadía se cobró en dólares, acá también se lee en dólares.
+      extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
       firmada: !!ficha, grupo: String(r.grupo || ''),
       notas: String(r.notas || '')
     });

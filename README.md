@@ -284,6 +284,10 @@ unidas por un mismo grupo.
 - El total se calcula solo y se reparte entre los alojamientos elegidos; si
   lo editas a mano, el reparto se ajusta en la misma proporción.
 - El abono se anota una sola vez, no una por habitación.
+- Tiene la misma casilla de **turistas extranjeros**: una familia de afuera
+  que toma tres piezas es una sola familia de afuera, así que las tres se
+  cotizan en dólares y sin IVA con el mismo cambio, de una vez. Antes había
+  que crear el grupo y después entrar pieza por pieza a marcarlas.
 - **O entra el grupo completo o no entra ninguno**: si al guardar uno de los
   alojamientos acaba de ocuparse, se rechaza todo y no queda media familia
   cargada.
