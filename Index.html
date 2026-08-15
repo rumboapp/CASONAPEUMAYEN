@@ -1400,7 +1400,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-21';
+var VERSION_ESPERADA = '2026-08-22';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
@@ -4613,9 +4613,24 @@ var QR = (function(){
 
     for(i=8;i<n-8;i++){ poner(6,i, i%2===0?1:0); poner(i,6, i%2===0?1:0); }
 
-    var al=ALIN[ver];
+    /* Los patrones de alineación van en todos los cruces de la lista, MENOS
+       en las tres esquinas donde ya está un ojo de posición.
+
+       Acá había un error que dejaba ilegible todo código de la versión 7 en
+       adelante: se descartaba el cruce si el módulo del centro ya estaba
+       ocupado, con la idea de saltarse los que chocan con un ojo. Pero la
+       línea de sincronía también ocupa la fila 6 y la columna 6, así que los
+       patrones que van SOBRE esa línea —que desde la versión 7 existen y son
+       obligatorios— se descartaban igual. Esos huecos se llenaban después con
+       datos, y el flujo entero quedaba corrido.
+
+       La regla de la norma es por posición, no por lo que haya escrito: se
+       omiten solo la primera con la primera, la primera con la última y la
+       última con la primera. */
+    var al=ALIN[ver], pri=al[0], ult=al[al.length-1];
     al.forEach(function(r){ al.forEach(function(c){
-      if(fijo[r][c]) return;                      // se solapa con un ojo
+      var enUnOjo = (r===pri && c===pri) || (r===pri && c===ult) || (r===ult && c===pri);
+      if(enUnOjo) return;
       for(var dr=-2;dr<=2;dr++) for(var dc=-2;dc<=2;dc++)
         poner(r+dr, c+dc,
           (Math.abs(dr)===2||Math.abs(dc)===2||(dr===0&&dc===0))?1:0);
@@ -4672,19 +4687,32 @@ var QR = (function(){
     return mejor;
   }
 
+  /* Los 15 bits del formato, en sus dos copias.
+
+     El orden es lo único delicado y es donde estuvo el error que hacía que
+     ningún teléfono leyera estos códigos: la norma escribe el bit MÁS
+     significativo primero —el 14 en la primera casilla y el 0 en la última—,
+     y acá se estaba escribiendo al revés. El valor de los 15 bits era el
+     correcto; llegaban dados vuelta. Un lector de verdad lee esos bits antes
+     que nada para saber con qué máscara desenmascarar, así que con eso
+     equivocado ni siquiera encuentra el código.
+
+     Las posiciones van escritas una por una a propósito. La cuenta aritmética
+     que había antes escondía además un desfase de uno en la segunda copia
+     —siete casillas donde van ocho— y con una tabla eso no se puede colar. */
   function ponerFormato(m, n, fmt){
+    // Del bit 14 al 0, en orden.
+    var copia1 = [[8,0],[8,1],[8,2],[8,3],[8,4],[8,5],[8,7],[8,8],
+                  [7,8],[5,8],[4,8],[3,8],[2,8],[1,8],[0,8]];
+    var copia2 = [[n-1,8],[n-2,8],[n-3,8],[n-4,8],[n-5,8],[n-6,8],[n-7,8],
+                  [8,n-8],[8,n-7],[8,n-6],[8,n-5],[8,n-4],[8,n-3],[8,n-2],[8,n-1]];
     for(var i=0;i<15;i++){
-      var bit=(fmt>>i)&1;
-      // Copia de arriba a la izquierda…
-      if(i<6) m[8][i]=bit;
-      else if(i===6) m[8][7]=bit;
-      else if(i===7) m[8][8]=bit;
-      else if(i===8) m[7][8]=bit;
-      else m[14-i][8]=bit;
-      // …y la segunda, repartida en las otras dos esquinas.
-      if(i<8) m[n-1-i][8]=bit;
-      else m[8][n-15+i]=bit;
+      var bit=(fmt>>(14-i))&1;
+      m[copia1[i][0]][copia1[i][1]]=bit;
+      m[copia2[i][0]][copia2[i][1]]=bit;
     }
+    // El módulo que va siempre negro. No es parte del formato y va aparte:
+    // cae justo debajo de la segunda copia.
     m[n-8][8]=1;
   }
 

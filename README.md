@@ -549,24 +549,46 @@ Es la manera de registrar los documentos **sin escáner**, que es lo que hay en
 el mostrador. Si el archivo ya está en el computador, en esa misma pantalla se
 puede arrastrar o elegir, sin pasar por el teléfono.
 
-**Que el QR se lea de verdad.** Es lo que más costó:
+**Que el QR se lea de verdad.** Es lo que más costó, y por una razón que vale
+la pena dejar escrita.
+
+El generador de QR está hecho a mano en el propio archivo —no se puede cargar
+una librería de internet dentro de Apps Script sin salir a buscarla— y tenía
+**dos errores que lo hacían ilegible para cualquier teléfono**:
+
+- Los 15 bits del **formato** —los que le dicen al lector con qué máscara
+  desenmascarar— se escribían **al revés**: el bit 14 donde va el 0. El valor
+  era correcto; llegaba dado vuelta. Un lector lee esos bits antes que nada,
+  así que con eso mal ni siquiera encuentra el código.
+- Los **patrones de alineación** que caen sobre la línea de sincronía se
+  descartaban por error. Existen de la versión 7 en adelante y son
+  obligatorios; sin ellos, los huecos se llenaban con datos y el flujo entero
+  quedaba corrido.
+
+**Por qué no lo cachó ninguna prueba, que es lo importante.** La prueba
+decodificaba el código con un lector escrito por la misma mano que el
+generador. Los dos compartían el mismo malentendido, así que el viaje de ida y
+vuelta cuadraba perfecto mientras ningún teléfono podía leer nada. Una prueba
+que se mira al espejo no prueba nada.
+
+Ahora se comprueba con **dos piezas ajenas**: la matriz se compara módulo por
+módulo contra la de un generador de referencia, y el dibujo que sale a la
+pantalla se fotografía en un navegador de verdad y se lee con **jsQR**, el
+lector que usan los escáneres web —que sí verifica la corrección de errores—.
+Se prueban las diez versiones, una por una, porque el segundo error solo
+aparecía de la séptima en adelante.
+
+Aparte de eso, tres cosas que ayudan a que la cámara lo agarre rápido:
 
 - El enlace de recepción es **corto y propio**: un código de 10 letras en vez
   del token de 32 de la ficha. Son 22 letras menos dentro del código, y eso se
-  traduce directamente en cuadraditos más grandes.
+  traduce en cuadraditos más grandes.
 - **Cada cuadradito mide 6 píxeles exactos.** Antes medía 3,88 y, al pedir
-  bordes nítidos, unos salían de 3px y otros de 4px: el patrón se deformaba lo
-  justo para que muchas cámaras no lo leyeran, aunque a la vista se viera
-  perfecto.
+  bordes nítidos, unos salían de 3px y otros de 4px.
 - Hay un botón **Ampliar para escanear** que lo pone a pantalla completa, con
-  cuadraditos del doble de grandes y nada alrededor que le quite contraste. Es
-  la salida cuando el teléfono no coopera —pantalla con brillo, poca luz—.
-- Y debajo va el **enlace escrito con un botón para copiarlo**, por si aun así
-  no hay caso.
-
-Todo esto está probado dibujando el código en un navegador de verdad, sacándole
-una foto y volviendo a leerlo **desde los píxeles**, sin mirar el original: si
-esa prueba pasa, un teléfono lo escanea.
+  cuadraditos del doble de grandes y nada alrededor que le quite contraste, y
+  debajo va el **enlace escrito con un botón para copiarlo**, por si aun así no
+  hay caso.
 
 **Y la reserva avisa si están o no.** Arriba del todo, apenas se abre: verde si
 el pasaporte y la tarjeta PDI ya están escaneados, ámbar si falta alguno —
