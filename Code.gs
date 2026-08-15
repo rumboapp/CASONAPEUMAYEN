@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-20';
+var VERSION = '2026-08-21';
 
 function version() { return VERSION; }
 
@@ -1132,6 +1132,9 @@ function guardarReserva(token, datos) {
         medio: datos.medioAnticipo || 'otro', fecha: hoy_()
       }, u.nombre);
     }
+    // El aviso al grupo va al final, con todo ya escrito, y envuelto para que
+    // un problema de Telegram no se lleve por delante la reserva.
+    avisarReservaNueva_(id, u.nombre);
     return { id: id, total: plan.total,
              moneda: esExtranjero ? 'USD' : 'CLP', usd: aUsd_(plan.total, cambio) };
   } finally {
@@ -1260,6 +1263,7 @@ function guardarReservaGrupo(token, datos) {
       ids.forEach(function (id) { convertirAlojamiento_(id, true); });
     }
     logCambio_(u.nombre, 'grupo_creado', grupo + ' · ' + ids.length + ' alojamientos · ' + datos.huesped);
+    avisarGrupoNuevo_(ids, u.nombre);
     return { grupo: grupo, ids: ids };
   } finally {
     lock.releaseLock();
@@ -1303,6 +1307,11 @@ function moverReserva(token, id, recurso, checkIn, checkOut) {
   lock.waitLock(20000);
   try {
     verificarLibre_(recurso, f.checkIn, f.checkOut, id);
+    // Cómo estaba antes, para poder contar en el grupo qué cambió.
+    var previa = leer_('Reservas').filter(function (x) { return x.id === id; })[0];
+    var antes = previa
+      ? { recurso: previa.recurso, checkIn: ymd_(previa.checkIn), checkOut: ymd_(previa.checkOut) }
+      : null;
     // Primero se le repone el plan si le faltaba: después de cambiarle las
     // fechas ya no se sabría por qué noches se acordó su precio.
     asegurarPlan_(id);
@@ -1315,6 +1324,10 @@ function moverReserva(token, id, recurso, checkIn, checkOut) {
     // el total nunca se queda pegado en lo que valía antes.
     var r = sincronizarNoches_({ id: id, recurso: recurso, checkIn: f.checkIn, checkOut: f.checkOut },
                                u.nombre);
+    if (antes && previa) {
+      avisarMovida_({ id: id, huesped: previa.huesped, recurso: recurso,
+                      checkIn: f.checkIn, checkOut: f.checkOut }, antes, u.nombre);
+    }
     return { total: r.total, agregadas: r.agregadas, quitadas: r.quitadas };
   } finally {
     lock.releaseLock();
@@ -1343,6 +1356,7 @@ function cambiarEstado(token, id, estado) {
     });
   }
   logCambio_(u.nombre, 'reserva_estado', id + ' -> ' + estado);
+  avisarEstado_(r, estado, u.nombre);
   return true;
 }
 
@@ -1353,6 +1367,8 @@ function eliminarReserva(token, id) {
   // la tarjeta PDI de una persona. Si solo se borrara la reserva quedarían
   // sueltos en la planilla y en Drive, sin nadie a quien pertenecer y sin
   // forma de encontrarlos para borrarlos después.
+  // La reserva se lee ANTES de borrarla: después no habría de qué avisar.
+  var r = leer_('Reservas').filter(function (x) { return x.id === id; })[0];
   documentosDe_(id).forEach(function (d) {
     try { borrarDocumento(token, d.id); } catch (e) {}
   });
@@ -1361,6 +1377,7 @@ function eliminarReserva(token, id) {
   borrar_('Noches', 'idReserva', id);
   borrar_('Acompanantes', 'idReserva', id);
   logCambio_(u.nombre, 'reserva_eliminada', id);
+  if (r) avisarBorrada_(r, u.nombre);
   return true;
 }
 
@@ -3259,6 +3276,284 @@ function reglamentoPorDefecto_(entrada, salida) {
   };
 }
 
+/* ===================== AVISOS AL GRUPO DE TELEGRAM =====================
+
+   Un bot que escribe en el grupo del equipo cada vez que pasa algo con una
+   reserva. Es para que nadie tenga que estar mirando la app: la reserva cae y
+   el grupo se entera.
+
+   Tres reglas que ordenan todo lo de acá abajo:
+
+   1. VIENE APAGADO. Sin token no se llama a nadie y no sale ni un paquete a
+      internet. El resto del sistema funciona sin conexión a propósito, y esto
+      no puede cambiarlo por defecto.
+
+   2. UN AVISO NUNCA PUEDE VOLTEAR UNA RESERVA. Todo va envuelto en try/catch
+      y el error se traga. Que Telegram esté caído, que cambiaran el token o
+      que se acabe la cuota de Google no puede impedir que se guarde una
+      reserva: el aviso es un lujo, la reserva es el trabajo.
+
+   3. SOLO EL NOMBRE. Ni teléfono ni correo. El historial de un grupo de
+      Telegram no lo controlamos nosotros y queda para siempre; el nombre
+      alcanza para saber de quién se habla, y el resto está en la app. */
+
+function telegramToken_() { return String(config_('telegramToken', '') || '').trim(); }
+function telegramChat_()  { return String(config_('telegramChat', '') || '').trim(); }
+
+function telegramActivo_() { return !!(telegramToken_() && telegramChat_()); }
+
+/* Manda el mensaje. Devuelve true o false, nunca lanza. */
+function telegramMandar_(texto) {
+  if (!telegramActivo_()) return false;
+  try {
+    var r = UrlFetchApp.fetch(
+      'https://api.telegram.org/bot' + telegramToken_() + '/sendMessage', {
+        method: 'post',
+        muteHttpExceptions: true,
+        payload: {
+          chat_id: telegramChat_(),
+          text: texto,
+          parse_mode: 'HTML',
+          disable_web_page_preview: 'true'
+        }
+      });
+    return r.getResponseCode() === 200;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* El punto por el que pasan TODOS los avisos. Mira si ese tipo de aviso está
+   encendido y, si lo está, arma el texto y lo manda. Se llama siempre al
+   final de la operación, con los datos ya guardados. */
+function avisar_(tipo, texto) {
+  try {
+    if (!telegramActivo_()) return false;
+    if (String(config_('telegramAvisa_' + tipo, 'si')) === 'no') return false;
+    return telegramMandar_(texto);
+  } catch (e) {
+    return false;
+  }
+}
+
+/* En HTML de Telegram solo hay que escapar estos tres. Un huésped que se
+   apellide "Ortiz & Cía" no puede romper el mensaje. */
+function escTg_(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/* "vie 15 ago" — la fecha como se lee en el grupo, no como se guarda. */
+var DIAS_TG_ = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+var MESES_TG_ = ['ene', 'feb', 'mar', 'abr', 'may', 'jun',
+                 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+function fechaTg_(ymd) {
+  var f = ymd_(ymd);
+  if (!f) return String(ymd || '');
+  var d = new Date(f + 'T12:00');
+  if (isNaN(d.getTime())) return f;
+  return DIAS_TG_[d.getDay()] + ' ' + d.getDate() + ' ' + MESES_TG_[d.getMonth()];
+}
+
+/* La plata en la moneda de esa reserva, igual que en pantalla: a quien
+   reservó en dólares no se le habla en pesos ni siquiera acá. */
+function plataTg_(reserva, pesos) {
+  return reserva && reserva.extranjero
+    ? usd_(pesos, Number(reserva.dolar) || dolarHoy_().valor)
+    : plataTxt_(pesos);
+}
+
+function nombreRecurso_(recursoId) {
+  var r = recursos_().filter(function (x) { return x.id === recursoId; })[0];
+  return r ? (r.unidad + (r.nombre ? ' — ' + r.nombre : '')) : String(recursoId || '');
+}
+
+/* Las líneas que comparten todos los avisos de una reserva. */
+function lineasReserva_(r) {
+  var n = noches_(ymd_(r.checkIn), ymd_(r.checkOut));
+  var pax = Number(r.pax) || 1, ninos = Number(r.ninos) || 0;
+  return [
+    '👤 <b>' + escTg_(r.huesped) + '</b>',
+    '🛏 ' + escTg_(nombreRecurso_(r.recurso)),
+    '📅 ' + fechaTg_(r.checkIn) + ' → ' + fechaTg_(r.checkOut) +
+      '  ·  ' + plural_(n, 'noche', 'noches'),
+    '👥 ' + plural_(pax, 'persona', 'personas') +
+      (ninos ? ' + ' + plural_(ninos, 'menor de 6', 'menores de 6') : '')
+  ];
+}
+
+/* ---------- Reserva nueva ---------- */
+function avisarReservaNueva_(idReserva, quien) {
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) return false;
+  var lineas = ['🆕 <b>Reserva nueva</b>', ''].concat(lineasReserva_(r));
+  lineas.push('💵 ' + plataTg_(r, Number(r.total) || 0) +
+              (r.extranjero ? '  ·  exenta de IVA' : ''));
+  if (r.addon) lineas.push('🛁 Con programa tinaja + tabla de sushi');
+  lineas.push('📲 ' + escTg_(r.canal || 'directo') + '  ·  la cargó ' + escTg_(quien));
+  return avisar_('reserva', lineas.join('\n'));
+}
+
+/* ---------- Reserva de grupo ---------- */
+function avisarGrupoNuevo_(ids, quien) {
+  var todas = leer_('Reservas');
+  var suyas = todas.filter(function (x) { return ids.indexOf(x.id) > -1; });
+  if (!suyas.length) return false;
+  var r = suyas[0];
+  var total = 0;
+  suyas.forEach(function (x) { total += Number(x.total) || 0; });
+  var n = noches_(ymd_(r.checkIn), ymd_(r.checkOut));
+
+  var lineas = [
+    '🆕 <b>Reserva de grupo</b>  ·  ' + suyas.length + ' alojamientos', '',
+    '👤 <b>' + escTg_(r.huesped) + '</b>',
+    '📅 ' + fechaTg_(r.checkIn) + ' → ' + fechaTg_(r.checkOut) +
+      '  ·  ' + plural_(n, 'noche', 'noches')
+  ];
+  suyas.forEach(function (x) {
+    lineas.push('   🛏 ' + escTg_(nombreRecurso_(x.recurso)) +
+                '  ·  ' + plataTg_(x, Number(x.total) || 0));
+  });
+  lineas.push('💵 <b>' + plataTg_(r, total) + '</b> en total' +
+              (r.extranjero ? '  ·  exenta de IVA' : ''));
+  lineas.push('📲 ' + escTg_(r.canal || 'directo') + '  ·  lo cargó ' + escTg_(quien));
+  return avisar_('reserva', lineas.join('\n'));
+}
+
+/* ---------- Se movió de día o de pieza ---------- */
+function avisarMovida_(r, antes, quien) {
+  var cambioPieza = String(antes.recurso) !== String(r.recurso);
+  var cambioFecha = ymd_(antes.checkIn) !== ymd_(r.checkIn) ||
+                    ymd_(antes.checkOut) !== ymd_(r.checkOut);
+  if (!cambioPieza && !cambioFecha) return false;
+
+  var lineas = ['🔀 <b>Reserva movida</b>', '', '👤 <b>' + escTg_(r.huesped) + '</b>'];
+  if (cambioPieza) {
+    lineas.push('🛏 ' + escTg_(nombreRecurso_(antes.recurso)) +
+                '  →  <b>' + escTg_(nombreRecurso_(r.recurso)) + '</b>');
+  } else {
+    lineas.push('🛏 ' + escTg_(nombreRecurso_(r.recurso)));
+  }
+  if (cambioFecha) {
+    lineas.push('📅 ' + fechaTg_(antes.checkIn) + ' → ' + fechaTg_(antes.checkOut));
+    lineas.push('     <b>' + fechaTg_(r.checkIn) + ' → ' + fechaTg_(r.checkOut) + '</b>  ·  ' +
+                plural_(noches_(ymd_(r.checkIn), ymd_(r.checkOut)), 'noche', 'noches'));
+  }
+  lineas.push('✏️ La movió ' + escTg_(quien));
+  return avisar_('cambio', lineas.join('\n'));
+}
+
+/* ---------- Cambió de estado ---------- */
+function avisarEstado_(r, estado, quien) {
+  var saldo = (Number(r.total) || 0) - (Number(r.anticipo) || 0);
+  var lineas;
+
+  if (estado === 'cancelada' || estado === 'no_show') {
+    lineas = [estado === 'cancelada' ? '❌ <b>Reserva cancelada</b>'
+                                     : '🚫 <b>No-show</b>  ·  nunca llegó', '']
+      .concat(lineasReserva_(r));
+    lineas.push('✏️ ' + escTg_(quien));
+    return avisar_('cambio', lineas.join('\n'));
+  }
+
+  if (estado === 'en_casa') {
+    lineas = ['🔑 <b>Check-in</b>', '']
+      .concat(lineasReserva_(r).slice(0, 2));
+    lineas.push('📅 se va el ' + fechaTg_(r.checkOut));
+    lineas.push(saldo > 0 ? '💵 queda por cobrar ' + plataTg_(r, saldo)
+                          : '💵 sin saldo pendiente');
+    lineas.push('✏️ ' + escTg_(quien));
+    return avisar_('check', lineas.join('\n'));
+  }
+
+  if (estado === 'checkout') {
+    lineas = ['👋 <b>Check-out</b>', '']
+      .concat(lineasReserva_(r).slice(0, 2));
+    lineas.push(saldo > 0 ? '⚠️ <b>Se fue debiendo ' + plataTg_(r, saldo) + '</b>'
+                          : '✅ Cuenta pagada');
+    lineas.push('🧹 La pieza queda marcada como sucia');
+    lineas.push('✏️ ' + escTg_(quien));
+    return avisar_('check', lineas.join('\n'));
+  }
+
+  return false;
+}
+
+/* ---------- Se borró ---------- */
+function avisarBorrada_(r, quien) {
+  var lineas = ['🗑 <b>Reserva eliminada</b>', ''].concat(lineasReserva_(r));
+  lineas.push('✏️ La eliminó ' + escTg_(quien));
+  return avisar_('cambio', lineas.join('\n'));
+}
+
+/* ---------- Probar y encontrar el grupo, desde Configuración ---------- */
+
+/* Manda un mensaje de prueba para que vean que llegó. */
+function telegramProbar(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  if (!telegramToken_()) throw new Error('Falta pegar el token del bot.');
+  if (!telegramChat_()) throw new Error('Falta el grupo. Usa "Buscar el grupo" acá abajo.');
+  var ok = telegramMandar_(
+    '✅ <b>Casona Peumayén</b>\n\nEl bot quedó conectado a este grupo. ' +
+    'Desde ahora van a llegar acá los avisos de las reservas.');
+  if (!ok) {
+    throw new Error('No llegó. Revisa que el token esté bien pegado y que el bot ' +
+      'siga dentro del grupo.');
+  }
+  return { ok: true };
+}
+
+/* Encuentra el ID del grupo sin que nadie tenga que averiguarlo a mano: se
+   agrega el bot al grupo, se escribe cualquier cosa ahí, y esto lee el último
+   mensaje que le llegó y se queda con el grupo de donde vino. */
+function telegramBuscarGrupo(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var t = telegramToken_();
+  if (!t) throw new Error('Primero pega el token del bot y guarda.');
+
+  var datos;
+  try {
+    var r = UrlFetchApp.fetch('https://api.telegram.org/bot' + t + '/getUpdates',
+                              { muteHttpExceptions: true });
+    datos = JSON.parse(r.getContentText());
+  } catch (e) {
+    throw new Error('No se pudo hablar con Telegram. Revisa el token.');
+  }
+  if (!datos || !datos.ok) {
+    throw new Error('Telegram rechazó el token. Cópialo de nuevo desde BotFather.');
+  }
+
+  var chats = [];
+  (datos.result || []).forEach(function (up) {
+    var m = up.message || up.channel_post || up.my_chat_member;
+    if (!m || !m.chat) return;
+    var c = m.chat;
+    if (chats.some(function (x) { return String(x.id) === String(c.id); })) return;
+    chats.push({ id: String(c.id),
+                 nombre: String(c.title || c.first_name || c.username || c.id),
+                 tipo: String(c.type || '') });
+  });
+
+  if (!chats.length) {
+    throw new Error('Telegram no tiene mensajes recientes para este bot. ' +
+      'Agrégalo al grupo, escribe cualquier cosa ahí y vuelve a apretar.');
+  }
+  // El último es el más reciente: es el grupo donde acaban de escribir.
+  var elegido = chats[chats.length - 1];
+  guardarOCrear_('Config', 'clave', 'telegramChat',
+                 { clave: 'telegramChat', valor: elegido.id });
+  // El nombre se guarda solo para poder decir "conectado al grupo Equipo
+  // Casona" en vez de escupir el número: quien lo lee no tiene por qué saber
+  // qué es un -100777.
+  guardarOCrear_('Config', 'clave', 'telegramChatNombre',
+                 { clave: 'telegramChatNombre', valor: elegido.nombre });
+  olvidarConfig_();
+  logCambio_(u.nombre, 'telegram_grupo', elegido.nombre + ' (' + elegido.id + ')');
+  return { id: elegido.id, nombre: elegido.nombre, tipo: elegido.tipo, encontrados: chats };
+}
+
 /* ===================== CONFIGURACIÓN =====================
    Lo que cambia con el tiempo se edita desde la app y no desde el código:
    horarios, normas, temporada, precios del programa y el correo del dueño. */
@@ -3270,6 +3565,11 @@ var CONFIG_EDITABLE = [
   // El cambio lo deciden ellos, así que el campo va al frente y no escondido.
   // En 0 se busca el dólar observado del día; con un valor puesto, manda ese.
   { clave: 'dolarManual', rotulo: 'Nuestro valor del dólar ($ por US$1)', tipo: 'numero', grupo: 'dolar' },
+  // El bot del grupo de Telegram. Sin token no sale ni un paquete a internet.
+  { clave: 'telegramToken', rotulo: 'Token del bot (te lo da @BotFather)', tipo: 'texto', grupo: 'telegram' },
+  { clave: 'telegramAvisa_reserva', rotulo: 'Avisar las reservas nuevas', tipo: 'si_no', grupo: 'telegram' },
+  { clave: 'telegramAvisa_cambio', rotulo: 'Avisar cancelaciones y cambios de fecha o pieza', tipo: 'si_no', grupo: 'telegram' },
+  { clave: 'telegramAvisa_check', rotulo: 'Avisar los check-in y check-out', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'reglasEs', rotulo: 'Normas de convivencia', tipo: 'texto_largo', grupo: 'normas' },
   { clave: 'reglasEn', rotulo: 'House rules (las mismas, en inglés)', tipo: 'texto_largo', grupo: 'normas' },
   { clave: 'correoDueno', rotulo: 'Correo para el cierre de cada noche', tipo: 'texto', grupo: 'avanzado' },
@@ -3295,7 +3595,14 @@ function configuracion(token) {
     campos: CONFIG_EDITABLE.map(function (c) {
       var v = actual[c.clave];
       if (c.tipo === 'hora') v = hora_(v, '');
+      // Los avisos vienen encendidos: si nadie los ha tocado, la casilla sale
+      // marcada, que es lo que espera quien acaba de conectar el bot.
+      if (c.tipo === 'si_no' && (v === undefined || v === null || v === '')) v = 'si';
       var valor = (v === undefined || v === null) ? '' : String(v);
+      // El token del bot no vuelve a la pantalla: es una llave y no tiene por
+      // qué andar viajando de vuelta cada vez que se abre Configuración. Se
+      // manda una vez y se queda guardado.
+      if (c.clave === 'telegramToken') valor = valor ? '•'.repeat(12) : '';
       // El cuadro de las normas nunca sale vacío: si nadie las ha escrito,
       // trae las que están rigiendo hoy, para editarlas encima.
       if (!valor && porDefecto[c.clave]) valor = porDefecto[c.clave];
@@ -3304,7 +3611,16 @@ function configuracion(token) {
     }),
     reglasPorDefecto: porDefecto,
     vistaPrevia: reglamento(),
-    dolar: dolarHoy_()
+    dolar: dolarHoy_(),
+    // El token NO viaja de vuelta a la pantalla: se manda una vez y se queda
+    // en la planilla. Lo que la pantalla necesita saber es si ya hay uno
+    // puesto y a qué grupo está apuntando.
+    telegram: {
+      conToken: !!telegramToken_(),
+      chat: telegramChat_(),
+      chatNombre: String(config_('telegramChatNombre', '') || ''),
+      activo: telegramActivo_()
+    }
   };
 }
 
@@ -3317,11 +3633,17 @@ function guardarConfiguracion(token, cambios) {
   Object.keys(cambios || {}).forEach(function (k) {
     if (!validas[k]) return;                       // nada fuera de la lista
     var v = cambios[k];
+    // El token vuelve tapado con puntos; si nadie lo tocó, llega igual y no
+    // hay que guardarlo encima del bueno.
+    if (k === 'telegramToken' && /^•+$/.test(String(v))) return;
     if (validas[k].tipo === 'hora') {
       v = hora_(v, '');
       if (!v) throw new Error('La hora de "' + validas[k].rotulo + '" tiene que ser como 15:00.');
     }
     if (validas[k].tipo === 'numero') v = Number(v) || 0;
+    // Las de sí/no se guardan como palabra y no como true/false: en la
+    // planilla se leen, y alguien las puede corregir a mano desde ahí.
+    if (validas[k].tipo === 'si_no') v = (v === true || String(v) === 'si') ? 'si' : 'no';
     guardarOCrear_('Config', 'clave', k, { clave: k, valor: v });
   });
   olvidarConfig_();

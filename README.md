@@ -107,11 +107,12 @@ También va a pedir permiso para **crear carpetas en Drive**, porque los
 documentos se archivan por año y mes. Es la misma pantalla de siempre con una
 línea más.
 
-**El sistema no sale a internet.** El valor del dólar lo fijan ustedes en
-*Configuración* y viene con uno puesto de fábrica, así que en el uso normal no
-se consulta nada externo. Solo si dejan ese campo en **0** el sistema busca el
-dólar observado del día, y recién ahí Google pediría el permiso de consultas
-externas.
+**El sistema no sale a internet salvo que ustedes lo pidan.** El valor del
+dólar lo fijan ustedes en *Configuración* y viene con uno puesto de fábrica,
+así que en el uso normal no se consulta nada externo. Hay dos cosas —y solo
+dos— que sí salen, y las dos vienen apagadas: dejar el dólar en **0** para que
+busque el observado del día, y conectar el **bot de Telegram**. Recién ahí
+Google pide el permiso de consultas externas.
 
 ### Si no ves el logo
 
@@ -582,6 +583,69 @@ celular pesa varios megas y con datos móviles no llegaría nunca. Queda en unos
 Los archivos se guardan en Drive, en `AAAA / MM mes / Documentos de huéspedes`,
 y en la planilla queda solo la referencia. Borrar uno lo manda a la papelera de
 Drive, no lo destruye.
+
+## Avisos al grupo de Telegram
+
+Un bot que escribe en el grupo del equipo cada vez que pasa algo con una
+reserva, para que nadie tenga que estar mirando la app: la reserva cae y el
+grupo se entera.
+
+**Viene apagado.** Sin el token del bot no se manda nada y no sale ni un
+paquete a internet — el resto del sistema funciona sin conexión a propósito, y
+esto no lo cambia por defecto. Se enciende en *Configuración → Avisos al grupo
+de Telegram*.
+
+**Cómo se conecta, una sola vez:**
+
+1. En Telegram, escríbele a **@BotFather** y manda `/newbot`. Te pide un nombre
+   y te devuelve un **token**.
+2. Pega ese token en la app y aprieta **Guardar**.
+3. Agrega el bot al grupo del equipo y **escribe cualquier cosa** en ese grupo.
+4. Aprieta **Buscar el grupo** — la app encuentra sola el ID, nadie tiene que
+   averiguarlo — y después **Mandar una prueba** para verlo llegar.
+
+El token queda guardado en la planilla y **no vuelve a la pantalla**: se
+muestra tapado con puntos. Guardar la configuración sin tocarlo no lo pisa.
+
+**Qué avisa**, y cada uno se puede apagar por separado:
+
+- **Reservas nuevas** — huésped, pieza, fechas, noches, personas, total y por
+  qué canal entró. Un grupo de tres piezas manda **un** mensaje, no tres.
+- **Cancelaciones y cambios** — cuando se cancela, se elimina, o se mueve de
+  día o de habitación. En una movida dice de dónde a dónde.
+- **Check-in y check-out** — quién llegó y cuánto le queda por pagar; quién se
+  fue y, sobre todo, **si se fue debiendo**, que es cuando ya no hay a quién
+  cobrarle.
+
+Así se ve uno:
+
+```
+🆕 Reserva nueva
+
+👤 Ana Pérez
+🛏 Habitación 1 · Matrimonial
+📅 mar 14 feb → vie 17 feb  ·  3 noches
+👥 2 personas + 1 menor de 6
+💵 $150.000
+🛁 Con programa tinaja + tabla de sushi
+📲 booking  ·  la cargó admin
+```
+
+A un huésped extranjero se le nombra **en dólares**, igual que en toda la app.
+
+**Solo el nombre.** El mensaje no lleva teléfono ni correo. El historial de un
+grupo de Telegram no lo controlamos nosotros y queda para siempre; el nombre
+alcanza para saber de quién se habla y el resto está en la app.
+
+**Un aviso nunca puede voltear una reserva.** Si Telegram está caído, si
+cambiaron el token o si se acabó la cuota de Google, la reserva se guarda
+igual y el error se traga en silencio. El aviso es un lujo; la reserva es el
+trabajo. El botón *Mandar una prueba* sí avisa cuando algo falla — para eso
+está.
+
+> La primera vez que se mande un aviso, Google va a pedir permiso para hacer
+> **consultas a servicios externos**. Es el mismo permiso que pediría el dólar
+> automático. Se acepta una vez.
 
 ## Cierre de día
 

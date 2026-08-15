@@ -714,6 +714,39 @@
           Si lo dejas en <b>0</b>, el sistema consulta solo el dólar observado del día.
         </p>
       </div>
+
+      <!-- ---------- El bot del grupo de Telegram ---------- -->
+      <div class="card">
+        <h2>Avisos al grupo de Telegram</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Un bot que escribe en el grupo del equipo cada vez que cae una reserva, se
+          cancela, se cambia de día o alguien hace un check-in. Así nadie tiene que
+          estar mirando la app. <b>Viene apagado</b>: sin el token no se manda nada.
+        </p>
+
+        <div class="ctaCaja" style="margin-top:0">
+          <div class="ctaTit">Cómo se conecta, una sola vez</div>
+          <ol class="muted" style="font-size:12.5px;padding-left:18px;margin:0">
+            <li style="margin-bottom:5px">En Telegram, escríbele a <b>@BotFather</b> y manda
+              <b>/newbot</b>. Te va a pedir un nombre y te va a dar un <b>token</b>.</li>
+            <li style="margin-bottom:5px">Pega ese token acá abajo y aprieta <b>Guardar</b>.</li>
+            <li style="margin-bottom:5px">Agrega el bot al grupo del equipo y <b>escribe
+              cualquier cosa</b> en ese grupo.</li>
+            <li>Aprieta <b>Buscar el grupo</b> y después <b>Mandar una prueba</b>.</li>
+          </ol>
+        </div>
+
+        <div id="cfgTgCampos" style="margin-top:14px"></div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+          <button class="btn sm" id="cfgTgGuardar">Guardar</button>
+          <button class="btn gh sm" id="cfgTgBuscar">Buscar el grupo</button>
+          <button class="btn gh sm" id="cfgTgProbar">Mandar una prueba</button>
+        </div>
+        <div class="muted" id="cfgTgEstado" style="font-size:12.5px;margin-top:10px"></div>
+        <div class="err hide" id="cfgTgErr" style="margin-top:10px"></div>
+      </div>
+
       <div class="card">
         <h2>Normas de convivencia</h2>
         <p class="muted" style="font-size:13px;margin-bottom:12px">
@@ -1367,7 +1400,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-20';
+var VERSION_ESPERADA = '2026-08-21';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
@@ -4118,10 +4151,16 @@ function pintarConfiguracion(){
         'border:1px solid var(--line);border-radius:8px;background:var(--surface);'+
         'resize:vertical">'+(c.valor||'')+'</textarea></div>';
     }
+    if(c.tipo==='si_no'){
+      return '<div class="fld"><label class="chk"><input type="checkbox" data-c="'+c.clave+'"'+
+        (c.valor==='no' ? '' : ' checked')+'> '+c.rotulo+'</label></div>';
+    }
     return '<div class="fld"><label>'+c.rotulo+'</label>'+
       '<input data-c="'+c.clave+'" value="'+val+'"'+
       (c.tipo==='numero'?' type="number" step="1"':'')+
-      (c.tipo==='hora'?' placeholder="15:00"':'')+'></div>';
+      (c.tipo==='hora'?' placeholder="15:00"':'')+
+      (c.clave==='telegramToken'?' placeholder="123456789:AA..." autocomplete="off"':'')+
+      '></div>';
   };
 
   var deGrupo=function(g){ return CFG.campos.filter(function(c){ return c.grupo===g; }); };
@@ -4132,6 +4171,9 @@ function pintarConfiguracion(){
       ? 'Rigiendo: $'+plataSimple(CFG.dolar.valor)+', el que ustedes fijaron.'
       : 'Rigiendo: $'+plataSimple(CFG.dolar.valor)+' ('+CFG.dolar.fuente+').';
   }
+
+  $('cfgTgCampos').innerHTML = deGrupo('telegram').map(campo).join('');
+  pintarEstadoTelegram();
 
   $('cfgCampos').innerHTML = deGrupo('normas').map(campo).join('');
 
@@ -4156,6 +4198,54 @@ $('cfgDolarGuardar').onclick=function(){
                                  : 'Vuelve al dólar del día');
       recargarCal();
     }).catch(fallo);
+};
+
+/* ---------- El bot de Telegram ----------
+   El token se guarda aparte de las normas, igual que el dólar: son cosas
+   distintas y guardar una no tiene por qué tocar la otra. */
+function pintarEstadoTelegram(){
+  var t = (CFG && CFG.telegram) || {};
+  var e = $('cfgTgEstado');
+  if(t.activo){
+    e.innerHTML = '✅ Conectado al grupo <b>'+(t.chatNombre || t.chat)+'</b>. Los avisos '+
+                  'que estén marcados arriba van a llegar ahí.';
+  } else if(t.conToken){
+    e.innerHTML = 'Falta el grupo. Agrega el bot al grupo del equipo, escribe cualquier '+
+                  'cosa ahí y aprieta <b>Buscar el grupo</b>.';
+  } else {
+    e.innerHTML = 'Apagado. Pega el token de @BotFather y aprieta <b>Guardar</b>.';
+  }
+}
+
+function errTg(m){ var e=$('cfgTgErr'); e.textContent=m; e.classList.remove('hide'); }
+
+$('cfgTgGuardar').onclick=function(){
+  $('cfgTgErr').classList.add('hide');
+  var cambios={};
+  Array.prototype.forEach.call($('cfgTgCampos').querySelectorAll('[data-c]'), function(el){
+    cambios[el.dataset.c] = el.type==='checkbox' ? (el.checked?'si':'no') : el.value;
+  });
+  ocupado('cfgTgGuardar', srv('guardarConfiguracion')(cambios)).then(function(d){
+    CFG=d; pintarConfiguracion();
+    toast('Avisos guardados');
+  }).catch(function(e){ errTg(e.message||String(e)); });
+};
+
+$('cfgTgBuscar').onclick=function(){
+  $('cfgTgErr').classList.add('hide');
+  ocupado('cfgTgBuscar', srv('telegramBuscarGrupo')()).then(function(d){
+    toast('Grupo encontrado: '+d.nombre);
+    return srv('configuracion')();
+  }).then(function(d){
+    CFG=d; pintarConfiguracion();
+  }).catch(function(e){ errTg(e.message||String(e)); });
+};
+
+$('cfgTgProbar').onclick=function(){
+  $('cfgTgErr').classList.add('hide');
+  ocupado('cfgTgProbar', srv('telegramProbar')()).then(function(){
+    toast('Mandado. Mira el grupo.');
+  }).catch(function(e){ errTg(e.message||String(e)); });
 };
 
 $('cfgAvanzado').onclick=function(){
