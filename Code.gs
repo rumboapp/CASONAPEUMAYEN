@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-24';
+var VERSION = '2026-08-25';
 
 function version() { return VERSION; }
 
@@ -105,6 +105,12 @@ var LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAbgAAAEQBAMAAAAwq3wDAA
 function doGet(e) {
   var p = (e && e.parameter) || {};
   var pagina, titulo;
+
+  /* El calendario que lee Booking. No es una página: es un archivo .ics que
+     Booking va a buscar solo cada cierto rato para bloquear en su lado las
+     fechas que acá ya están tomadas. Va antes que todo lo demás porque no
+     devuelve HTML. */
+  if (p.ical) return icalDeRecurso_(String(p.ical), String(p.u || ''));
 
   if (p.f) {
     pagina = HtmlService.createTemplateFromFile('Ficha');
@@ -3467,10 +3473,10 @@ function codigoDocDe_(idReserva) {
    —no van la l, la ñ, la o ni el 0 ni el 1—: son 32^10 combinaciones, más de
    mil billones, de sobra para que nadie dé con uno probando, y bastante más
    corto que un UUID. */
-function codigoCorto_() {
+function codigoCorto_(largo) {
   var abc = 'abcdefghijkmnpqrstuvwxyz23456789';
-  var c = '';
-  for (var i = 0; i < 10; i++) c += abc.charAt(Math.floor(Math.random() * abc.length));
+  var n = Number(largo) || 10, c = '';
+  for (var i = 0; i < n; i++) c += abc.charAt(Math.floor(Math.random() * abc.length));
   return c;
 }
 
@@ -3945,6 +3951,124 @@ function guardarConfiguracion(token, cambios) {
    Genera un enlace propio de cada reserva para mandar por WhatsApp o correo.
    El huésped lo abre, lee el reglamento, lo acepta y firma desde su teléfono.
    El enlace no da acceso a nada más: solo a su propia reserva. */
+
+/* ===================== EL CALENDARIO QUE LEE BOOKING =====================
+
+   Booking no acepta conexiones directas de propiedades individuales: su API
+   de dos vías es solo para channel managers certificados. Pero sí deja
+   IMPORTAR un calendario externo desde el extranet, y eso alcanza para lo
+   que de verdad duele — que Booking venda una pieza que acá ya se vendió.
+
+   Cada alojamiento publica su propio archivo .ics con las fechas tomadas.
+   Booking lo va a buscar solo cada varias horas y bloquea esas fechas de su
+   lado. No es instantáneo: entre que se carga una reserva directa y Booking
+   la ve hay una ventana de horas, y eso hay que saberlo.
+
+   La dirección es pública porque Booking la lee sin identificarse, así que:
+   lleva una clave larga, y adentro NO va ningún dato del huésped. Solo dice
+   "ocupado" de tal día a tal día. Quien tenga la dirección aprende cuándo
+   está lleno el lodge, nada más. */
+
+function claveIcal_() {
+  var c = String(config_('claveIcal', '') || '');
+  if (!c) {
+    /* Larga a propósito y no un UUID: esta dirección es pública y la única
+       protección que tiene es que nadie la adivine. Treinta y dos caracteres
+       de un alfabeto de 32 son 32^32 combinaciones. */
+    c = codigoCorto_(32);
+    guardarOCrear_('Config', 'clave', 'claveIcal', { clave: 'claveIcal', valor: c });
+    olvidarConfig_();
+  }
+  return c;
+}
+
+function icalTexto_(lineas) {
+  return ContentService.createTextOutput(lineas.join('\r\n'))
+    .setMimeType(ContentService.MimeType.ICAL);
+}
+
+function icalDeRecurso_(clave, idRecurso) {
+  // Clave mala: se contesta un calendario vacío y no un error. Booking
+  // reintenta solo, y un atacante no aprende si acertó el alojamiento.
+  var vacio = ['BEGIN:VCALENDAR', 'VERSION:2.0',
+               'PRODID:-//Casona Peumayen//PMS//ES', 'END:VCALENDAR'];
+  try {
+    if (clave !== claveIcal_()) return icalTexto_(vacio);
+    var rec = recursos_().filter(function (x) { return x.id === idRecurso; })[0];
+    if (!rec) return icalTexto_(vacio);
+
+    /* Qué bloquea a este alojamiento. Se usa la MISMA regla que impide una
+       doble reserva en el calendario: en una habitación que se vende por
+       camas, tomar una cama deja sin cupo a la pieza y al revés. Si acá se
+       mirara solo el recurso exacto, Booking podría vender la pieza entera
+       con una cama ya ocupada. */
+    var choca = conflictosDe_(idRecurso);
+    var hoy = hoy_();
+    var lineas = ['BEGIN:VCALENDAR', 'VERSION:2.0',
+                  'PRODID:-//Casona Peumayen//PMS//ES', 'CALSCALE:GREGORIAN',
+                  'METHOD:PUBLISH',
+                  'X-WR-CALNAME:' + icalEscapar_('Casona Peumayén — ' +
+                    rec.unidad + (rec.nombre ? ' — ' + rec.nombre : ''))];
+
+    leer_('Reservas').forEach(function (r) {
+      if (!choca[String(r.recurso)]) return;
+      // Se bloquea lo mismo que bloquea el calendario de acá: todo menos las
+      // canceladas y los no-show. Una tentativa retiene la pieza igual.
+      if (r.estado === 'cancelada' || r.estado === 'no_show') return;
+      var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
+      if (!ci || !co || co <= ci) return;
+      // Lo que ya pasó no le sirve a nadie y solo engorda el archivo.
+      if (co < hoy) return;
+
+      lineas.push('BEGIN:VEVENT');
+      lineas.push('UID:' + r.id + '@casonapeumayen');
+      lineas.push('DTSTAMP:' + icalSello_());
+      lineas.push('DTSTART;VALUE=DATE:' + ci.replace(/-/g, ''));
+      // En iCal el final es exclusivo, igual que un check-out: la noche del
+      // día de salida queda libre. Calza exacto con cómo se cuenta acá.
+      lineas.push('DTEND;VALUE=DATE:' + co.replace(/-/g, ''));
+      // Sin nombres. Este archivo lo puede leer cualquiera que tenga la
+      // dirección, y el huésped no tiene por qué aparecer ahí.
+      lineas.push('SUMMARY:Ocupado');
+      lineas.push('END:VEVENT');
+    });
+
+    lineas.push('END:VCALENDAR');
+    return icalTexto_(lineas);
+  } catch (e) {
+    // Un calendario que falla haría que Booking creyera que no hay nada
+    // bloqueado y vendiera todo. Vacío es igual de malo, pero un error 500
+    // hace que Booking conserve lo último que leyó, que es lo prudente.
+    throw e;
+  }
+}
+
+function icalSello_() {
+  return Utilities.formatDate(new Date(), 'UTC', "yyyyMMdd'T'HHmmss'Z'");
+}
+
+function icalEscapar_(t) {
+  return String(t == null ? '' : t)
+    .replace(/\\/g, '\\\\').replace(/;/g, '\\;')
+    .replace(/,/g, '\\,').replace(/\n/g, '\\n');
+}
+
+/* Las direcciones que hay que pegar en Booking, una por alojamiento. */
+function enlacesIcal(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var base = ScriptApp.getService().getUrl() + '?ical=' + claveIcal_() + '&u=';
+  return {
+    enlaces: recursos_().map(function (r) {
+      return {
+        id: r.id,
+        nombre: r.unidad + (r.nombre ? ' — ' + r.nombre : ''),
+        grupo: r.grupo,
+        url: base + encodeURIComponent(r.id)
+      };
+    })
+  };
+}
 
 function linkFicha(token, idReserva) {
   sesion_(token);

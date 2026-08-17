@@ -732,6 +732,74 @@ está.
 > **consultas a servicios externos**. Es el mismo permiso que pediría el dólar
 > automático. Se acepta una vez.
 
+## Booking
+
+### Por qué no hay una conexión "de verdad"
+
+**Booking no acepta conexiones directas de propiedades individuales.** Su API
+de dos vías —la que sincroniza disponibilidad, tarifas y reservas— es solo para
+*Connectivity Partners* certificados: empresas que conectan muchos hoteles. Un
+lodge de 11 unidades no entra, y no es cuestión de esfuerzo ni de plata. La
+alternativa oficial es contratar un *channel manager*, que cuesta todos los
+meses.
+
+Así que se hace por los dos caminos que Booking sí deja abiertos, uno para cada
+dirección.
+
+### 1. Bloquear fechas en Booking (ya funciona)
+
+Es la mitad urgente. Si alguien reserva **directo** por WhatsApp y se carga
+acá, Booking no se entera y puede vender la misma pieza. Booking permite
+**importar un calendario externo** desde el extranet, así que la app publica uno
+por cada alojamiento y Booking bloquea solo esas fechas.
+
+En *Configuración → Bloquear fechas en Booking* está la lista de direcciones,
+una por alojamiento, con su botón de copiar. En el extranet de Booking:
+**Rates & Availability → Sync calendars →** elegir la habitación **→ Import
+calendar →** pegar la dirección.
+
+Lo que hay que saber:
+
+- **No es instantáneo.** Booking va a buscar el calendario cada varias horas.
+  Entre que se carga una reserva y Booking la ve hay una ventana.
+- **Bloquea lo mismo que bloquea el calendario de acá**: todo menos las
+  canceladas y los no-show. Una tentativa retiene la pieza, así que también
+  bloquea. Y en una habitación que se vende por camas, tomar una cama bloquea
+  la pieza entera — la misma regla que impide una doble reserva internamente.
+- **No lleva ningún dato del huésped.** Solo dice "Ocupado" de tal día a tal
+  día. La dirección es pública porque Booking la lee sin identificarse, así que
+  adentro no puede haber nombres, teléfonos ni notas.
+- **La dirección es secreta.** Lleva una clave de 32 caracteres y es lo único
+  que la protege. Quien la tenga puede ver qué días está lleno el lodge, nada
+  más. Con la clave equivocada sale un calendario vacío, no un error.
+
+### 2. Que la reserva de Booking entre sola (pendiente)
+
+La otra mitad: que una reserva hecha en Booking aparezca acá sin que nadie la
+escriba. La única forma gratis de recibir la reserva **completa** —huésped,
+fechas, habitación, precio, personas— es **leer el correo que Booking manda por
+cada reserva**. Apps Script puede leer el Gmail de la cuenta, así que un
+disparador cada pocos minutos revisa los correos nuevos, los interpreta, crea la
+reserva y avisa por Telegram.
+
+Está diseñado pero **no escrito todavía**, porque depende de algo que no se
+puede adivinar: **el formato exacto de esos correos**. Cambia según el idioma y
+Booking lo modifica cada tanto. Escribir el interpretador contra correos
+inventados garantiza que falle contra los de verdad.
+
+Cuando se escriba, va a funcionar así:
+
+- La reserva entra **confirmada**, con canal *booking*, y el grupo de Telegram
+  se entera al tiro.
+- Guarda el **número de reserva de Booking**, para que una modificación o una
+  cancelación encuentren la misma reserva en vez de duplicarla.
+- Hay que **mapear los nombres de habitación** de Booking a las unidades de acá.
+  Se hace una vez, en Configuración.
+- Si un correo **no se puede interpretar**, avisa en Telegram y no crea nada.
+  Una reserva mal creada en silencio es peor que escribirla a mano.
+- El correo tiene que llegar **a la cuenta que corre el script**. Si Booking le
+  escribe a otra, hay que reenviarlo automáticamente.
+
 ## Cierre de día
 
 Es lo que en un hotel grande se llama *night audit*, y es el corazón de que

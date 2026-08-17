@@ -746,6 +746,42 @@
         <div class="err hide" id="progErr" style="margin-top:10px"></div>
       </div>
 
+      <!-- ---------- El calendario que lee Booking ----------
+           Booking no acepta conexión directa de propiedades chicas, pero sí
+           deja importar un calendario externo. Con esto Booking bloquea solo
+           lo que acá ya se vendió. -->
+      <div class="card">
+        <h2>Bloquear fechas en Booking</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Cuando cargas una reserva directa acá, Booking no se entera y puede vender
+          la misma pieza. Esto lo evita: se le entrega a Booking un calendario por
+          cada alojamiento y él <b>bloquea solo</b> las fechas que acá ya están tomadas.
+        </p>
+
+        <div class="ctaCaja" style="margin-top:0">
+          <div class="ctaTit">Cómo se conecta, una vez por habitación</div>
+          <ol class="muted" style="font-size:12.5px;padding-left:18px;margin:0">
+            <li style="margin-bottom:5px">En el extranet de Booking:
+              <b>Rates &amp; Availability → Sync calendars</b>.</li>
+            <li style="margin-bottom:5px">Elige la habitación y aprieta
+              <b>Import calendar</b>.</li>
+            <li>Pega ahí la dirección que corresponde de la lista de abajo y ponle
+              un nombre, por ejemplo "PMS Casona".</li>
+          </ol>
+        </div>
+
+        <div id="icalLista" style="margin-top:14px"></div>
+
+        <p class="muted" style="font-size:12px;margin-top:12px">
+          <b>Ojo con dos cosas.</b> Booking va a buscar el calendario cada varias
+          horas, no al instante: entre que cargas una reserva y Booking la ve hay una
+          ventana. Y estas direcciones son <b>secretas</b> — no llevan ningún dato del
+          huésped, solo dicen qué días están ocupados, pero quien las tenga puede
+          verlas.
+        </p>
+        <div class="err hide" id="icalErr" style="margin-top:10px"></div>
+      </div>
+
       <!-- ---------- La planilla ----------
            Casi todo se hace desde acá, pero a veces hay que mirar los datos en
            crudo o corregir algo a mano, y buscar la planilla en Drive es una
@@ -1500,7 +1536,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-24';
+var VERSION_ESPERADA = '2026-08-25';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -4297,6 +4333,7 @@ var CFG = null;
 function cargarConfiguracion(){
   esqueleto('cfgCampos',5);
   cargarProgramas();
+  cargarIcal();
   srv('configuracion')().then(function(d){ CFG=d; pintarConfiguracion(); }).catch(fallo);
 }
 
@@ -4368,6 +4405,37 @@ $('cfgDolarGuardar').onclick=function(){
       recargarCal();
     }).catch(fallo);
 };
+
+/* ---------- El calendario que lee Booking ---------- */
+function cargarIcal(){
+  srv('enlacesIcal')().then(function(d){
+    var c=$('icalLista'); c.innerHTML='';
+    var grupo='';
+    (d.enlaces||[]).forEach(function(e){
+      if(e.grupo!==grupo){
+        grupo=e.grupo;
+        var t=document.createElement('div');
+        t.className='ctaTit'; t.style.marginTop='12px'; t.textContent=grupo;
+        c.appendChild(t);
+      }
+      var f=document.createElement('div');
+      f.className='docFila';
+      f.innerHTML='<b style="font-size:12.5px;min-width:150px">'+e.nombre+'</b>'+
+        '<span class="quien" style="flex:1;word-break:break-all">'+e.url+'</span>';
+      var b=document.createElement('button');
+      b.className='btn gh sm'; b.textContent='Copiar'; b.style.marginLeft='auto';
+      b.onclick=function(){
+        var listo=copiarTexto(e.url);
+        toast(listo ? 'Dirección copiada · '+e.nombre : 'Cópiala a mano', !listo);
+      };
+      f.appendChild(b);
+      c.appendChild(f);
+    });
+  }).catch(function(e){
+    $('icalErr').textContent=e.message||String(e);
+    $('icalErr').classList.remove('hide');
+  });
+}
 
 /* ---------- Programas ----------
    Se archivan y no se borran: una reserva del año pasado tiene que poder
