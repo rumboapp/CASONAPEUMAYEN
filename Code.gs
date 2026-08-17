@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-23';
+var VERSION = '2026-08-24';
 
 function version() { return VERSION; }
 
@@ -36,7 +36,21 @@ var HOJAS = {
   // número no hay forma de saberlo —$45.000 puede ser con o sin impuesto—,
   // y sin ese dato la pantalla mentía: le decía "sin IVA" a un precio que
   // todavía lo llevaba, y descontarlo dos veces habría sido cosa de un clic.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc'],
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc', 'programa', 'programaNombre'],
+  /* Los programas especiales. Un programa NO es un extra que se suma al
+     alojamiento: es una TARIFA distinta que lo reemplaza. "Programa
+     romántico" a $95.000 la noche se cobra en vez de los $70.000 de la
+     pieza, no encima.
+
+     'incluye' es texto libre, una cosa por línea, y sale tal cual en el
+     comprobante del huésped: es lo que le promete el programa.
+
+     'grupos' dice a qué se le puede aplicar —Lodge, Glamping, o vacío para
+     todo—, porque un programa de carpa no tiene sentido en una habitación.
+
+     No se borran nunca, se archivan: una reserva vieja tiene que poder
+     seguir diciendo con qué programa se vendió. */
+  Programas: ['id', 'nombre', 'incluye', 'precio', 'precioAlta', 'grupos', 'activo', 'orden', 'creado'],
   // Lo que se cobra por CADA noche de una reserva. El total de la reserva es
   // la suma de estas filas, así que alargarla o acortarla recalcula el precio
   // solo, y una noche de promoción se baja sin tocar las demás.
@@ -68,6 +82,7 @@ var HOJAS = {
    "2026-08-07" en un objeto Date con hora local y las comparaciones fallaban. */
 var COLS_TEXTO = {
   Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo'],
+  Programas: ['creado'],
   Noches: ['fecha'],
   Acompanantes: ['nacimiento', 'creado'],
   Documentos: ['creado'],
@@ -597,10 +612,6 @@ function setup() {
     var cfg = {
       checkIn: '15:00', checkOut: '11:00',
       temporadaAltaInicio: '12-15', temporadaAltaFin: '03-15',
-      addonBase: 30000, addonAlta: 35000,
-      // Porcentaje del programa tinaja + sushi que se anota al restaurante.
-      // Cámbialo acá cuando definan el reparto con la cocina.
-      addonParteRestaurante: 50,
       iva: 19,
       // El cambio lo fijan ellos desde Configuración. Viene con un valor
       // puesto a propósito: mientras haya uno, el sistema NO sale a internet
@@ -675,7 +686,60 @@ function setup() {
   if (netas) Logger.log('A ' + plural_(netas, 'reserva', 'reservas') +
     ' de turistas extranjeros se les descontó el IVA que tenían pendiente.');
 
+  // El programa fijo de tinaja + sushi pasó a ser un programa más, de los que
+  // se crean desde Configuración. Las reservas que lo tenían marcado se pasan
+  // al programa nuevo para no perder con qué se vendieron.
+  var migradas = migrarAddonAPrograma_();
+  if (migradas) Logger.log('Se pasaron ' + plural_(migradas, 'reserva', 'reservas') +
+    ' del antiguo programa tinaja + sushi al sistema de programas.');
+
   return ss.getUrl();
+}
+
+/* El tinaja + sushi era un programa fijo, escrito en el código: una casilla
+   en la reserva y dos precios en Configuración. Ahora los programas se crean
+   desde la pantalla, así que ese deja de ser especial y pasa a ser uno más.
+
+   Esto pasa las reservas que lo tenían marcado al programa nuevo, para no
+   perder el dato. Es idempotente: una reserva que ya tiene programa no se
+   vuelve a tocar, así que ejecutar setup() otra vez no hace nada. Y no cambia
+   ni un peso de lo que ya estaba cobrado. */
+function migrarAddonAPrograma_() {
+  var conAddon = leer_('Reservas').filter(function (r) {
+    return r.addon && !String(r.programa || '');
+  });
+  if (!conAddon.length) return 0;
+
+  var NOMBRE = 'Tinaja + tabla de sushi';
+  var p = programas_().filter(function (x) { return x.nombre === NOMBRE; })[0];
+  if (!p) {
+    var base = Number(config_('addonBase', 30000)) || 30000;
+    var alta = Number(config_('addonAlta', 35000)) || base;
+    var id = uid_('P');
+    insertar_('Programas', {
+      id: id, nombre: NOMBRE,
+      incluye: 'Uso de la tinaja caliente\nTabla de sushi para dos',
+      /* Los precios que tenía configurados el programa viejo. Ojo: antes se
+         SUMABAN al alojamiento y ahora un programa lo reemplaza, así que hay
+         que revisarlos antes de volver a venderlo. Por eso nace archivado:
+         queda a la vista en Configuración, pero no se puede elegir por
+         equivocación mientras nadie le mire el precio. */
+      precio: base, precioAlta: alta,
+      grupos: 'Glamping', activo: false,
+      orden: programas_().length + 1, creado: ahora_()
+    });
+    olvidarProgramas_();
+    p = programaPorId_(id);
+  }
+  if (!p) return 0;
+
+  // Solo se les pone la etiqueta: los precios ya cobrados NO se tocan.
+  // Recalcularlos ahora movería cuentas que ya están cerradas.
+  actualizarVarias_('Reservas', function (r) {
+    if (!r.addon || String(r.programa || '')) return null;
+    return { programa: p.id, programaNombre: p.nombre };
+  });
+  return conAddon.length;
 }
 
 /* Repara las reservas que quedaron con las columnas corridas.
@@ -775,6 +839,169 @@ function sesion_(token) {
 function olvidarRecursos_() {
   try { CacheService.getScriptCache().remove('recursos'); } catch (e) {}
   MEMO.__recursos = null;
+}
+
+/* ===================== PROGRAMAS =====================
+   Un programa es una TARIFA distinta, no un extra que se suma. Elegir
+   "Programa romántico" al reservar hace que la noche valga lo que vale el
+   programa en vez de lo que vale la pieza — no una cosa más la otra.
+
+   Eso es lo que lo hace encajar sin romper nada: el precio de una reserva ya
+   se llevaba noche por noche, así que el programa solo cambia de dónde sale
+   el número de cada noche. Alargar la estadía, bajar una noche a mano,
+   repartir un total acordado y cobrar en dólares siguen funcionando igual.
+
+   Se archivan, no se borran: una reserva del año pasado tiene que poder
+   seguir diciendo con qué programa se vendió. */
+function olvidarProgramas_() {
+  try { CacheService.getScriptCache().remove('programas'); } catch (e) {}
+  MEMO.__programas = null;
+}
+
+function programas_() {
+  if (MEMO.__programas) return MEMO.__programas;
+  try {
+    var guardado = CacheService.getScriptCache().get('programas');
+    if (guardado) { MEMO.__programas = JSON.parse(guardado); return MEMO.__programas; }
+  } catch (e) { /* sin caché se lee de la planilla igual */ }
+
+  var lista = [];
+  try {
+    lista = leer_('Programas').map(function (p) {
+      return {
+        id: String(p.id), nombre: String(p.nombre || ''),
+        incluye: String(p.incluye || ''),
+        precio: Math.round(Number(p.precio) || 0),
+        precioAlta: Math.round(Number(p.precioAlta) || 0),
+        grupos: String(p.grupos || ''),
+        activo: !!p.activo, orden: Number(p.orden) || 0
+      };
+    }).sort(function (a, b) { return a.orden - b.orden; });
+  } catch (e) {
+    // La hoja todavía no existe: setup() sin ejecutar. Sin programas la app
+    // funciona igual, así que no vale la pena tirar abajo la pantalla.
+    lista = [];
+  }
+  MEMO.__programas = lista;
+  try { CacheService.getScriptCache().put('programas', JSON.stringify(lista), 21600); } catch (e) {}
+  return lista;
+}
+
+function programaPorId_(id) {
+  if (!id) return null;
+  return programas_().filter(function (p) { return p.id === String(id); })[0] || null;
+}
+
+/* Vuelve a poner precio a todas las noches de una reserva a la tarifa que
+   corresponda ahora: la del programa nuevo, o la de la pieza si se le quitó.
+
+   Se recotiza TODO, incluidas las noches que alguien había bajado a mano. Es
+   a propósito: cambiar de programa es cambiar de tarifa, y dejar media
+   estadía al precio viejo daría un total que no es ni uno ni el otro. Si
+   había un precio conversado, se vuelve a escribir en el total del formulario
+   y ajustarPlan_ lo reparte encima. */
+function recotizarPorPrograma_(idReserva, idPrograma, exento, quien) {
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) return 0;
+  var plan = planDe_(idReserva);
+  if (!plan.length) return Math.round(Number(r.total) || 0);
+
+  var nuevos = {};
+  plan.forEach(function (n) {
+    var v = tarifaDe_(r.recurso, n.fecha, idPrograma);
+    // Al turista extranjero exento le corresponde el neto: la tarifa, venga
+    // de la pieza o del programa, se escribe con IVA incluido.
+    nuevos[n.fecha] = exento ? netoDe_(v) : v;
+  });
+  var p = programaPorId_(idPrograma);
+  var total = aplicarValores_(idReserva, nuevos, p ? p.nombre : 'Tarifa normal');
+  logCambio_(quien || '', 'programa', idReserva + ' · ' +
+    (p ? p.nombre : 'sin programa') + ' · total ' + total);
+  return total;
+}
+
+/* Lo que incluye, como lista. Es texto libre con una cosa por línea, igual
+   que el reglamento: se escribe tal como se va a leer. */
+function incluyeDe_(programa) {
+  if (!programa) return [];
+  return String(programa.incluye || '').split('\n')
+    .map(function (x) { return x.trim(); })
+    .filter(function (x) { return x !== ''; });
+}
+
+/* Si el programa se le puede aplicar a este alojamiento. Vacío = a todos. */
+function programaSirvePara_(programa, recursoId) {
+  if (!programa) return false;
+  var g = String(programa.grupos || '').trim();
+  if (!g) return true;
+  var rec = recursos_().filter(function (x) { return x.id === recursoId; })[0];
+  if (!rec) return true;
+  return g.split(',').map(function (x) { return x.trim(); })
+          .filter(function (x) { return x !== ''; })
+          .indexOf(String(rec.grupo)) > -1;
+}
+
+/* Lo que la pantalla necesita saber de cada programa. */
+function programasParaPantalla_(incluirArchivados) {
+  return programas_().filter(function (p) { return incluirArchivados || p.activo; })
+    .map(function (p) {
+      return { id: p.id, nombre: p.nombre, incluye: p.incluye,
+               lista: incluyeDe_(p), precio: p.precio, precioAlta: p.precioAlta,
+               grupos: p.grupos, activo: p.activo, orden: p.orden };
+    });
+}
+
+function programasAdmin(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  // Los archivados también: se ven en gris, para poder revivirlos.
+  return { programas: programasParaPantalla_(true), iva: ivaPct_() };
+}
+
+function guardarPrograma(token, d) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var nombre = String(d.nombre || '').trim();
+  if (!nombre) throw new Error('El programa necesita un nombre.');
+  var precio = Math.round(Number(d.precio) || 0);
+  if (precio <= 0) throw new Error('Ponle un valor por noche al programa.');
+
+  var campos = {
+    nombre: nombre,
+    incluye: String(d.incluye || ''),
+    precio: precio,
+    // Si no se escribe precio de temporada alta, se usa el mismo de siempre.
+    precioAlta: Math.round(Number(d.precioAlta) || 0) || precio,
+    grupos: String(d.grupos || ''),
+    activo: d.activo === undefined ? true : !!d.activo,
+    orden: Number(d.orden) || 0
+  };
+
+  if (d.id) {
+    if (!programaPorId_(d.id)) throw new Error('No se encontró ese programa.');
+    actualizar_('Programas', 'id', d.id, campos);
+    logCambio_(u.nombre, 'programa_editado', d.id + ' · ' + nombre);
+  } else {
+    campos.id = uid_('P');
+    campos.creado = ahora_();
+    if (!campos.orden) campos.orden = programas_().length + 1;
+    insertar_('Programas', campos);
+    logCambio_(u.nombre, 'programa_creado', campos.id + ' · ' + nombre);
+  }
+  olvidarProgramas_();
+  return programasAdmin(token);
+}
+
+/* Archivar y no borrar: las reservas que se vendieron con ese programa
+   tienen que poder seguir diciéndolo. */
+function archivarPrograma(token, id, archivar) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  if (!programaPorId_(id)) throw new Error('No se encontró ese programa.');
+  actualizar_('Programas', 'id', id, { activo: !archivar });
+  olvidarProgramas_();
+  logCambio_(u.nombre, archivar ? 'programa_archivado' : 'programa_reactivado', id);
+  return programasAdmin(token);
 }
 
 function recursos_() {
@@ -904,7 +1131,8 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
       firmada: !!firmadas[r.id],
       checkIn: ci, checkOut: co,
       estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
-      addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
+      programa: String(r.programa || ''),
+      programaNombre: String(r.programaNombre || ''),
       notas: r.notas || '', grupo: String(r.grupo || ''),
       pax: Number(r.pax) || 1, ninos: Number(r.ninos) || 0,
       extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
@@ -923,6 +1151,9 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
     // El inventario solo viaja si cambió desde la última vez.
     recursos: (versionQueTiene && versionQueTiene === version) ? null : recursos_(),
     recursosVer: version,
+    // Los programas activos, para poder elegir uno al hacer la reserva sin
+    // salir del calendario. Son pocos y cambian poco: viajan enteros.
+    programas: programasParaPantalla_(false),
     reservas: reservas, hoy: hoy_(),
     // Reservas que existen en la planilla pero no se pueden ubicar en el
     // calendario porque su fecha quedó ilegible: se avisa en pantalla.
@@ -933,8 +1164,6 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
     cfg: {
       altaIni: String(config_('temporadaAltaInicio', '12-15')),
       altaFin: String(config_('temporadaAltaFin', '03-15')),
-      addonBase: Number(config_('addonBase', 30000)),
-      addonAlta: Number(config_('addonAlta', 35000)),
       // La pantalla necesita el IVA para avisar cuánto baja el precio al
       // marcar a alguien como turista extranjero.
       iva: ivaPct_()
@@ -1027,8 +1256,25 @@ function guardarReserva(token, datos) {
       huesped: datos.huesped, telefono: datos.telefono || '', email: datos.email || '',
       canal: datos.canal || 'whatsapp',
       checkIn: f.checkIn, checkOut: f.checkOut, estado: datos.estado || 'confirmada',
-      addon: !!datos.addon, addonFecha: datos.addonFecha || '', notas: datos.notas || ''
+      notas: datos.notas || ''
     };
+
+    /* El programa. Se guarda el id Y el nombre: el id sirve para leer el
+       precio y lo que incluye, y el nombre queda como copia congelada del
+       día en que se vendió, para que una reserva vieja siga diciendo con qué
+       se vendió aunque después el programa se archive o se le cambie el
+       nombre. */
+    var prog = null;
+    if (datos.programa !== undefined) {
+      prog = programaPorId_(datos.programa);
+      if (datos.programa && !prog) throw new Error('Ese programa ya no existe.');
+      if (prog && !programaSirvePara_(prog, datos.recurso)) {
+        throw new Error('El programa "' + prog.nombre + '" no se puede aplicar a ' +
+          'este alojamiento.');
+      }
+      campos.programa = prog ? prog.id : '';
+      campos.programaNombre = prog ? prog.nombre : '';
+    }
     if (datos.grupo !== undefined) campos.grupo = datos.grupo || '';
 
     // Huésped extranjero: se le fija el tipo de cambio del día en que reserva
@@ -1094,6 +1340,16 @@ function guardarReserva(token, datos) {
                         antes ? String(antes.docTurismo || '') : '');
         olvidar_('Noches');
       }
+      /* Cambiar de programa —o quitarlo— es cambiar de tarifa, así que las
+         noches se vuelven a cotizar al precio nuevo. Si además se escribió un
+         total a mano, ese manda y se reparte encima: lo hace ajustarPlan_ un
+         par de líneas más abajo. */
+      if (datos.programa !== undefined &&
+          String(antes && antes.programa || '') !== String(campos.programa || '')) {
+        recotizarPorPrograma_(datos.id, campos.programa,
+                              !!(antes && antes.exentoIva), u.nombre);
+        olvidar_('Noches');
+      }
       var totalNuevo = ajustarPlan_(campos, pedido, u.nombre);
       return { id: datos.id, total: totalNuevo,
                moneda: esExtranjero ? 'USD' : 'CLP', usd: aUsd_(totalNuevo, cambio) };
@@ -1106,7 +1362,8 @@ function guardarReserva(token, datos) {
     campos.creadoPor = u.nombre;
     // Las noches se arman antes de guardar, para que el total que queda en la
     // reserva sea ya la suma de sus noches y no haya que corregirlo después.
-    var plan = armarNoches_(id, datos.recurso, f.checkIn, f.checkOut, pedido);
+    var plan = armarNoches_(id, datos.recurso, f.checkIn, f.checkOut, pedido,
+                            prog ? prog.id : '');
     campos.total = plan.total;
     insertar_('Reservas', campos);
     insertarVarias_('Noches', plan.noches);
@@ -1207,6 +1464,19 @@ function guardarReservaGrupo(token, datos) {
     // las piezas se cotizan todas en dólares y sin IVA, con el mismo cambio.
     // Los precios llegan ya en esa moneda; acá se pasan a pesos, que es como
     // se guarda la planilla.
+    // Un grupo se vende con UN programa para todas sus piezas, o con ninguno.
+    var progGrupo = datos.programa ? programaPorId_(datos.programa) : null;
+    if (datos.programa && !progGrupo) throw new Error('Ese programa ya no existe.');
+    if (progGrupo) {
+      lista.forEach(function (item) {
+        var idr = item.recurso || item;
+        if (!programaSirvePara_(progGrupo, idr)) {
+          throw new Error('El programa "' + progGrupo.nombre + '" no se puede aplicar a ' +
+            (validos[idr] ? validos[idr].unidad : idr) + '.');
+        }
+      });
+    }
+
     var extranjero = !!datos.extranjero;
     var enUsd = String(datos.moneda || '') === 'USD';
     var cambio = dolarHoy_().valor;
@@ -1229,8 +1499,9 @@ function guardarReservaGrupo(token, datos) {
         total: aPesos(item.precio),
         // El abono se anota una sola vez, en la primera del grupo.
         anticipo: i === 0 ? aPesos(datos.anticipo) : 0,
-        addon: !!datos.addon, addonFecha: datos.addonFecha || '',
         notas: datos.notas || '', grupo: grupo,
+        programa: progGrupo ? progGrupo.id : '',
+        programaNombre: progGrupo ? progGrupo.nombre : '',
         extranjero: extranjero, exentoIva: extranjero,
         dolar: extranjero ? cambio : 0,
         // Un precio que llegó en dólares YA viene sin impuesto; uno que salió
@@ -1244,7 +1515,8 @@ function guardarReservaGrupo(token, datos) {
     var noches = [];
     filas.forEach(function (x) {
       var plan = armarNoches_(x.id, x.recurso, f.checkIn, f.checkOut,
-                              Math.round(Number(x.total) || 0));
+                              Math.round(Number(x.total) || 0),
+                              progGrupo ? progGrupo.id : '');
       x.total = plan.total;
       noches = noches.concat(plan.noches);
     });
@@ -1402,7 +1674,19 @@ function planDe_(idReserva) {
     .sort(function (a, b) { return a.fecha < b.fecha ? -1 : 1; });
 }
 
-function tarifaDe_(recursoId, fecha) {
+/* Lo que vale UNA noche.
+
+   Si la reserva va con un programa, manda el precio del programa: lo
+   REEMPLAZA, no se le suma. Es el único lugar donde el programa entra al
+   cálculo, y por eso todo lo demás —estirar la estadía, bajar una noche a
+   mano, repartir un total, cobrar en dólares— sigue funcionando igual. */
+function tarifaDe_(recursoId, fecha, idPrograma) {
+  if (idPrograma) {
+    var p = programaPorId_(idPrograma);
+    if (p) return Math.round(Number(esAlta_(fecha) ? p.precioAlta : p.precio) || 0);
+    // Programa borrado a mano de la planilla: se sigue con la tarifa de la
+    // pieza en vez de cobrar cero.
+  }
   var r = recursos_().filter(function (x) { return x.id === recursoId; })[0];
   if (!r) return 0;
   return Math.round(Number(esAlta_(fecha) ? r.precioAlta : r.precioBase) || 0);
@@ -1432,7 +1716,7 @@ function sincronizarNoches_(reserva, quien) {
   var total = 0, agregadas = 0, quitadas = 0, nuevas = [], sobran = {};
   Object.keys(quiero).forEach(function (f) {
     if (actuales[f]) { total += actuales[f].valor; return; }
-    var valor = tarifaDe_(reserva.recurso, f);
+    var valor = tarifaDe_(reserva.recurso, f, suya && suya.programa);
     if (sinIva) valor = netoDe_(valor);
     nuevas.push({ idReserva: reserva.id, fecha: f, valor: valor, ajustada: false, nota: '' });
     total += valor;
@@ -1500,7 +1784,7 @@ function planEfectivo_(reserva) {
 
   var dias = [];
   for (var f = ci; f < co; f = sumarDias_(f, 1)) {
-    dias.push({ fecha: f, valor: tarifaDe_(reserva.recurso, f) });
+    dias.push({ fecha: f, valor: tarifaDe_(reserva.recurso, f, reserva.programa) });
   }
   // El total guardado ya viene neto si la reserva es exenta, así que
   // repartirlo alcanza; si no hay total, la tarifa de lista se netea.
@@ -1572,7 +1856,7 @@ function nochesDe(token, idReserva) {
   });
   var plan = planEfectivo_(r).map(function (n) {
     n.posteada = !!posteadas[n.fecha];
-    n.tarifa = tarifaDe_(r.recurso, n.fecha);
+    n.tarifa = tarifaDe_(r.recurso, n.fecha, r.programa);
     return n;
   });
   var total = plan.reduce(function (a, n) { return a + n.valor; }, 0);
@@ -1647,10 +1931,10 @@ function repartirTotal(token, idReserva, total) {
 /* Arma el plan de noches de una reserva SIN escribir nada: devuelve las filas
    y el total. Sirve para dejar la reserva y sus noches guardadas de una sola
    vez, en vez de crear la reserva y después corregirle el total. */
-function armarNoches_(idReserva, recurso, checkIn, checkOut, totalPedido) {
+function armarNoches_(idReserva, recurso, checkIn, checkOut, totalPedido, idPrograma) {
   var dias = [];
   for (var d = checkIn; d < checkOut; d = sumarDias_(d, 1)) {
-    dias.push({ fecha: d, valor: tarifaDe_(recurso, d) });
+    dias.push({ fecha: d, valor: tarifaDe_(recurso, d, idPrograma) });
   }
   if (!dias.length) return { noches: [], total: 0 };
 
@@ -2005,41 +2289,6 @@ function postearNoche_(reserva, fecha, quien) {
     exento: !!reserva.exentoIva, fecha: fecha
   }, quien || 'cierre de día');
   return true;
-}
-
-/* La tinaja + sushi es un programa que reparte plata entre el lodge y la
-   cocina, así que se anota como dos líneas: cada una a su centro. El
-   porcentaje que va al restaurante se ajusta en la hoja Config. */
-function cargarPrograma(token, idReserva, monto) {
-  var u = sesion_(token);
-  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
-  if (!r) throw new Error('No se encontró la reserva.');
-
-  var t = Math.round(Number(monto) || 0);
-  if (t <= 0) t = Math.round(Number(esAlta_(ymd_(r.checkIn))
-    ? config_('addonAlta', 35000) : config_('addonBase', 30000)) || 0);
-
-  var pct = Math.min(Math.max(Number(config_('addonParteRestaurante', 50)) || 0, 0), 100);
-  var parteSushi = Math.round(t * pct / 100);
-  var parteTinaja = t - parteSushi;
-  // La tinaja y el sushi se venden aparte del alojamiento, así que llevan
-  // IVA aunque el huésped sea turista extranjero.
-  var fecha = ymd_(r.addonFecha) || hoy_();
-
-  if (parteTinaja > 0) {
-    anotar_(idReserva, { clase: 'cargo', tipo: 'tinaja', centro: 'lodge',
-      descripcion: 'Programa tinaja + sushi · parte tinaja', cantidad: 1,
-      unitario: parteTinaja, total: parteTinaja,
-      exento: exentoPorDefecto_(r, 'tinaja'), fecha: fecha }, u.nombre);
-  }
-  if (parteSushi > 0) {
-    anotar_(idReserva, { clase: 'cargo', tipo: 'sushi', centro: 'restaurante',
-      descripcion: 'Programa tinaja + sushi · parte sushi', cantidad: 1,
-      unitario: parteSushi, total: parteSushi,
-      exento: exentoPorDefecto_(r, 'sushi'), fecha: fecha }, u.nombre);
-  }
-  logCambio_(u.nombre, 'programa_cargado', idReserva + ' · ' + t);
-  return { total: t, tinaja: parteTinaja, sushi: parteSushi };
 }
 
 /* Marca de turista extranjero exento de IVA. Se acredita con el pasaporte y
@@ -2557,6 +2806,12 @@ function armarComprobante_(idReserva) {
   });
   var total = Math.round(Number(r.total) || 0);
   var cambioR = Number(r.dolar) || dolarHoy_().valor;
+  // El programa con el que se vendió, si lo hubo. El nombre sale de la copia
+  // congelada en la reserva —para que siga diciendo lo mismo aunque después
+  // se archive o se le cambie el nombre— y lo que incluye se lee del
+  // programa, que es lo que el huésped quiere ver escrito.
+  var prog = programaPorId_(r.programa);
+  var incluye = incluyeDe_(prog);
 
   var filas = plan.map(function (n) {
     return '<tr><td>' + escapar_(n.fecha) + (n.nota ? ' · ' + escapar_(n.nota) : '') +
@@ -2576,8 +2831,18 @@ function armarComprobante_(idReserva) {
     '<tr><td>Noches</td><td class="n">' + plan.length + '</td></tr>' +
     '<tr><td>Personas</td><td class="n">' + (Number(r.pax) || 1) +
       (Number(r.ninos) ? ' + ' + Number(r.ninos) + ' menor(es) de 6' : '') + '</td></tr>' +
-    (r.addon ? '<tr><td>Programa tinaja + tabla de sushi</td><td class="n">incluido</td></tr>' : '') +
+    (r.programa || r.programaNombre
+      ? '<tr><td>Programa</td><td class="n">' +
+        escapar_(String(r.programaNombre || (prog ? prog.nombre : ''))) + '</td></tr>'
+      : '') +
     '</table>' +
+    // Lo que el programa promete, tal como se escribió en Configuración. Es
+    // la parte que el huésped va a leer con más atención.
+    (incluye.length
+      ? '<h2>Tu programa incluye</h2><ul class="reglas">' +
+        incluye.map(function (x) { return '<li>' + escapar_(x) + '</li>'; }).join('') +
+        '</ul>'
+      : '') +
     (acompanantes.length
       ? '<h2>Quiénes se alojan</h2><table><tr><td>' + escapar_(r.huesped) +
         ' <span style="color:#6b7280">(titular)</span></td></tr>' +
@@ -2733,7 +2998,7 @@ function panelHoy(token, fecha) {
       id: r.id, huesped: r.huesped, telefono: String(r.telefono || ''), canal: r.canal,
       recurso: nombre(r.recurso), estado: r.estado, notas: r.notas || '',
       firmada: !!firmadas[r.id],
-      addon: !!r.addon, addonFecha: r.addonFecha ? String(r.addonFecha) : '',
+      programa: String(r.programaNombre || ''),
       saldo: (Number(r.total) || 0) - (Number(r.anticipo) || 0),
       // Con qué moneda se le habla a este huésped. Es la pantalla que mira
       // recepción cuando alguien llega o se va, así que es JUSTO donde el
@@ -2755,8 +3020,9 @@ function panelHoy(token, fecha) {
       if (r.estado === 'en_casa') return true;
       return ymd_(r.checkIn) < dia && ymd_(r.checkOut) > dia;
     }).map(mapear),
-    addons: todas.filter(function (r) {
-      return r.addon && ymd_(r.checkIn) >= dia;
+    // Las que llegan con un programa contratado: hay que tenerlo preparado.
+    programas: todas.filter(function (r) {
+      return r.programa && ymd_(r.checkIn) >= dia && r.estado !== 'checkout';
     }).map(mapear)
   };
 }
@@ -3412,7 +3678,7 @@ function avisarReservaNueva_(idReserva, quien) {
   var lineas = ['🆕 <b>Reserva nueva</b>', ''].concat(lineasReserva_(r));
   lineas.push('💵 ' + plataTg_(r, Number(r.total) || 0) +
               (r.extranjero ? '  ·  exenta de IVA' : ''));
-  if (r.addon) lineas.push('🛁 Con programa tinaja + tabla de sushi');
+  if (r.programaNombre) lineas.push('🎁 Programa: ' + escTg_(r.programaNombre));
   lineas.push('📲 ' + escTg_(r.canal || 'directo') + '  ·  la cargó ' + escTg_(quien));
   return avisar_('reserva', lineas.join('\n'));
 }
@@ -3600,9 +3866,6 @@ var CONFIG_EDITABLE = [
   { clave: 'checkOut', rotulo: 'Hora de check-out', tipo: 'hora', grupo: 'avanzado' },
   { clave: 'temporadaAltaInicio', rotulo: 'Temporada alta desde (MM-DD)', tipo: 'texto', grupo: 'avanzado' },
   { clave: 'temporadaAltaFin', rotulo: 'Temporada alta hasta (MM-DD)', tipo: 'texto', grupo: 'avanzado' },
-  { clave: 'addonBase', rotulo: 'Programa tinaja + sushi (baja)', tipo: 'numero', grupo: 'avanzado' },
-  { clave: 'addonAlta', rotulo: 'Programa tinaja + sushi (alta)', tipo: 'numero', grupo: 'avanzado' },
-  { clave: 'addonParteRestaurante', rotulo: '% del programa que va al restaurante', tipo: 'numero', grupo: 'avanzado' },
   { clave: 'iva', rotulo: 'IVA (%)', tipo: 'numero', grupo: 'avanzado' }
 ];
 
@@ -3958,8 +4221,8 @@ function informes(token, desde, hasta) {
       chocan_(ymd_(r.checkIn), ymd_(r.checkOut), d, h);
   });
 
-  var nochesVendidas = 0, ingresos = 0, abonado = 0, conAddon = 0, paxNoches = 0;
-  var porCanal = {}, porUnidad = {}, porMes = {};
+  var nochesVendidas = 0, ingresos = 0, abonado = 0, conPrograma = 0, paxNoches = 0;
+  var porCanal = {}, porUnidad = {}, porMes = {}, porPrograma = {};
 
   reservas.forEach(function (r) {
     var ini = ymd_(r.checkIn), fin = ymd_(r.checkOut);
@@ -3977,7 +4240,18 @@ function informes(token, desde, hasta) {
     paxNoches += nDentro * (Number(r.pax) || 1);
     ingresos += proporcion;
     abonado += (Number(r.anticipo) || 0) * (nDentro / nTotal);
-    if (r.addon) conAddon++;
+    // Los programas vendidos: cuántas reservas y cuánta plata. Es lo que
+    // dice si un programa vale la pena o si nadie lo pide.
+    if (r.programa || r.programaNombre) {
+      conPrograma++;
+      var np = String(r.programaNombre || '') ||
+               ((programaPorId_(r.programa) || {}).nombre) || 'Programa';
+      porPrograma[np] = porPrograma[np] ||
+        { nombre: np, reservas: 0, noches: 0, ingresos: 0 };
+      porPrograma[np].reservas++;
+      porPrograma[np].noches += nDentro;
+      porPrograma[np].ingresos += proporcion;
+    }
 
     var canal = String(r.canal || 'sin canal');
     porCanal[canal] = porCanal[canal] || { canal: canal, reservas: 0, noches: 0, ingresos: 0 };
@@ -4061,7 +4335,8 @@ function informes(token, desde, hasta) {
     estadiaMedia: reservas.length ? Math.round(nochesVendidas / reservas.length * 10) / 10 : 0,
     paxNoches: paxNoches,
     paxPromedio: nochesVendidas ? Math.round(paxNoches / nochesVendidas * 10) / 10 : 0,
-    programasGlamping: conAddon,
+    conPrograma: conPrograma,
+    porPrograma: ordenar(porPrograma, 'ingresos'),
     fichasFirmadas: fichas,
     porCanal: ordenar(porCanal, 'ingresos'),
     porUnidad: ordenar(porUnidad, 'ingresos'),

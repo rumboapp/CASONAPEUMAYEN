@@ -237,6 +237,20 @@
     border:1px solid var(--line);border-radius:8px;margin-bottom:7px}
   .docFila .quien{color:var(--tx3);font-size:11.5px}
 
+  /* Elegir la tarifa: normal o uno de los programas. Botones y no un menú
+     desplegable, porque son pocos y hay que poder compararlos de un vistazo,
+     con su precio al lado. */
+  .tarifas{display:flex;gap:8px;flex-wrap:wrap}
+  .tarifas button{border:1px solid var(--line);border-radius:9px;padding:9px 12px;
+    background:var(--surface);text-align:left;font-size:13px;line-height:1.3;
+    min-width:120px;flex:1 1 auto}
+  .tarifas button:hover{border-color:var(--tx3)}
+  .tarifas button.on{border-color:var(--ac);background:var(--ac-soft);
+    box-shadow:inset 0 0 0 1px var(--ac)}
+  .tarifas button b{display:block;font-weight:600}
+  .tarifas button .val{color:var(--tx2);font-size:12px}
+  .tarifas button.on .val{color:var(--ac)}
+
   /* El QR a pantalla completa. Fondo blanco liso y nada alrededor: cualquier
      cosa cerca del código le quita contraste a la cámara. */
   .qrGrande{position:fixed;inset:0;z-index:200;background:#fff;display:flex;
@@ -583,7 +597,7 @@
       <div class="card"><h2>Llegadas</h2><div id="tLleg"></div></div>
       <div class="card"><h2>Salidas</h2><div id="tSal"></div></div>
       <div class="card"><h2>En casa</h2><div id="tCasa"></div></div>
-      <div class="card"><h2>Programa tinaja + sushi</h2><div id="tAdd"></div></div>
+      <div class="card"><h2>Llegan con programa</h2><div id="tAdd"></div></div>
     </section>
 
     <!-- ---------- Aseo ---------- -->
@@ -713,6 +727,23 @@
         <p class="muted" style="font-size:12px;margin-top:10px">
           Si lo dejas en <b>0</b>, el sistema consulta solo el dólar observado del día.
         </p>
+      </div>
+
+      <!-- ---------- Programas ----------
+           Un programa es una TARIFA distinta, no un extra que se suma: al
+           reservar se elige la tarifa normal o uno de estos, y la noche pasa
+           a valer lo que vale el programa. -->
+      <div class="card">
+        <h2>Programas</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Tarifas especiales con lo que incluyen. Al hacer una reserva se elige la
+          <b>tarifa normal o un programa</b>, y la noche pasa a valer lo que vale el
+          programa — no se suma encima. Lo que escribas en <i>Incluye</i> sale tal
+          cual en el comprobante del huésped.
+        </p>
+        <div id="progLista"></div>
+        <button class="btn sm" id="progNuevo" style="margin-top:12px">+ Programa nuevo</button>
+        <div class="err hide" id="progErr" style="margin-top:10px"></div>
       </div>
 
       <!-- ---------- La planilla ----------
@@ -910,6 +941,15 @@
         </div>
       </div>
 
+      <!-- La tarifa: normal o un programa. Va JUNTO al precio y no en "Más
+           datos" porque no es un extra que se suma, es de dónde sale el
+           precio de cada noche. Elegir un programa recotiza la estadía. -->
+      <div class="fld" id="rProgBox">
+        <label>Tarifa</label>
+        <div class="tarifas" id="rProgramas"></div>
+        <div class="muted hide" id="rProgIncluye" style="font-size:11.5px;margin-top:8px"></div>
+      </div>
+
       <!-- Turista extranjero va acá, pegado al precio, y no plegado dentro de
            "Más datos": es lo que decide en qué moneda se escriben esas dos
            casillas de arriba, así que tenerlo escondido obligaba a abrir un
@@ -941,10 +981,6 @@
               <option value="directo">Directo / walk-in</option>
             </select>
           </div>
-        </div>
-        <div class="fld hide" id="rAddonBox">
-          <label class="chk"><input type="checkbox" id="rAddon"> Programa tinaja + tabla de sushi</label>
-          <input type="datetime-local" id="rAddonF" class="hide" style="margin-top:8px">
         </div>
         <div class="fld"><label>Estado</label>
           <select id="rEst">
@@ -1068,6 +1104,53 @@
   </div>
 </div>
 
+<!-- ==================== PROGRAMA ==================== -->
+<div class="ov hide" id="mProg">
+  <div class="mo" style="max-width:520px">
+    <header><h3 id="progTit">Programa nuevo</h3><button class="x" data-cerrar="mProg">×</button></header>
+    <div class="body">
+      <div class="fld"><label>Nombre</label>
+        <input id="pgNom" placeholder="Programa romántico"></div>
+      <div class="fld">
+        <label>Qué incluye <span class="muted">· una cosa por línea</span></label>
+        <textarea id="pgInc" rows="5" placeholder="Tinaja caliente al atardecer&#10;Tabla de sushi para dos&#10;Desayuno en la habitación"
+          style="font:inherit;line-height:1.55;width:100%;padding:12px 13px;
+          border:1px solid var(--line);border-radius:8px;background:var(--surface);
+          resize:vertical"></textarea>
+        <div class="muted" style="font-size:11.5px;margin-top:5px">
+          Es lo que el huésped lee en su comprobante.
+        </div>
+      </div>
+      <div class="g2">
+        <div class="fld"><label>Valor por noche ($)</label>
+          <input id="pgPre" type="number" min="0" step="1000"></div>
+        <div class="fld"><label>Temporada alta ($)</label>
+          <input id="pgAlta" type="number" min="0" step="1000">
+          <div class="muted" style="font-size:11.5px;margin-top:5px">
+            Si lo dejas vacío, vale el mismo todo el año.
+          </div>
+        </div>
+      </div>
+      <div class="fld">
+        <label>Dónde se puede usar</label>
+        <select id="pgGru">
+          <option value="">En todo: lodge y glamping</option>
+          <option value="Lodge">Solo en el lodge</option>
+          <option value="Glamping">Solo en el glamping</option>
+        </select>
+      </div>
+      <div class="err hide" id="pgErr"></div>
+    </div>
+    <footer>
+      <div class="left">
+        <button class="btn gh sm hide" id="pgArchivar">Archivar</button>
+      </div>
+      <button class="btn gh" data-cerrar="mProg">Cerrar</button>
+      <button class="btn" id="pgGuardar">Guardar</button>
+    </footer>
+  </div>
+</div>
+
 <!-- ==================== ACOMPAÑANTES ==================== -->
 <div class="ov hide" id="mAcom">
   <div class="mo" style="max-width:520px">
@@ -1107,7 +1190,6 @@
         <p class="muted" style="font-size:12.5px;margin-bottom:10px" id="ctaPendTxt"></p>
         <div style="display:flex;gap:7px;flex-wrap:wrap">
           <button class="btn gh sm" id="ctaPostear">Cargar las noches que faltan</button>
-          <button class="btn gh sm" id="ctaPrograma">Cargar tinaja + sushi</button>
         </div>
       </div>
 
@@ -1418,10 +1500,10 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-23';
+var VERSION_ESPERADA = '2026-08-24';
 
 var S = { token:null, user:null, rol:null };
-var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], hoy:null, cfg:{}, dolar:null };
+var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
 
 /* ¿Estamos en un teléfono? No se pregunta por el aparato sino por el ancho,
    que es lo que de verdad importa: una tablet apaisada se comporta como un
@@ -1836,6 +1918,8 @@ function aplicarTablero(d){
   CAL.reservas=d.reservas||[];
   CAL.hoy=d.hoy||fmtHoy(); CAL.cfg=d.cfg||{}; CAL.aseo=d.aseo||{};
   if(d.dolar) CAL.dolar=d.dolar;
+  // Los programas activos, para elegir la tarifa al hacer una reserva.
+  CAL.programas=d.programas||[];
 
   var av=$('avisoIleg');
   if(d.ilegibles){
@@ -2091,7 +2175,7 @@ function pintarCal(animar){
     // una por una y ver quién falta por registrar.
     b.innerHTML = (r.firmada ? '<span class="ok" title="Ficha firmada">✓</span>'
                              : '<span class="dot" title="Ficha sin firmar"></span>')
-                  + r.huesped + (r.addon ? ' 🛁' : '');
+                  + r.huesped + (r.programa ? ' 🎁' : '');
     if(!r.firmada) b.classList.add('sinfirma');
     b.draggable=true;
     b.dataset.id=r.id;
@@ -2356,23 +2440,87 @@ function ajustarPax(){
    mano, ese gana y el servidor lo reparte entre las noches. */
 var TOTAL_TOCADO = false;
 
+/* ---------- La tarifa: normal o un programa ----------
+   Un programa NO es un extra que se suma al alojamiento: es una tarifa
+   distinta que lo reemplaza. Elegir "Programa romántico" hace que la noche
+   valga lo que vale el programa en vez de lo que vale la pieza.
+
+   Por eso los botones viven pegados al precio y no dentro de "Más datos":
+   son de dónde sale el número que está justo abajo. */
+var PROG_ELEGIDO = '';
+
+function programasDe(recursoId){
+  var rec=(CAL.recursos||[]).filter(function(x){ return x.id===recursoId; })[0];
+  return (CAL.programas||[]).filter(function(p){
+    var g=String(p.grupos||'').trim();
+    if(!g) return true;                       // sin grupos: sirve para todo
+    if(!rec) return true;
+    return g.split(',').map(function(x){ return x.trim(); }).indexOf(rec.grupo)>-1;
+  });
+}
+
+/* Lo que vale una noche con esta tarifa, para mostrarlo en el botón. */
+function valorNoche(recursoId, idPrograma){
+  var f = RANGO.in || fmtHoy();
+  var p = (CAL.programas||[]).filter(function(x){ return x.id===idPrograma; })[0];
+  if(p) return esAlta(f) ? p.precioAlta : p.precio;
+  var r=(CAL.recursos||[]).filter(function(x){ return x.id===recursoId; })[0];
+  if(!r) return 0;
+  return esAlta(f) ? r.precioAlta : r.precioBase;
+}
+
+function pintarProgramas(){
+  var rec=$('rRec').value;
+  var lista=programasDe(rec);
+  // Si el programa que estaba elegido no sirve para esta pieza, se suelta.
+  if(PROG_ELEGIDO && !lista.some(function(p){ return p.id===PROG_ELEGIDO; })) PROG_ELEGIDO='';
+
+  var c=$('rProgramas'); c.innerHTML='';
+  var boton=function(id, nombre, valor){
+    var b=document.createElement('button');
+    b.type='button';
+    b.className = (PROG_ELEGIDO===id) ? 'on' : '';
+    b.innerHTML='<b>'+nombre+'</b><span class="val">'+
+      (monedaRes()==='USD' ? dolares(deLista(valor)) : plata(valor))+' por noche</span>';
+    b.onclick=function(){
+      PROG_ELEGIDO=id;
+      // Cambiar de tarifa vuelve a cotizar: el precio escrito a mano deja de
+      // mandar, porque era el de la tarifa anterior.
+      TOTAL_TOCADO=false;
+      pintarProgramas();
+      recalcularTotal();
+    };
+    c.appendChild(b);
+  };
+  boton('', 'Tarifa normal', valorNoche(rec, ''));
+  lista.forEach(function(p){ boton(p.id, p.nombre, valorNoche(rec, p.id)); });
+
+  // Lo que incluye el programa elegido, para no tener que ir a Configuración.
+  var elegido=lista.filter(function(p){ return p.id===PROG_ELEGIDO; })[0];
+  var nota=$('rProgIncluye');
+  if(elegido && (elegido.lista||[]).length){
+    nota.classList.remove('hide');
+    nota.innerHTML='<b>Incluye:</b> '+elegido.lista.join(' · ');
+  } else nota.classList.add('hide');
+
+  // Sin programas creados, la fila entera sobra: no hay nada que elegir.
+  $('rProgBox').classList.toggle('hide', lista.length===0);
+}
+
 function recalcularTotal(){
   ajustarPax();
+  pintarProgramas();
   if(!RANGO.in) return;
-  var r=CAL.recursos.filter(function(x){ return x.id===$('rRec').value; })[0];
-  if(!r) return;
+  var rec=$('rRec').value;
+  if(!CAL.recursos.some(function(x){ return x.id===rec; })) return;
   var t=0, n=0;
-  for(var f=RANGO.in; f<RANGO.out; f=mas(f,1)){ t += esAlta(f)? r.precioAlta : r.precioBase; n++; }
+  for(var f=RANGO.in; f<RANGO.out; f=mas(f,1)){ t += valorNoche(rec, PROG_ELEGIDO); n++; }
   if(!TOTAL_TOCADO) $('rTot').value=deLista(t);
   $('rTotNota').textContent = TOTAL_TOCADO
     ? 'Se reparte entre las '+plural(n,'noche','noches')+' al guardar'
     : 'Suma de '+plural(n,'noche','noches');
-  var esGlamping = r.grupo==='Glamping';
-  $('rAddonBox').classList.toggle('hide', !esGlamping);
-  if(!esGlamping){ $('rAddon').checked=false; $('rAddonF').classList.add('hide'); }
 }
 $('rRec').addEventListener('change', recalcularTotal);
-$('rAddon').addEventListener('change', function(){ $('rAddonF').classList.toggle('hide', !this.checked); });
 
 /* ---------- La moneda del formulario ----------
    Marcar "turista extranjero" no es ponerle una etiqueta a la reserva: le
@@ -2465,7 +2613,7 @@ function nuevaReserva(rec, entrada, salida){
   $('rPax').value='';   // lo rellena ajustarPax() según lo que quepa
   $('rNinos').value=0;
   $('rExtranjero').checked=false; pintarMoneda();
-  $('rAddon').checked=false; $('rAddonF').value=''; $('rAddonF').classList.add('hide');
+  PROG_ELEGIDO='';
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
   $('rBorrar').classList.add('hide');
@@ -2496,7 +2644,6 @@ function plegarExtra(abierto){
   // 'extranjero' ya no se cuenta acá: la casilla se subió junto al precio y
   // está siempre a la vista, así que anunciarla dentro de este resumen haría
   // pensar que está escondida adentro.
-  if($('rAddon').checked) partes.push('tinaja + sushi');
   if($('rNot').value.trim()) partes.push('notas');
   $('rMasResumen').textContent = abierto ? ''
     : (partes.length ? partes.join(' · ') : 'correo, canal, notas…');
@@ -2531,11 +2678,8 @@ function abrirReserva(r){
   $('rTot').value=deGuardado(r.total); $('rAnt').value=deGuardado(r.anticipo);
   pintarDocsReserva(r);
   $('rNot').value=r.notas||'';
-  $('rAddon').checked=!!r.addon;
-  $('rAddonF').value=r.addonFecha||'';
-  $('rAddonF').classList.toggle('hide', !r.addon);
-  var rec=CAL.recursos.filter(function(x){ return x.id===r.recurso; })[0];
-  $('rAddonBox').classList.toggle('hide', !(rec && rec.grupo==='Glamping'));
+  PROG_ELEGIDO=String(r.programa||'');
+  pintarProgramas();
   $('rErr').classList.add('hide');
   $('rCancelar').classList.remove('hide');
   $('rBorrar').classList.toggle('hide', S.rol!=='admin');
@@ -2546,7 +2690,7 @@ function abrirReserva(r){
   // Si la reserva ya trae algo de lo plegado, se abre: si no, esos datos
   // quedarían escondidos y parecerían no existir. Ser extranjero ya no obliga
   // a abrirlo: esa casilla está arriba, a la vista.
-  plegarExtra(!!(r.email || r.notas || r.addon ||
+  plegarExtra(!!(r.email || r.notas ||
                  (r.canal && r.canal!=='whatsapp') ||
                  (r.estado!=='confirmada' && r.estado!=='en_casa')));
   pintarPaso(r);
@@ -2846,15 +2990,6 @@ $('ctaPostear').onclick=function(){
     }).catch(fallo);
 };
 
-$('ctaPrograma').onclick=function(){
-  if(!CTA) return;
-  ocupado('ctaPrograma', srv('cargarPrograma')(CTA.idReserva, 0))
-    .then(function(d){
-      return refrescarCuenta(CTA.idReserva).then(function(){
-        toast('Programa cargado: '+plata(d.tinaja)+' al lodge y '+plata(d.sushi)+' al restaurante');
-      });
-    }).catch(fallo);
-};
 
 function errCta(m){ var e=$('ctaErr'); e.textContent=m; e.classList.remove('hide'); }
 
@@ -3093,7 +3228,7 @@ $('rGuardar').onclick=function(){
     // servidor no tiene otra forma de saber si un 45.000 son pesos o si un
     // 49 son dólares, y adivinarlo fue lo que descuadró el IVA.
     moneda: monedaRes(),
-    addon:$('rAddon').checked, addonFecha:$('rAddonF').value, notas:$('rNot').value
+    programa: PROG_ELEGIDO, notas:$('rNot').value
   };
   ocupado('rGuardar', srv('guardarReserva')(datos)).then(function(d){
     cerrar('mRes');
@@ -3400,7 +3535,7 @@ function cargarHoy(){
   else ['tLleg','tSal','tCasa','tAdd'].forEach(function(x){ esqueleto(x,2); });
   srv('panelHoy')('').then(function(d){
     d = d || {};
-    ['llegadas','salidas','enCasa','addons'].forEach(function(k){ if(!d[k]) d[k]=[]; });
+    ['llegadas','salidas','enCasa','programas'].forEach(function(k){ if(!d[k]) d[k]=[]; });
     // Si nada cambió no se vuelve a dibujar, para que no parpadee.
     var igual = HOY_DATOS && JSON.stringify(d)===JSON.stringify(HOY_DATOS);
     HOY_DATOS = d;
@@ -3434,13 +3569,13 @@ function pintarHoy(d){
              (r.saldo>0 ? plataDe(r, r.saldo) : 'Ver')+'</button>';
     }]
   ]), 'No hay huéspedes alojados.');
-  tabla('tAdd', d.addons, [
+  tabla('tAdd', d.programas, [
     ['Huésped', function(r){ return r.huesped; }],
     ['Unidad',  function(r){ return r.recurso; }],
     ['Pax',     function(r){ return r.pax||1; }],
     ['Llegada', function(r){ return largo(r.checkIn); }],
-    ['Agendado',function(r){ return r.addonFecha? String(r.addonFecha).replace('T',' ') : '<span class="muted">por coordinar</span>'; }]
-  ], 'Sin programas de tinaja + sushi pendientes.');
+    ['Programa', function(r){ return '<b>'+(r.programa||'')+'</b>'; }]
+  ], 'Ninguna reserva próxima trae programa.');
 
   // Desde Hoy se llega a la cuenta de un tirón: es lo que se necesita cuando
   // el huésped está parado en el mesón preguntando cuánto debe.
@@ -3852,6 +3987,11 @@ function cargarInformes(){
         [['Canal','canal'],['Reservas','reservas'],['Noches','noches'],['Ingresos','ingresos']]) +
       tablaInforme('Por alojamiento', d.porUnidad,
         [['Alojamiento','unidad'],['Noches','noches'],['Ingresos','ingresos']]) +
+      // Qué programa se vendió y cuánto dejó: es lo que dice si uno vale la
+      // pena o si nadie lo pide.
+      tablaInforme('Programas vendidos', d.porPrograma,
+        [['Programa','nombre'],['Reservas','reservas'],['Noches','noches'],
+         ['Ingresos','ingresos']]) +
       tablaInforme('Mes a mes', d.porMes,
         [['Mes','mes'],['Noches','noches'],['Ingresos','ingresos']]);
   }).catch(fallo);
@@ -3865,7 +4005,7 @@ function tarjetasInforme(d){
     ['Ingreso por alojamiento', plata(d.ingresoPorUnidad), 'incluye los que quedaron vacíos'],
     ['Por cobrar', plata(d.porCobrar), plata(d.abonado)+' ya abonado'],
     ['Estadía media', d.estadiaMedia+' noches', d.canceladas+' cancelada(s) o no-show'],
-    ['Programas de glamping', d.programasGlamping, 'tinaja + tabla de sushi'],
+    ['Reservas con programa', d.conPrograma, 'de las '+d.reservas+' del período'],
     ['Fichas firmadas', d.fichasFirmadas, 'en total histórico']
   ];
   return '<div class="card"><h2>Resumen del '+largo(d.desde)+' al '+largo(mas(d.hasta,-1))+'</h2>'+
@@ -4156,6 +4296,7 @@ var CFG = null;
 
 function cargarConfiguracion(){
   esqueleto('cfgCampos',5);
+  cargarProgramas();
   srv('configuracion')().then(function(d){ CFG=d; pintarConfiguracion(); }).catch(fallo);
 }
 
@@ -4226,6 +4367,94 @@ $('cfgDolarGuardar').onclick=function(){
                                  : 'Vuelve al dólar del día');
       recargarCal();
     }).catch(fallo);
+};
+
+/* ---------- Programas ----------
+   Se archivan y no se borran: una reserva del año pasado tiene que poder
+   seguir diciendo con qué programa se vendió. */
+var PROGS = null, PROG_EDIT = null;
+
+function cargarProgramas(){
+  srv('programasAdmin')().then(function(d){ PROGS=d; pintarProgramasCfg(); })
+    .catch(function(e){ $('progErr').textContent=e.message||String(e);
+                        $('progErr').classList.remove('hide'); });
+}
+
+function pintarProgramasCfg(){
+  var c=$('progLista'); c.innerHTML='';
+  var lista=(PROGS && PROGS.programas)||[];
+  if(!lista.length){
+    c.innerHTML='<div class="empty">Todavía no hay programas. Crea el primero '+
+                'con el botón de abajo.</div>';
+    return;
+  }
+  lista.forEach(function(p){
+    var d=document.createElement('div');
+    d.className='docFila';
+    d.style.cssText='display:block;padding:11px 13px'+(p.activo?'':';opacity:.55');
+    var donde = p.grupos ? p.grupos : 'lodge y glamping';
+    d.innerHTML='<div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">'+
+      '<b style="font-size:14px">'+p.nombre+'</b>'+
+      (p.activo?'':'<span class="tag checkout">archivado</span>')+
+      '<span style="margin-left:auto;font-weight:600">'+plata(p.precio)+'</span>'+
+      '</div>'+
+      '<div class="muted" style="font-size:12px;margin-top:3px">'+
+        'por noche'+(p.precioAlta&&p.precioAlta!==p.precio
+                      ? ' · '+plata(p.precioAlta)+' en temporada alta' : '')+
+        ' · '+donde+'</div>'+
+      ((p.lista||[]).length
+        ? '<div class="muted" style="font-size:12px;margin-top:5px">Incluye: '+
+          p.lista.join(' · ')+'</div>' : '');
+    d.style.cursor='pointer';
+    d.onclick=function(){ abrirPrograma(p); };
+    c.appendChild(d);
+  });
+}
+
+function abrirPrograma(p){
+  PROG_EDIT = p || null;
+  $('progTit').textContent = p ? 'Programa: '+p.nombre : 'Programa nuevo';
+  $('pgNom').value = p ? p.nombre : '';
+  $('pgInc').value = p ? p.incluye : '';
+  $('pgPre').value = p ? p.precio : '';
+  $('pgAlta').value = (p && p.precioAlta!==p.precio) ? p.precioAlta : '';
+  $('pgGru').value = p ? (p.grupos||'') : '';
+  $('pgErr').classList.add('hide');
+  var arch=$('pgArchivar');
+  arch.classList.toggle('hide', !p);
+  if(p) arch.textContent = p.activo ? 'Archivar' : 'Volver a activarlo';
+  abrir('mProg');
+}
+
+$('progNuevo').onclick=function(){ abrirPrograma(null); };
+
+$('pgGuardar').onclick=function(){
+  $('pgErr').classList.add('hide');
+  var d={ nombre:$('pgNom').value.trim(), incluye:$('pgInc').value,
+          precio:+$('pgPre').value||0, precioAlta:+$('pgAlta').value||0,
+          grupos:$('pgGru').value };
+  if(PROG_EDIT){ d.id=PROG_EDIT.id; d.activo=PROG_EDIT.activo; }
+  ocupado('pgGuardar', srv('guardarPrograma')(d)).then(function(res){
+    PROGS=res; pintarProgramasCfg(); cerrar('mProg');
+    toast(PROG_EDIT ? 'Programa actualizado' : 'Programa creado');
+    // El calendario tiene su propia copia de los programas: se refresca para
+    // que el formulario de reserva ofrezca el nuevo sin recargar la página.
+    recargarCal();
+  }).catch(function(e){
+    $('pgErr').textContent=e.message||String(e); $('pgErr').classList.remove('hide');
+  });
+};
+
+$('pgArchivar').onclick=function(){
+  if(!PROG_EDIT) return;
+  var archivar = PROG_EDIT.activo;
+  ocupado('pgArchivar', srv('archivarPrograma')(PROG_EDIT.id, archivar)).then(function(res){
+    PROGS=res; pintarProgramasCfg(); cerrar('mProg');
+    toast(archivar ? 'Programa archivado' : 'Programa activo de nuevo');
+    recargarCal();
+  }).catch(function(e){
+    $('pgErr').textContent=e.message||String(e); $('pgErr').classList.remove('hide');
+  });
 };
 
 /* ---------- El bot de Telegram ----------

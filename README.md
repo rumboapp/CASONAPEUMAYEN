@@ -2,7 +2,7 @@
 
 Sistema interno de reservas para el lodge y el glamping. Calendario visual,
 estado de aseo, ficha de check-in con firma y coordinación del programa de
-tinaja + sushi.
+programas especiales.
 
 No se conecta automáticamente con Booking ni Airbnb: sirve para que el equipo
 cargue a mano lo que llega por cualquier canal y lo vea todo en un solo lugar,
@@ -394,6 +394,60 @@ cada noche**. Cada noche parte con la tarifa que le corresponde por fecha
   martes era promoción, en la cuenta aparece el martes con su precio de
   promoción.
 
+## Programas
+
+Un **programa** es una tarifa especial con lo que incluye escrito: *Programa
+Romántico*, *Escapada Full Day*, lo que quieran armar. Se crean en
+*Configuración → Programas* y desde ahí se usan al reservar.
+
+**Lo importante de entender: un programa NO es un extra que se suma al
+alojamiento — es una tarifa que lo reemplaza.** Al hacer la reserva se elige
+entre la *tarifa normal* y los programas disponibles, como botones uno al lado
+del otro con su precio a la vista. Si la pieza vale $55.000 la noche y el
+programa $95.000, la reserva queda en $95.000, no en $150.000.
+
+Cada programa tiene:
+
+- **Nombre** — el que ve el huésped en su comprobante.
+- **Qué incluye** — texto libre, **una cosa por línea**. Sale tal cual en el
+  comprobante, así que se escribe como se quiere que se lea.
+- **Valor por noche**, con precio aparte de temporada alta si corresponde. Si
+  se deja vacío, vale lo mismo todo el año.
+- **Dónde se puede usar** — en todo, solo en el lodge o solo en el glamping.
+  Un programa de carpa no aparece al reservar una habitación.
+
+**Al reservar.** Los botones de tarifa están **junto al precio**, no escondidos
+en *Más datos*: son de dónde sale el número que está justo abajo. Elegir un
+programa **recotiza la estadía** al precio nuevo, y debajo se muestra lo que
+incluye para no tener que ir a mirarlo a otra parte. El precio sigue siendo
+editable a mano, como siempre, y el detalle noche a noche también.
+
+Cambiar de programa —o quitarlo— vuelve a cotizar las noches. Guardar la
+reserva **sin tocar el programa** no toca los precios: un valor conversado se
+respeta.
+
+**En el comprobante** aparece el nombre del programa y una sección *Tu programa
+incluye* con la lista completa. Es lo que el huésped va a leer con más
+atención.
+
+**En los informes** hay una tabla *Programas vendidos* con cuántas reservas y
+cuánto dejó cada uno, más un indicador de cuántas reservas del período fueron
+con programa. Es lo que dice si un programa vale la pena o si nadie lo pide.
+
+**Se archivan, no se borran.** Un programa que ya no se vende se archiva: deja
+de ofrecerse al reservar, pero las reservas que se vendieron con él lo siguen
+diciendo, y sus comprobantes también. La reserva guarda el nombre del programa
+**congelado** al momento de venderla, así que cambiarle el nombre después no
+reescribe la historia.
+
+> El programa fijo de **tinaja + sushi** que existía antes pasó a ser uno más
+> de estos. Al ejecutar `setup()`, las reservas que lo tenían marcado quedan
+> apuntando a un programa nuevo con ese nombre, **archivado** y con los precios
+> que estaban configurados. Nace archivado a propósito: antes ese valor se
+> *sumaba* al alojamiento y ahora un programa lo *reemplaza*, así que hay que
+> revisarle el precio antes de volver a venderlo. Ninguna reserva ya cobrada
+> cambia de valor.
+
 ## La cuenta del huésped
 
 Cada reserva tiene su propia cuenta: un libro donde **los cargos suman y los
@@ -419,9 +473,6 @@ no, una estadía que recién empieza parecería no deber nada.
 - **Cada cargo sabe a qué centro de ingreso pertenece**, el lodge o el
   restaurante. Eso es lo que hace que el reparto con la cocina salga solo en
   los informes en vez de discutirse a fin de mes.
-- **El programa tinaja + sushi se anota como dos líneas**, una a cada centro.
-  El porcentaje que va al restaurante se ajusta en la hoja `Config`, en
-  `addonParteRestaurante` (viene en 50).
 - **Los pagos se registran con su medio**: efectivo, transferencia, tarjeta o
   "lo cobra Booking". El campo *Abonado* de la reserva es el espejo de esos
   pagos, así que una vez que hay pagos se llena solo y deja de editarse a mano.
@@ -661,7 +712,7 @@ Así se ve uno:
 📅 mar 14 feb → vie 17 feb  ·  3 noches
 👥 2 personas + 1 menor de 6
 💵 $150.000
-🛁 Con programa tinaja + tabla de sushi
+🎁 Programa: Programa Romántico
 📲 booking  ·  la cargó admin
 ```
 
@@ -810,8 +861,7 @@ conectarlo.
 Detrás de *Ajustes que casi nunca se tocan* quedan los datos que el sistema usa
 por dentro y que casi nunca hay que mover: el correo al que llega el cierre de
 cada noche, las horas de check-in y check-out (aparecen en la pantalla de aseo y
-en el comprobante), las fechas de temporada alta, el precio del programa tinaja
-+ sushi, el porcentaje que va al restaurante y el IVA.
+en el comprobante), las fechas de temporada alta y el IVA.
 
 Ahí mismo está también **Probar la generación de documentos**, que dice en qué
 paso falla un PDF: el permiso de Drive, la conversión, el logo o el correo. Casi
