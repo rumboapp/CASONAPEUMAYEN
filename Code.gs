@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-25';
+var VERSION = '2026-08-26';
 
 function version() { return VERSION; }
 
@@ -36,7 +36,7 @@ var HOJAS = {
   // número no hay forma de saberlo —$45.000 puede ser con o sin impuesto—,
   // y sin ese dato la pantalla mentía: le decía "sin IVA" a un precio que
   // todavía lo llevaba, y descontarlo dos veces habría sido cosa de un clic.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc', 'programa', 'programaNombre'],
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc', 'programa', 'programaNombre', 'uidExterno', 'refExterna'],
   /* Los programas especiales. Un programa NO es un extra que se suma al
      alojamiento: es una TARIFA distinta que lo reemplaza. "Programa
      romántico" a $95.000 la noche se cobra en vez de los $70.000 de la
@@ -81,7 +81,7 @@ var HOJAS = {
    Esto era el origen del bug de reservas duplicadas: Sheets convertía
    "2026-08-07" en un objeto Date con hora local y las comparaciones fallaban. */
 var COLS_TEXTO = {
-  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo'],
+  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo', 'refExterna'],
   Programas: ['creado'],
   Noches: ['fecha'],
   Acompanantes: ['nacimiento', 'creado'],
@@ -3865,6 +3865,7 @@ var CONFIG_EDITABLE = [
   { clave: 'telegramAvisa_reserva', rotulo: 'Avisar las reservas nuevas', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_cambio', rotulo: 'Avisar cancelaciones y cambios de fecha o pieza', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_check', rotulo: 'Avisar los check-in y check-out', tipo: 'si_no', grupo: 'telegram' },
+  { clave: 'telegramAvisa_booking', rotulo: 'Avisar lo que Booking mete solo', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'reglasEs', rotulo: 'Normas de convivencia', tipo: 'texto_largo', grupo: 'normas' },
   { clave: 'reglasEn', rotulo: 'House rules (las mismas, en inglés)', tipo: 'texto_largo', grupo: 'normas' },
   { clave: 'correoDueno', rotulo: 'Correo para el cierre de cada noche', tipo: 'texto', grupo: 'avanzado' },
@@ -4068,6 +4069,383 @@ function enlacesIcal(token) {
       };
     })
   };
+}
+
+/* ===================== LO QUE BOOKING VENDE, ENTRA SOLO =====================
+
+   Arriba está la ida: se le entrega a Booking un calendario para que no venda
+   lo que acá ya está tomado. Esto es la vuelta: leer el calendario que Booking
+   publica y meter acá lo que Booking vendió, sin que nadie toque nada.
+
+   POR QUÉ NO POR CORREO. Lo primero que uno piensa es leer el correo que llega
+   cuando cae una reserva. No sirve: ese correo dice el número de reserva y una
+   fecha, y nada más. No dice qué habitación es, ni el nombre, ni cuántas
+   noches, ni el precio. Con eso no se puede armar una reserva.
+
+   POR QUÉ EL CALENDARIO SÍ. Porque hay UNO POR HABITACIÓN. La dirección que se
+   pega abajo ya viene atada a una pieza de Booking, y acá se la amarra a un
+   alojamiento nuestro. Eso resuelve justo lo que al correo le falta: saber qué
+   pieza es. Las fechas vienen exactas en el archivo, y según cómo esté la
+   cuenta, a veces también el nombre del huésped y el número de reserva.
+
+   LO QUE NUNCA VIENE ES EL PRECIO. Ningún calendario iCal lo lleva. Así que la
+   reserva entra completa en lo que de verdad importa —la pieza queda bloqueada
+   y el equipo se entera— y con el precio puesto a la tarifa de la casa, que hay
+   que revisar: lo que Booking deposita es esa cifra menos su comisión. Se deja
+   dicho en las notas de la reserva y en el aviso al grupo, para que nadie
+   suponga que ese número ya está bueno.
+
+   CÓMO NO SE DUPLICA NADA. Cada evento del calendario viaja con un UID que
+   Booking no cambia. Ese UID queda escrito en la reserva. Mañana se vuelve a
+   leer el mismo archivo y, comparando UIDs, se sabe qué es nuevo, qué se movió
+   de fecha y qué desapareció, sin crear dos veces lo mismo. */
+
+function bookingUrlDe_(idRecurso) {
+  return String(config_('bookingIcal_' + idRecurso, '') || '').trim();
+}
+
+/* Los rótulos que ponen Booking y compañía cuando NO quieren decir quién es.
+   Si el resumen del evento es uno de estos, no hay nombre y se sigue de largo:
+   es preferible una reserva que se llame "Booking 5459534227" a una que se
+   llame "CLOSED - Not available". */
+var SIN_NOMBRE_ = ['closed', 'not available', 'unavailable', 'reserved',
+                   'blocked', 'busy', 'ocupado', 'no disponible', 'cerrado'];
+
+function bookingNombre_(ev) {
+  var s = String(ev.resumen || '').trim();
+  if (!s) return '';
+  var l = s.toLowerCase();
+  for (var i = 0; i < SIN_NOMBRE_.length; i++) {
+    if (l.indexOf(SIN_NOMBRE_[i]) > -1) return '';
+  }
+  return s.slice(0, 80);
+}
+
+/* El número de reserva de Booking: nueve o diez dígitos. Puede venir en el
+   resumen, en la descripción o dentro del propio UID. El mínimo son nueve a
+   propósito: ocho dígitos seguidos serían una fecha (20260820). */
+function bookingNumero_(ev) {
+  var m = [ev.resumen, ev.descripcion, ev.uid].join(' ').match(/\b(\d{9,10})\b/);
+  return m ? m[1] : '';
+}
+
+/* ---------- Leer un archivo .ics ----------
+   Un iCal es texto plano de "NOMBRE;parámetros:valor", una por línea, y las
+   líneas largas vienen cortadas: la continuación empieza con un espacio o un
+   tabulador. Si eso no se pega antes de nada, un nombre largo llega partido. */
+function icalLeer_(texto) {
+  var sueltas = String(texto || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  var juntas = [];
+  sueltas.forEach(function (l) {
+    if (/^[ \t]/.test(l) && juntas.length) juntas[juntas.length - 1] += l.slice(1);
+    else juntas.push(l);
+  });
+
+  var eventos = [], actual = null;
+  juntas.forEach(function (l) {
+    if (/^BEGIN:VEVENT/i.test(l)) { actual = {}; return; }
+    if (/^END:VEVENT/i.test(l)) { if (actual) eventos.push(actual); actual = null; return; }
+    if (!actual) return;
+    var c = l.indexOf(':');
+    if (c < 0) return;
+    var campo = l.slice(0, c).split(';')[0].toUpperCase();
+    var valor = l.slice(c + 1)
+      .replace(/\\n/gi, ' ').replace(/\\,/g, ',')
+      .replace(/\\;/g, ';').replace(/\\\\/g, '\\').trim();
+    if (campo === 'UID') actual.uid = valor;
+    else if (campo === 'DTSTART') actual.inicio = icalFecha_(valor);
+    else if (campo === 'DTEND') actual.fin = icalFecha_(valor);
+    else if (campo === 'SUMMARY') actual.resumen = valor;
+    else if (campo === 'DESCRIPTION') actual.descripcion = valor;
+  });
+  return eventos;
+}
+
+/* "20260820" o "20260820T140000Z" → "2026-08-20". Solo interesa el día: acá
+   las reservas se cuentan por noches, no por horas. */
+function icalFecha_(v) {
+  var m = String(v || '').match(/(\d{4})(\d{2})(\d{2})/);
+  return m ? m[1] + '-' + m[2] + '-' + m[3] : '';
+}
+
+/* ---------- El aviso al grupo ---------- */
+function avisarBookingNueva_(idReserva, numero, sinNombre) {
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) return false;
+  var lineas = ['🟦 <b>Reserva nueva desde Booking</b>', ''].concat(lineasReserva_(r));
+  if (numero) lineas.push('🔖 N° ' + escTg_(numero));
+  lineas.push('💵 ' + plataTg_(r, Number(r.total) || 0) + '  ·  a la tarifa de la casa');
+  lineas.push('⚠️ Hay que revisarla: Booking no manda el precio' +
+              (sinNombre ? ' ni el nombre' : '') + ' ni cuántas personas vienen.');
+  return avisar_('booking', lineas.join('\n'));
+}
+
+function avisarBookingCambio_(titulo, lineas) {
+  return avisar_('booking', [titulo, ''].concat(lineas).join('\n'));
+}
+
+/* ---------- Crear lo que Booking vendió ---------- */
+function bookingCrear_(ev, rec, res) {
+  var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
+  var num = bookingNumero_(ev);
+
+  // Antes que nada: ¿está libre? Si Booking vendió algo que acá ya estaba
+  // tomado, NO se fuerza. Una sobreventa se arregla hablando con el huésped,
+  // no pisando una reserva que ya existe.
+  try {
+    verificarLibre_(rec.id, ev.inicio, ev.fin, '');
+  } catch (e) {
+    res.chocadas++;
+    res.avisos.push(pieza + ': Booking vendió del ' + ev.inicio + ' al ' + ev.fin +
+                    ' y acá ya estaba tomado. ' + e.message);
+    avisarBookingCambio_('⚠️ <b>Booking vendió algo ya tomado</b>', [
+      '🛏 ' + escTg_(pieza),
+      '📅 ' + fechaTg_(ev.inicio) + ' → ' + fechaTg_(ev.fin),
+      num ? '🔖 N° ' + escTg_(num) : '',
+      '', escTg_(e.message),
+      'Hay que resolverlo a mano en el extranet.'
+    ].filter(String));
+    return;
+  }
+
+  var nombre = bookingNombre_(ev);
+  var id = uid_('R');
+  var plan = armarNoches_(id, rec.id, ev.inicio, ev.fin, null, '');
+
+  insertar_('Reservas', {
+    id: id, recurso: rec.id, idUnidad: rec.idUnidad,
+    huesped: nombre || ('Booking' + (num ? ' ' + num : '')),
+    telefono: '', email: '', canal: 'booking',
+    checkIn: ev.inicio, checkOut: ev.fin,
+    // Confirmada, porque en Booking ya lo está: la pieza está vendida y no hay
+    // nada que confirmar de este lado.
+    estado: 'confirmada',
+    total: plan.total, anticipo: 0, pax: 1, ninos: 0,
+    notas: 'Entró sola desde el calendario de Booking' + (num ? ' · N° ' + num : '') +
+      '. Falta revisar: el precio quedó a la tarifa de la casa y Booking descuenta ' +
+      'su comisión' + (nombre ? '' : ', Booking no mandó el nombre') +
+      ', y las personas quedaron en 1 porque el calendario no lo dice.',
+    creado: ahora_(), creadoPor: 'Booking', tokenFicha: '',
+    uidExterno: ev.uid, refExterna: num
+  });
+  insertarVarias_('Noches', plan.noches);
+  res.creadas++;
+  avisarBookingNueva_(id, num, !nombre);
+}
+
+/* ---------- La que ya estaba: ¿se movió, revivió, o no cambió nada? ---------- */
+function bookingActualizar_(ya, ev, rec, res) {
+  var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
+  var ci = ymd_(ya.checkIn), co = ymd_(ya.checkOut);
+  var muerta = (ya.estado === 'cancelada' || ya.estado === 'no_show');
+  if (ci === ev.inicio && co === ev.fin && !muerta) return;   // igual que ayer
+
+  try {
+    verificarLibre_(rec.id, ev.inicio, ev.fin, ya.id);
+  } catch (e) {
+    res.chocadas++;
+    res.avisos.push(pieza + ': la reserva de ' + ya.huesped + ' se movió en Booking al ' +
+                    ev.inicio + '–' + ev.fin + ', pero acá esas fechas están tomadas.');
+    avisarBookingCambio_('⚠️ <b>Booking movió una reserva a fechas tomadas</b>', [
+      '👤 <b>' + escTg_(ya.huesped) + '</b>',
+      '🛏 ' + escTg_(pieza),
+      '📅 ' + fechaTg_(ev.inicio) + ' → ' + fechaTg_(ev.fin),
+      '', escTg_(e.message), 'Hay que resolverlo a mano.'
+    ]);
+    return;
+  }
+
+  // El plan de noches se repone antes de mover las fechas: después ya no se
+  // sabría por qué noches se había cotizado. Es el mismo cuidado que tiene
+  // moverReserva() cuando alguien arrastra una burbuja en el calendario.
+  asegurarPlan_(ya.id);
+  var cambios = { checkIn: ev.inicio, checkOut: ev.fin };
+  if (muerta) cambios.estado = 'confirmada';
+  actualizar_('Reservas', 'id', ya.id, cambios);
+  sincronizarNoches_({ id: ya.id, recurso: rec.id, checkIn: ev.inicio, checkOut: ev.fin,
+                       total: ya.total }, 'Booking');
+  res.movidas++;
+
+  avisarBookingCambio_(muerta ? '🔁 <b>Booking revivió una reserva</b>'
+                              : '🔀 <b>Booking movió una reserva</b>', [
+    '👤 <b>' + escTg_(ya.huesped) + '</b>',
+    '🛏 ' + escTg_(pieza),
+    '📅 ' + fechaTg_(ci) + ' → ' + fechaTg_(co),
+    '     <b>' + fechaTg_(ev.inicio) + ' → ' + fechaTg_(ev.fin) + '</b>'
+  ]);
+}
+
+/* ---------- La pasada completa ----------
+   Se llama sola desde el disparador cada cuarto de hora, y también a mano
+   desde Configuración. Va con candado: si se cruza con alguien guardando una
+   reserva desde la pantalla, una espera a la otra y no se pisan. */
+function sincronizarBooking() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) {
+    return { cuando: ahora_(), creadas: 0, movidas: 0, canceladas: 0, chocadas: 0,
+             revisadas: 0, avisos: ['El sistema estaba ocupado; se reintenta solo.'] };
+  }
+  try {
+    return bookingSincronizar_();
+  } catch (e) {
+    // Un disparador que revienta deja de correr y nadie se entera. Mejor
+    // dejarlo escrito y que la pantalla lo muestre.
+    var mal = { cuando: ahora_(), creadas: 0, movidas: 0, canceladas: 0, chocadas: 0,
+                revisadas: 0, avisos: ['Falló la sincronización: ' + (e.message || e)] };
+    try {
+      actualizarConfig_('bookingUltima', JSON.stringify(mal));
+    } catch (e2) {}
+    return mal;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function bookingSincronizar_() {
+  var res = { cuando: ahora_(), creadas: 0, movidas: 0, canceladas: 0, chocadas: 0,
+              revisadas: 0, avisos: [] };
+  var conUrl = recursos_().filter(function (r) { return !!bookingUrlDe_(r.id); });
+  if (!conUrl.length) {
+    res.avisos.push('Todavía no hay ninguna dirección de Booking pegada.');
+    actualizarConfig_('bookingUltima', JSON.stringify(res));
+    return res;
+  }
+  var hoy = hoy_();
+
+  conUrl.forEach(function (rec) {
+    var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
+    var texto;
+    try {
+      var r = UrlFetchApp.fetch(bookingUrlDe_(rec.id),
+                                { muteHttpExceptions: true, followRedirects: true });
+      if (r.getResponseCode() !== 200) {
+        res.avisos.push(pieza + ': Booking contestó ' + r.getResponseCode() + '.');
+        return;
+      }
+      texto = r.getContentText();
+    } catch (e) {
+      res.avisos.push(pieza + ': no se pudo leer el calendario (' + (e.message || e) + ').');
+      return;
+    }
+    if (String(texto).indexOf('BEGIN:VCALENDAR') === -1) {
+      res.avisos.push(pieza + ': esa dirección no devuelve un calendario.');
+      return;
+    }
+
+    var eventos = icalLeer_(texto).filter(function (ev) {
+      // Lo que ya terminó no se toca: Booking lo va sacando de su archivo y no
+      // hay nada que hacer con una reserva del mes pasado.
+      return ev.uid && ev.inicio && ev.fin && ev.fin > ev.inicio && ev.fin > hoy;
+    });
+    res.revisadas += eventos.length;
+
+    // Lo que ya está acá, de este alojamiento, y vino de este calendario.
+    var mias = {};
+    leer_('Reservas').forEach(function (x) {
+      if (String(x.recurso) !== String(rec.id)) return;
+      var u = String(x.uidExterno || '');
+      if (u) mias[u] = x;
+    });
+
+    var vistos = {};
+    eventos.forEach(function (ev) {
+      vistos[ev.uid] = true;
+      if (mias[ev.uid]) bookingActualizar_(mias[ev.uid], ev, rec, res);
+      else bookingCrear_(ev, rec, res);
+    });
+
+    /* Lo que desapareció del calendario: Booking lo canceló.
+       Con una red de seguridad. Un archivo vacío es indistinguible de "se
+       cancelaron todas", y cancelar de golpe la agenda entera por un archivo
+       mal servido es mucho peor que enterarse tarde de una cancelación. Así
+       que si no vino ni un evento y acá hay reservas vivas, no se cancela
+       nada y se deja dicho. */
+    var vivas = [];
+    Object.keys(mias).forEach(function (u) {
+      var x = mias[u];
+      if (vistos[u]) return;
+      if (x.estado === 'cancelada' || x.estado === 'no_show') return;
+      if (ymd_(x.checkOut) < hoy) return;
+      vivas.push(x);
+    });
+    if (!vivas.length) return;
+    if (!eventos.length) {
+      res.avisos.push(pieza + ': el calendario vino vacío y acá hay ' + vivas.length +
+                      ' reserva(s) de Booking. No se canceló ninguna, por si acaso.');
+      return;
+    }
+    vivas.forEach(function (x) {
+      actualizar_('Reservas', 'id', x.id, { estado: 'cancelada' });
+      res.canceladas++;
+      avisarBookingCambio_('❌ <b>Booking canceló una reserva</b>', [
+        '👤 <b>' + escTg_(x.huesped) + '</b>',
+        '🛏 ' + escTg_(pieza),
+        '📅 ' + fechaTg_(x.checkIn) + ' → ' + fechaTg_(x.checkOut)
+      ]);
+    });
+  });
+
+  actualizarConfig_('bookingUltima', JSON.stringify(res));
+  return res;
+}
+
+/* ---------- Lo que usa la pantalla de Configuración ---------- */
+
+function bookingEstado(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var ultima = null;
+  try { ultima = JSON.parse(String(config_('bookingUltima', '') || 'null')); } catch (e) {}
+  return {
+    activo: String(config_('bookingAuto', 'no')) === 'si',
+    ultima: ultima,
+    recursos: recursos_().map(function (r) {
+      return {
+        id: r.id,
+        nombre: r.unidad + (r.nombre ? ' — ' + r.nombre : ''),
+        grupo: r.grupo,
+        url: bookingUrlDe_(r.id)
+      };
+    })
+  };
+}
+
+function bookingGuardarUrl(token, idRecurso, url) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var v = String(url || '').trim();
+  // webcal:// es la misma dirección con otro nombre; UrlFetchApp solo entiende
+  // http. Booking a veces la ofrece así y pegarla tal cual no funcionaría.
+  if (/^webcal:\/\//i.test(v)) v = 'https://' + v.slice(9);
+  if (v && !/^https?:\/\//i.test(v)) {
+    throw new Error('Esa no parece una dirección de calendario. Tiene que empezar con https://');
+  }
+  actualizarConfig_('bookingIcal_' + idRecurso, v);
+  logCambio_(u.nombre, 'booking_url', idRecurso + (v ? ' puesta' : ' borrada'));
+  return true;
+}
+
+function bookingSincronizarAhora(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  return sincronizarBooking();
+}
+
+/* Enciende o apaga el disparador que lee Booking cada cuarto de hora. Se
+   borran primero los que hubiera: si no, cada vez que se apretara el botón
+   quedaría uno más y terminarían corriendo cinco a la vez. */
+function bookingAutomatico(token, encender) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sincronizarBooking') ScriptApp.deleteTrigger(t);
+  });
+  if (encender) {
+    ScriptApp.newTrigger('sincronizarBooking').timeBased().everyMinutes(15).create();
+  }
+  actualizarConfig_('bookingAuto', encender ? 'si' : 'no');
+  logCambio_(u.nombre, 'booking_auto', encender ? 'encendido' : 'apagado');
+  return { activo: !!encender };
 }
 
 function linkFicha(token, idReserva) {

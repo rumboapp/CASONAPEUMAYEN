@@ -746,20 +746,23 @@
         <div class="err hide" id="progErr" style="margin-top:10px"></div>
       </div>
 
-      <!-- ---------- El calendario que lee Booking ----------
-           Booking no acepta conexión directa de propiedades chicas, pero sí
-           deja importar un calendario externo. Con esto Booking bloquea solo
-           lo que acá ya se vendió. -->
+      <!-- ---------- Booking, las dos direcciones ----------
+           Booking no acepta conexión directa de propiedades chicas: su API de
+           dos vías es solo para channel managers certificados. Pero sí
+           intercambia calendarios, y con eso alcanza para las dos cosas que
+           duelen: que Booking venda lo que acá ya se vendió, y que lo que
+           Booking vende haya que copiarlo a mano. -->
       <div class="card">
-        <h2>Bloquear fechas en Booking</h2>
+        <h2>Booking</h2>
         <p class="muted" style="font-size:13px;margin-bottom:12px">
-          Cuando cargas una reserva directa acá, Booking no se entera y puede vender
-          la misma pieza. Esto lo evita: se le entrega a Booking un calendario por
-          cada alojamiento y él <b>bloquea solo</b> las fechas que acá ya están tomadas.
+          Son dos direcciones distintas y se conectan por separado. La de <b>ida</b>
+          evita que Booking venda una pieza que acá ya está tomada. La de <b>vuelta</b>
+          hace que lo que Booking venda aparezca solo en este calendario, sin que
+          nadie lo copie.
         </p>
 
-        <div class="ctaCaja" style="margin-top:0">
-          <div class="ctaTit">Cómo se conecta, una vez por habitación</div>
+        <div class="ctaTit" style="margin-top:4px">1 · Que Booking no venda lo que acá ya se vendió</div>
+        <div class="ctaCaja" style="margin-top:8px">
           <ol class="muted" style="font-size:12.5px;padding-left:18px;margin:0">
             <li style="margin-bottom:5px">En el extranet de Booking:
               <b>Rates &amp; Availability → Sync calendars</b>.</li>
@@ -780,6 +783,49 @@
           verlas.
         </p>
         <div class="err hide" id="icalErr" style="margin-top:10px"></div>
+
+        <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
+
+        <div class="ctaTit">2 · Que lo que Booking venda entre solo acá</div>
+        <div class="ctaCaja" style="margin-top:8px">
+          <ol class="muted" style="font-size:12.5px;padding-left:18px;margin:0">
+            <li style="margin-bottom:5px">En la <b>misma</b> pantalla del extranet
+              (<b>Sync calendars</b>), pero del lado de
+              <b>Export calendar</b>.</li>
+            <li style="margin-bottom:5px">Copia la dirección de <b>esa</b> habitación
+              y pégala abajo, en la fila del alojamiento que le corresponde acá.</li>
+            <li>Enciende la revisión automática. Cada quince minutos se mira si
+              Booking vendió algo nuevo.</li>
+          </ol>
+        </div>
+
+        <p class="muted" style="font-size:12px;margin:12px 0 0">
+          <b>Por qué por acá y no por el correo de Booking.</b> El correo que llega
+          cuando cae una reserva no dice qué habitación es: trae el número de reserva
+          y una fecha, nada más. El calendario sí lo dice, porque hay uno por
+          habitación — al pegar cada dirección en su fila queda dicho qué pieza es.
+        </p>
+
+        <div id="impLista" style="margin-top:14px"></div>
+
+        <div class="docFila" style="margin-top:12px;gap:10px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
+            <input type="checkbox" id="impAuto" style="width:auto;flex:0 0 auto;margin:0">
+            <span style="font-size:13px">Revisar Booking sola, cada 15 minutos</span>
+          </label>
+          <button class="btn gh sm" id="impAhora" style="margin-left:auto">Revisar ahora</button>
+        </div>
+
+        <div id="impUltima" class="muted" style="font-size:12px;margin-top:10px"></div>
+
+        <p class="muted" style="font-size:12px;margin-top:12px">
+          <b>Lo que el calendario no trae es el precio</b>, ninguno lo trae. La reserva
+          entra con la pieza bloqueada y la tarifa de la casa puesta, y queda anotado
+          en sus notas que hay que revisar el precio y cuántas personas vienen. Si
+          Booking vende algo que acá ya estaba tomado, <b>no</b> se pisa la reserva que
+          ya existe: avisa y se resuelve a mano.
+        </p>
+        <div class="err hide" id="impErr" style="margin-top:10px"></div>
       </div>
 
       <!-- ---------- La planilla ----------
@@ -1536,7 +1582,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-25';
+var VERSION_ESPERADA = '2026-08-26';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -4334,6 +4380,7 @@ function cargarConfiguracion(){
   esqueleto('cfgCampos',5);
   cargarProgramas();
   cargarIcal();
+  cargarBookingEntrada();
   srv('configuracion')().then(function(d){ CFG=d; pintarConfiguracion(); }).catch(fallo);
 }
 
@@ -4436,6 +4483,98 @@ function cargarIcal(){
     $('icalErr').classList.remove('hide');
   });
 }
+
+/* ---------- La vuelta: lo que Booking vende entra solo ----------
+   Una fila por alojamiento con la dirección del calendario que Booking
+   publica de ESA habitación. Pegar cada una en su fila es lo que le dice al
+   sistema qué pieza de Booking es cuál de acá — que es justo lo que el correo
+   de Booking no dice. */
+function cargarBookingEntrada(){
+  srv('bookingEstado')().then(pintarBookingEntrada).catch(function(e){
+    $('impErr').textContent=e.message||String(e);
+    $('impErr').classList.remove('hide');
+  });
+}
+
+function pintarBookingEntrada(d){
+  var c=$('impLista'); c.innerHTML='';
+  var grupo='';
+  (d.recursos||[]).forEach(function(r){
+    if(r.grupo!==grupo){
+      grupo=r.grupo;
+      var t=document.createElement('div');
+      t.className='ctaTit'; t.style.marginTop='12px'; t.textContent=grupo;
+      c.appendChild(t);
+    }
+    var f=document.createElement('div');
+    f.className='docFila';
+    var et=document.createElement('b');
+    et.style.cssText='font-size:12.5px;min-width:150px';
+    et.textContent=r.nombre;
+    var inp=document.createElement('input');
+    inp.type='text'; inp.value=r.url||'';
+    inp.placeholder='Pega acá el "Export calendar" de esta habitación';
+    inp.style.cssText='flex:1;min-width:180px;font-size:12px';
+    // Se guarda al salir del campo y solo si cambió: pegar una dirección y
+    // seguir a la siguiente no debería obligar a apretar nada.
+    inp.onchange=function(){
+      srv('bookingGuardarUrl')(r.id, inp.value)
+        .then(function(){ r.url=inp.value.trim();
+                          toast(r.url ? 'Guardada · '+r.nombre : 'Quitada · '+r.nombre); })
+        .catch(function(e){ inp.value=r.url||''; fallo(e); });
+    };
+    f.appendChild(et); f.appendChild(inp);
+    c.appendChild(f);
+  });
+
+  $('impAuto').checked=!!d.activo;
+  pintarUltimaBooking(d.ultima);
+}
+
+/* El parte de la última pasada. Importa que se vea SIEMPRE, aunque no haya
+   pasado nada: un "revisado, sin novedad" es la única forma de distinguir que
+   está andando de que se cayó hace tres días. */
+function pintarUltimaBooking(u){
+  var el=$('impUltima');
+  el.innerHTML='';
+  if(!u){ el.textContent='Todavía no se ha revisado Booking.'; return; }
+  var partes=[];
+  if(u.creadas)    partes.push(u.creadas+(u.creadas===1?' reserva nueva':' reservas nuevas'));
+  if(u.movidas)    partes.push(u.movidas+(u.movidas===1?' movida':' movidas'));
+  if(u.canceladas) partes.push(u.canceladas+(u.canceladas===1?' cancelada':' canceladas'));
+  if(u.chocadas)   partes.push(u.chocadas+' con las fechas ya tomadas');
+  // Todo por textContent y no por innerHTML: acá adentro viajan mensajes de
+  // error de Booking y nombres de habitación, que son texto ajeno.
+  var t=document.createElement('div');
+  t.textContent='Última revisión: '+(u.cuando||'')+' · '+
+                (partes.length ? partes.join(', ') : 'sin novedad');
+  el.appendChild(t);
+  (u.avisos||[]).forEach(function(a){
+    var d=document.createElement('div');
+    d.style.cssText='color:var(--warn);margin-top:4px';
+    d.textContent='⚠️ '+a;
+    el.appendChild(d);
+  });
+}
+
+$('impAuto').onchange=function(){
+  var enc=$('impAuto').checked;
+  srv('bookingAutomatico')(enc)
+    .then(function(){ toast(enc ? 'Booking se revisa sola cada 15 minutos'
+                                : 'Revisión automática apagada'); })
+    .catch(function(e){ $('impAuto').checked=!enc; fallo(e); });
+};
+
+$('impAhora').onclick=function(){
+  ocupado('impAhora', srv('bookingSincronizarAhora')())
+    .then(function(u){
+      pintarUltimaBooking(u);
+      toast(u.creadas ? 'Entraron '+u.creadas+' de Booking'
+                      : 'Revisado, sin novedad');
+      // Si entró algo, el calendario de atrás ya no está al día.
+      if(u.creadas||u.movidas||u.canceladas) recargarCal();
+    }).catch(fallo);
+};
 
 /* ---------- Programas ----------
    Se archivan y no se borran: una reserva del año pasado tiene que poder

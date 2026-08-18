@@ -4,9 +4,10 @@ Sistema interno de reservas para el lodge y el glamping. Calendario visual,
 estado de aseo, ficha de check-in con firma y coordinación del programa de
 programas especiales.
 
-No se conecta automáticamente con Booking ni Airbnb: sirve para que el equipo
-cargue a mano lo que llega por cualquier canal y lo vea todo en un solo lugar,
-sin que se pisen las reservas.
+Con Booking intercambia calendarios en las dos direcciones: bloquea allá lo que
+acá ya se vendió, y mete acá lo que Booking vendió. Lo que llega por WhatsApp o
+por teléfono se carga a mano, y todo se ve en un solo lugar sin que se pisen las
+reservas.
 
 ## Los archivos
 
@@ -753,7 +754,7 @@ acá, Booking no se entera y puede vender la misma pieza. Booking permite
 **importar un calendario externo** desde el extranet, así que la app publica uno
 por cada alojamiento y Booking bloquea solo esas fechas.
 
-En *Configuración → Bloquear fechas en Booking* está la lista de direcciones,
+En *Configuración → Booking → 1* está la lista de direcciones,
 una por alojamiento, con su botón de copiar. En el extranet de Booking:
 **Rates & Availability → Sync calendars →** elegir la habitación **→ Import
 calendar →** pegar la dirección.
@@ -773,32 +774,68 @@ Lo que hay que saber:
   que la protege. Quien la tenga puede ver qué días está lleno el lodge, nada
   más. Con la clave equivocada sale un calendario vacío, no un error.
 
-### 2. Que la reserva de Booking entre sola (pendiente)
+### 2. Que la reserva de Booking entre sola (ya funciona)
 
 La otra mitad: que una reserva hecha en Booking aparezca acá sin que nadie la
-escriba. La única forma gratis de recibir la reserva **completa** —huésped,
-fechas, habitación, precio, personas— es **leer el correo que Booking manda por
-cada reserva**. Apps Script puede leer el Gmail de la cuenta, así que un
-disparador cada pocos minutos revisa los correos nuevos, los interpreta, crea la
-reserva y avisa por Telegram.
+escriba.
 
-Está diseñado pero **no escrito todavía**, porque depende de algo que no se
-puede adivinar: **el formato exacto de esos correos**. Cambia según el idioma y
-Booking lo modifica cada tanto. Escribir el interpretador contra correos
-inventados garantiza que falle contra los de verdad.
+**Por qué NO se hace leyendo el correo.** Era el plan obvio: Apps Script puede
+leer el Gmail de la cuenta, y Booking manda un correo por cada reserva. Los
+correos reales lo descartaron. Esto es todo lo que trae uno:
 
-Cuando se escriba, va a funcionar así:
+```
+Asunto: Booking.com - ¡Nueva reserva! (5459534227, jueves, 20 de agosto de 2026)
+Cuerpo:  Acabas de recibir una nueva reserva de un cliente de Booking.com.
+         Booking confirmation — 5459534227
+         [enlace al extranet]
+```
 
-- La reserva entra **confirmada**, con canal *booking*, y el grupo de Telegram
-  se entera al tiro.
-- Guarda el **número de reserva de Booking**, para que una modificación o una
-  cancelación encuentren la misma reserva en vez de duplicarla.
-- Hay que **mapear los nombres de habitación** de Booking a las unidades de acá.
-  Se hace una vez, en Configuración.
-- Si un correo **no se puede interpretar**, avisa en Telegram y no crea nada.
-  Una reserva mal creada en silencio es peor que escribirla a mano.
-- El correo tiene que llegar **a la cuenta que corre el script**. Si Booking le
-  escribe a otra, hay que reenviarlo automáticamente.
+No dice **qué habitación es**. Tampoco el nombre, ni el precio, ni cuántas
+personas, ni desde cuándo hasta cuándo. Con eso no se puede armar una reserva:
+lo único aprovechable es el número.
+
+**Por qué el calendario sí.** Booking publica un `.ics` por habitación
+(*Rates & Availability → Sync calendars → Export calendar*). Al pegar cada
+dirección en la fila del alojamiento que le corresponde acá, queda dicho de una
+vez y para siempre qué pieza de Booking es cuál de las nuestras — que es
+exactamente lo que al correo le falta. Las fechas vienen exactas, y según cómo
+esté la cuenta, a veces también el nombre del huésped y el número de reserva.
+
+En *Configuración → Booking → 2* está la lista, una fila por alojamiento. Se
+pega la dirección, se enciende el interruptor y cada quince minutos un
+disparador revisa si Booking vendió algo nuevo. El botón **Revisar ahora**
+hace la misma pasada en el momento.
+
+Cómo entra una reserva de Booking:
+
+- **Confirmada**, con canal *booking*, con sus noches armadas y el grupo de
+  Telegram enterado al tiro.
+- Con el **UID del evento** guardado. Eso es lo que hace que mañana, al volver
+  a leer el mismo archivo, se sepa qué es nuevo, qué se movió de fecha y qué
+  desapareció, **sin duplicar nada**.
+- Con el **número de reserva de Booking** cuando viene en el archivo — el mismo
+  que llega por correo, para poder cruzarlos.
+- Si Booking **la mueve de día**, se mueve acá y se rehace el plan de noches.
+  Si **la cancela**, queda cancelada acá (cancelada, no borrada). Si **la
+  revive**, vuelve a confirmarse sin crear una segunda.
+
+Lo que hay que saber:
+
+- **El precio no viene.** Ningún iCal lo lleva. La reserva entra con la tarifa
+  de la casa puesta y con una nota que lo dice: hay que revisarla, porque lo
+  que Booking deposita es esa cifra menos su comisión. Las personas quedan en 1
+  por lo mismo.
+- **Nunca se pisa una reserva que ya existe.** Si Booking vende algo que acá ya
+  estaba tomado, no entra: se cuenta como choque y avisa por Telegram para
+  resolverlo a mano en el extranet.
+- **Un calendario vacío no borra la agenda.** Un archivo sin eventos es
+  indistinguible de "se cancelaron todas". Si viene vacío y acá hay reservas de
+  Booking vivas, no se cancela ninguna y queda dicho en la pantalla.
+- **Si Booking no contesta** —error 500, la red caída, una dirección que
+  devuelve cualquier cosa— no se crea ni se cancela nada. Se anota el problema
+  y se reintenta en la pasada siguiente.
+- **No es instantáneo.** Entre que Booking vende y esto lo ve pasan hasta
+  quince minutos.
 
 ## Cierre de día
 
@@ -1226,11 +1263,14 @@ editor la función `crearUsuario("nombre", "pin", "admin")`.
 - **No cobra en dólares por sí solo.** Registra que el pago entró en dólares y
   lo convierte, pero recibir la plata sigue siendo cosa tuya: efectivo,
   transferencia o el terminal de tarjeta.
-- **No importa reservas desde Booking ni Airbnb.** Es lo siguiente: la vía
-  realista es leer los correos de reserva de Booking desde el mismo Apps
-  Script y crear la reserva sola. La conexión de dos vías con Booking solo la
-  abren a socios de conectividad certificados, así que eso pasaría por un
-  channel manager intermedio.
+- **De Booking no trae el precio ni el nombre del huésped.** La reserva entra
+  sola y bloquea la pieza, pero el calendario de Booking no lleva plata: queda
+  a la tarifa de la casa y hay que revisarla. El nombre viene solo si la cuenta
+  de Booking lo publica. Una conexión completa exige la API de dos vías, que
+  Booking abre únicamente a socios de conectividad certificados — eso pasaría
+  por un channel manager pagado.
+- **De Airbnb no importa nada todavía.** Airbnb publica el mismo tipo de
+  calendario, así que es el mismo camino ya escrito; falta pegarlo.
 - **Las tarifas base son por temporada, no por fecha.** Cada noche de una
   reserva sí se puede editar a mano, pero todavía no hay un calendario de
   precios por día, ni estadía mínima, ni "cerrado a la llegada".
