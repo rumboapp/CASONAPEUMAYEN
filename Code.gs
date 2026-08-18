@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-29';
+var VERSION = '2026-08-30';
 
 function version() { return VERSION; }
 
@@ -4882,6 +4882,25 @@ function bookingCruzarCorreo_(datos, edad, res) {
     bookingLinkReserva_(datos.numero)
   ]);
   return true;
+}
+
+/* ---------- Correr esta función a mano, una vez ----------
+
+   Declarar un permiso en appsscript.json no lo concede: solo dice cuál se va
+   a pedir. Quien lo concede es una persona apretando "Permitir", y esa
+   pantalla solo aparece corriendo algo desde el editor — la app web nunca la
+   muestra: si le falta un permiso, falla y ya.
+
+   Por eso existe esta función. No hace nada útil aparte de tocar el correo,
+   que es justo lo que obliga a Google a pedir el permiso que falta. Se elige
+   desde el editor de Apps Script, se aprieta Ejecutar, se acepta, y listo. */
+function autorizarCorreo() {
+  var n = GmailApp.search('from:booking.com newer_than:14d', 0, 10).length;
+  var msg = 'Listo: el permiso está concedido. Se ven ' + n +
+            ' conversación(es) de Booking de los últimos 14 días.' +
+            (n ? '' : ' No hay ninguna, pero el permiso quedó dado igual.');
+  Logger.log(msg);
+  return msg;
 }
 
 function bookingCorreoActivo_() {

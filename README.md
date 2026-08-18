@@ -915,6 +915,15 @@ Hace tres cosas más que el calendario no puede:
 - **No adivina.** Si llegan dos reservas de Booking el mismo día, no se le pega
   el número a ninguna: se avisa y lo mira una persona.
 
+**Hay que conceder el permiso a mano, una vez.** Declararlo en el manifiesto
+no lo concede: solo dice cuál se va a pedir. Quien lo concede es una persona
+apretando *Permitir*, y esa pantalla **solo aparece corriendo algo desde el
+editor** — la app web nunca la muestra: si le falta un permiso, falla y ya.
+Para eso está la función `autorizarCorreo()`: se elige en el editor de Apps
+Script, se aprieta Ejecutar, se acepta, y de paso dice cuántos correos de
+Booking ve. Después conviene desplegar una versión nueva y apagar y encender
+la revisión automática, para que el disparador se cree con el permiso puesto.
+
 **El permiso es de solo lectura.** Está declarado en `appsscript.json` como
 `gmail.readonly`, así que aunque el código quisiera, no puede mandar, borrar ni
 mover un correo. Ese archivo declara ahora todos los permisos de forma
