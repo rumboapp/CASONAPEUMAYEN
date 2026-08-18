@@ -809,10 +809,11 @@
         <div id="impLista" style="margin-top:14px"></div>
 
         <div class="docFila" style="margin-top:12px;gap:10px;flex-wrap:wrap">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" id="impAuto" style="width:auto;flex:0 0 auto;margin:0">
-            <span style="font-size:13px">Revisar Booking sola, cada 15 minutos</span>
+            <span style="font-size:13px">Revisar Booking sola, cada</span>
           </label>
+          <select id="impCada" style="width:auto;flex:0 0 auto;font-size:13px"></select>
           <button class="btn gh sm" id="impAhora" style="margin-left:auto">Revisar ahora</button>
         </div>
 
@@ -823,7 +824,15 @@
           entra con la pieza bloqueada y la tarifa de la casa puesta, y queda anotado
           en sus notas que hay que revisar el precio y cuántas personas vienen. Si
           Booking vende algo que acá ya estaba tomado, <b>no</b> se pisa la reserva que
-          ya existe: avisa y se resuelve a mano.
+          ya existe: avisa una vez y se resuelve a mano. Y si esa reserva la habías
+          cargado tú a mano desde el correo de Booking, <b>la reconoce</b> en vez de
+          duplicarla: le queda la ficha y la cuenta como estaban.
+        </p>
+        <p class="muted" style="font-size:12px;margin-top:8px">
+          Cinco minutos es lo que conviene. Se puede bajar a uno, pero Google le da a
+          cada cuenta un rato limitado de tareas automáticas al día: mirando cada
+          minuto se gasta cinco veces más rápido, y cuando se acaba deja de revisar
+          del todo.
         </p>
         <div class="err hide" id="impErr" style="margin-top:10px"></div>
       </div>
@@ -1582,7 +1591,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-26';
+var VERSION_ESPERADA = '2026-08-27';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -4528,6 +4537,13 @@ function pintarBookingEntrada(d){
   });
 
   $('impAuto').checked=!!d.activo;
+  var sel=$('impCada'); sel.innerHTML='';
+  (d.minutos||[5]).forEach(function(m){
+    var o=document.createElement('option');
+    o.value=m; o.textContent=(m===1?'1 minuto':m+' minutos');
+    if(m===d.cada) o.selected=true;
+    sel.appendChild(o);
+  });
   pintarUltimaBooking(d.ultima);
 }
 
@@ -4540,9 +4556,15 @@ function pintarUltimaBooking(u){
   if(!u){ el.textContent='Todavía no se ha revisado Booking.'; return; }
   var partes=[];
   if(u.creadas)    partes.push(u.creadas+(u.creadas===1?' reserva nueva':' reservas nuevas'));
+  if(u.adoptadas)  partes.push(u.adoptadas+(u.adoptadas===1?' reconocida de las que ya tenías'
+                                                           :' reconocidas de las que ya tenías'));
   if(u.movidas)    partes.push(u.movidas+(u.movidas===1?' movida':' movidas'));
   if(u.canceladas) partes.push(u.canceladas+(u.canceladas===1?' cancelada':' canceladas'));
   if(u.chocadas)   partes.push(u.chocadas+' con las fechas ya tomadas');
+  // El eco es nuestro propio calendario rebotando. Se cuenta para que no
+  // parezca que la revisión no hizo nada, pero no es novedad de nadie.
+  if(u.ecos)       partes.push(u.ecos+(u.ecos===1?' bloqueo nuestro de vuelta'
+                                                 :' bloqueos nuestros de vuelta'));
   // Todo por textContent y no por innerHTML: acá adentro viajan mensajes de
   // error de Booking y nombres de habitación, que son texto ajeno.
   var t=document.createElement('div');
@@ -4557,22 +4579,28 @@ function pintarUltimaBooking(u){
   });
 }
 
-$('impAuto').onchange=function(){
-  var enc=$('impAuto').checked;
-  srv('bookingAutomatico')(enc)
-    .then(function(){ toast(enc ? 'Booking se revisa sola cada 15 minutos'
+function guardarAutoBooking(){
+  var enc=$('impAuto').checked, cada=Number($('impCada').value)||5;
+  srv('bookingAutomatico')(enc, cada)
+    .then(function(){ toast(enc ? 'Booking se revisa sola cada '+cada+
+                                  (cada===1?' minuto':' minutos')
                                 : 'Revisión automática apagada'); })
     .catch(function(e){ $('impAuto').checked=!enc; fallo(e); });
-};
+}
+$('impAuto').onchange=guardarAutoBooking;
+// Cambiar el intervalo con la revisión apagada solo lo deja anotado; el
+// disparador se crea recién al encenderla.
+$('impCada').onchange=guardarAutoBooking;
 
 $('impAhora').onclick=function(){
   ocupado('impAhora', srv('bookingSincronizarAhora')())
     .then(function(u){
       pintarUltimaBooking(u);
       toast(u.creadas ? 'Entraron '+u.creadas+' de Booking'
-                      : 'Revisado, sin novedad');
-      // Si entró algo, el calendario de atrás ya no está al día.
-      if(u.creadas||u.movidas||u.canceladas) recargarCal();
+          : u.adoptadas ? 'Se reconocieron '+u.adoptadas+' que ya tenías'
+                        : 'Revisado, sin novedad');
+      // Si algo cambió, el calendario de atrás ya no está al día.
+      if(u.creadas||u.adoptadas||u.movidas||u.canceladas) recargarCal();
     }).catch(fallo);
 };
 

@@ -806,6 +806,14 @@ pega la dirección, se enciende el interruptor y cada quince minutos un
 disparador revisa si Booking vendió algo nuevo. El botón **Revisar ahora**
 hace la misma pasada en el momento.
 
+Se puede poner cada 1, 5, 10, 15 o 30 minutos — son los únicos que acepta
+Google. Viene en **5**, y conviene dejarlo ahí: Google le da a cada cuenta un
+rato limitado de tareas automáticas al día (hora y media en las gratis), y
+mirar cada minuto son 1.440 pasadas diarias con una llamada por habitación
+conectada. Cuando esa cuota se acaba el disparador deja de correr entero, así
+que bajarlo a 1 puede terminar en no revisar nada. La diferencia real son
+cuatro minutos.
+
 Cómo entra una reserva de Booking:
 
 - **Confirmada**, con canal *booking*, con sus noches armadas y el grupo de
@@ -818,6 +826,37 @@ Cómo entra una reserva de Booking:
 - Si Booking **la mueve de día**, se mueve acá y se rehace el plan de noches.
   Si **la cancela**, queda cancelada acá (cancelada, no borrada). Si **la
   revive**, vuelve a confirmarse sin crear una segunda.
+- Si **tú la cambias de pieza** acá —"te paso a la otra matrimonial"— esa
+  decisión manda: la app la sigue por su identificador y no por la habitación,
+  así que no aparece una copia en la pieza original. Para eso está la columna
+  `feedExterno`, que recuerda de qué calendario vino aunque la reserva se mude.
+
+### Las tres cosas que se parecen y no son la misma
+
+Cuando un evento del calendario cae encima de una reserva que ya existe acá,
+hay tres historias posibles y confundirlas cuesta caro. La app las separa así:
+
+- **La que ya cargaste a mano.** Es lo normal: cae el correo de Booking, el
+  recepcionista abre el extranet y la carga, el huésped firma su ficha. Días
+  después se conecta el calendario. Si el choque es con **una sola** reserva de
+  esa misma pieza, sin identificador todavía y con canal *booking*, **se
+  reconoce**: se le escribe el identificador del evento y quedan siendo la
+  misma. No se duplica al huésped, la ficha firmada y la cuenta siguen
+  intactas, y de ahí en adelante si Booking la mueve o la cancela, esta la
+  sigue. Si el que la cargó le puso otra fecha de salida —el correo trae una
+  sola fecha, es fácil equivocarse— manda la del calendario y el plan de noches
+  se rehace.
+- **El eco.** Acá hay una reserva directa de WhatsApp, la app le cierra ese día
+  a Booking, y Booking nos devuelve el día cerrado como si fuera un evento. Se
+  reconoce porque las fechas calzan **exactas** con una reserva que no es de
+  Booking, y se ignora en silencio. No se adopta a propósito: atar una reserva
+  de WhatsApp a un calendario ajeno significaría que el día que ese bloqueo
+  desapareciera, la app cancelaría sola a un huésped de verdad.
+- **La sobreventa de verdad.** Cualquier otra cosa: fechas que se pisan pero no
+  calzan, o dos reservas distintas de por medio. Ahí no se toca nada y se avisa
+  al grupo — **una sola vez**. Sin eso, con el disparador prendido, el mismo
+  choque llenaba Telegram de mensajes cada pocos minutos hasta que el huésped
+  se iba.
 
 Lo que hay que saber:
 

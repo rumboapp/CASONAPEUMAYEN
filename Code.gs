@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-26';
+var VERSION = '2026-08-27';
 
 function version() { return VERSION; }
 
@@ -36,7 +36,7 @@ var HOJAS = {
   // número no hay forma de saberlo —$45.000 puede ser con o sin impuesto—,
   // y sin ese dato la pantalla mentía: le decía "sin IVA" a un precio que
   // todavía lo llevaba, y descontarlo dos veces habría sido cosa de un clic.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc', 'programa', 'programaNombre', 'uidExterno', 'refExterna'],
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc', 'programa', 'programaNombre', 'uidExterno', 'refExterna', 'feedExterno'],
   /* Los programas especiales. Un programa NO es un extra que se suma al
      alojamiento: es una TARIFA distinta que lo reemplaza. "Programa
      romántico" a $95.000 la noche se cobra en vez de los $70.000 de la
@@ -4184,28 +4184,133 @@ function avisarBookingCambio_(titulo, lineas) {
   return avisar_('booking', [titulo, ''].concat(lineas).join('\n'));
 }
 
+/* ---------- ¿Con qué se topa este evento? ----------
+   Antes de crear nada hay que mirar qué hay en esa pieza en esas fechas.
+   Devuelve las reservas vivas que chocan, para poder distinguir tres cosas
+   que parecen la misma y no lo son:
+
+     - la reserva que el recepcionista YA cargó a mano mirando el correo de
+       Booking (hay que reconocerla, no duplicarla);
+     - el eco de nuestro propio calendario, cuando Booking nos devuelve como
+       "ocupado" un día que le cerramos nosotros (hay que ignorarlo);
+     - una sobreventa de verdad (hay que gritar).                             */
+function bookingChoques_(rec, ev) {
+  var choca = conflictosDe_(rec.id);
+  return leer_('Reservas').filter(function (x) {
+    return choca[String(x.recurso)] &&
+      x.estado !== 'cancelada' && x.estado !== 'no_show' &&
+      chocan_(ymd_(x.checkIn), ymd_(x.checkOut), ev.inicio, ev.fin);
+  });
+}
+
+/* Una sobreventa se avisa UNA vez, no en cada pasada. Sin esto, con el
+   disparador prendido, el mismo choque llenaba el grupo de mensajes cada
+   pocos minutos hasta que el huésped se iba. */
+function bookingYaAvisado_(uid) {
+  try {
+    var l = JSON.parse(String(config_('bookingAvisados', '') || '[]'));
+    return l.indexOf(String(uid)) > -1;
+  } catch (e) { return false; }
+}
+
+function bookingAnotarAviso_(uid) {
+  var l = [];
+  try { l = JSON.parse(String(config_('bookingAvisados', '') || '[]')); } catch (e) {}
+  if (l.indexOf(String(uid)) === -1) l.push(String(uid));
+  // Se recorta para que la lista no crezca sin fin: los últimos 200 alcanzan
+  // de sobra, y un choque de hace meses ya no interesa.
+  if (l.length > 200) l = l.slice(l.length - 200);
+  actualizarConfig_('bookingAvisados', JSON.stringify(l));
+}
+
+function bookingAvisarChoque_(pieza, ev, num, detalle, res) {
+  res.chocadas++;
+  res.avisos.push(pieza + ': Booking vendió del ' + ev.inicio + ' al ' + ev.fin +
+                  ' y acá ya estaba tomado. ' + detalle);
+  if (bookingYaAvisado_(ev.uid)) return;
+  bookingAnotarAviso_(ev.uid);
+  avisarBookingCambio_('⚠️ <b>Booking vendió algo ya tomado</b>', [
+    '🛏 ' + escTg_(pieza),
+    '📅 ' + fechaTg_(ev.inicio) + ' → ' + fechaTg_(ev.fin),
+    num ? '🔖 N° ' + escTg_(num) : '',
+    '', escTg_(detalle),
+    'Hay que resolverlo a mano en el extranet.'
+  ].filter(String));
+}
+
+/* ---------- Reconocer la que ya estaba cargada a mano ----------
+   El caso normal del mundo real: cae el correo de Booking, el recepcionista
+   abre el extranet y carga la reserva a mano. Días después se conecta el
+   calendario. Si la app no supiera reconocerla, crearía una segunda reserva
+   del mismo huésped —o, si la pieza está ocupada por ella misma, gritaría una
+   sobreventa que no existe cada pocos minutos.
+
+   Reconocerla es escribirle el identificador del evento. Desde ese momento
+   son la misma cosa: si Booking la mueve o la cancela, esta reserva la sigue,
+   con su ficha firmada y su cuenta intactas. */
+function bookingAdoptar_(ya, ev, rec, res, num) {
+  var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
+  var ci = ymd_(ya.checkIn), co = ymd_(ya.checkOut);
+  var cambios = { uidExterno: ev.uid, feedExterno: rec.id };
+  if (num && !String(ya.refExterna || '')) cambios.refExterna = num;
+
+  // Si el que la cargó a mano le puso otras fechas —el correo de Booking solo
+  // trae una—, mandan las del calendario, que son las que Booking vendió.
+  var corrige = (ci !== ev.inicio || co !== ev.fin);
+  if (corrige) { cambios.checkIn = ev.inicio; cambios.checkOut = ev.fin; }
+  actualizar_('Reservas', 'id', ya.id, cambios);
+  if (corrige) {
+    asegurarPlan_(ya.id);
+    sincronizarNoches_({ id: ya.id, recurso: ya.recurso, checkIn: ev.inicio,
+                         checkOut: ev.fin, total: ya.total }, 'Booking');
+  }
+  res.adoptadas++;
+
+  var lineas = ['👤 <b>' + escTg_(ya.huesped) + '</b>', '🛏 ' + escTg_(pieza)];
+  if (corrige) {
+    lineas.push('📅 ' + fechaTg_(ci) + ' → ' + fechaTg_(co));
+    lineas.push('     <b>' + fechaTg_(ev.inicio) + ' → ' + fechaTg_(ev.fin) +
+                '</b>  ·  según Booking');
+  } else {
+    lineas.push('📅 ' + fechaTg_(ev.inicio) + ' → ' + fechaTg_(ev.fin));
+  }
+  if (num) lineas.push('🔖 N° ' + escTg_(num));
+  lineas.push('Ya estaba cargada acá. Queda enlazada a Booking, sin duplicarla.');
+  return avisarBookingCambio_('🔗 <b>Reconocida una reserva de Booking</b>', lineas);
+}
+
 /* ---------- Crear lo que Booking vendió ---------- */
 function bookingCrear_(ev, rec, res) {
   var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
   var num = bookingNumero_(ev);
+  var choques = bookingChoques_(rec, ev);
 
-  // Antes que nada: ¿está libre? Si Booking vendió algo que acá ya estaba
-  // tomado, NO se fuerza. Una sobreventa se arregla hablando con el huésped,
-  // no pisando una reserva que ya existe.
-  try {
-    verificarLibre_(rec.id, ev.inicio, ev.fin, '');
-  } catch (e) {
-    res.chocadas++;
-    res.avisos.push(pieza + ': Booking vendió del ' + ev.inicio + ' al ' + ev.fin +
-                    ' y acá ya estaba tomado. ' + e.message);
-    avisarBookingCambio_('⚠️ <b>Booking vendió algo ya tomado</b>', [
-      '🛏 ' + escTg_(pieza),
-      '📅 ' + fechaTg_(ev.inicio) + ' → ' + fechaTg_(ev.fin),
-      num ? '🔖 N° ' + escTg_(num) : '',
-      '', escTg_(e.message),
-      'Hay que resolverlo a mano en el extranet.'
-    ].filter(String));
-    return;
+  if (choques.length) {
+    /* Un solo choque, en la MISMA pieza y sin dueño externo todavía: es una de
+       las dos historias inocentes. Con dos o más ya no se puede adivinar cuál
+       es cuál, así que se avisa y decide una persona. */
+    var c = (choques.length === 1) ? choques[0] : null;
+    var suelta = c && String(c.recurso) === String(rec.id) && !String(c.uidExterno || '');
+
+    if (suelta && String(c.canal || '') === 'booking') {
+      return bookingAdoptar_(c, ev, rec, res, num);
+    }
+
+    /* El eco. Le cerramos el día a Booking porque acá hay una reserva directa,
+       y Booking nos lo devuelve como ocupado. Se pide que las fechas calcen
+       EXACTAS: así se distingue del caso en que Booking de verdad vendió algo
+       encima. Y no se adopta —solo se ignora— porque adoptarla ataría una
+       reserva de WhatsApp a un calendario ajeno: el día que ese bloqueo
+       desapareciera, la app cancelaría al huésped de verdad. */
+    if (suelta && ymd_(c.checkIn) === ev.inicio && ymd_(c.checkOut) === ev.fin) {
+      res.ecos++;
+      return;
+    }
+
+    var quien = choques[0];
+    return bookingAvisarChoque_(pieza, ev, num,
+      'Ya hay una reserva de ' + quien.huesped + ' del ' + ymd_(quien.checkIn) +
+      ' al ' + ymd_(quien.checkOut) + '.', res);
   }
 
   var nombre = bookingNombre_(ev);
@@ -4226,26 +4331,33 @@ function bookingCrear_(ev, rec, res) {
       'su comisión' + (nombre ? '' : ', Booking no mandó el nombre') +
       ', y las personas quedaron en 1 porque el calendario no lo dice.',
     creado: ahora_(), creadoPor: 'Booking', tokenFicha: '',
-    uidExterno: ev.uid, refExterna: num
+    uidExterno: ev.uid, refExterna: num, feedExterno: rec.id
   });
   insertarVarias_('Noches', plan.noches);
   res.creadas++;
   avisarBookingNueva_(id, num, !nombre);
 }
 
-/* ---------- La que ya estaba: ¿se movió, revivió, o no cambió nada? ---------- */
+/* ---------- La que ya estaba: ¿se movió, revivió, o no cambió nada? ----------
+   Ojo con la pieza: se usa la de la RESERVA, no la del calendario. Si alguien
+   la cambió de habitación acá —"te paso a la otra matrimonial"— esa decisión
+   es de una persona y manda sobre el archivo. Mirando la pieza del calendario
+   la reserva se veía perdida y se creaba una copia en la pieza original. */
 function bookingActualizar_(ya, ev, rec, res) {
-  var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
+  var suPieza = String(ya.recurso || rec.id);
+  var pieza = nombreRecurso_(suPieza);
   var ci = ymd_(ya.checkIn), co = ymd_(ya.checkOut);
   var muerta = (ya.estado === 'cancelada' || ya.estado === 'no_show');
   if (ci === ev.inicio && co === ev.fin && !muerta) return;   // igual que ayer
 
   try {
-    verificarLibre_(rec.id, ev.inicio, ev.fin, ya.id);
+    verificarLibre_(suPieza, ev.inicio, ev.fin, ya.id);
   } catch (e) {
     res.chocadas++;
     res.avisos.push(pieza + ': la reserva de ' + ya.huesped + ' se movió en Booking al ' +
                     ev.inicio + '–' + ev.fin + ', pero acá esas fechas están tomadas.');
+    if (bookingYaAvisado_(ev.uid + '@' + ev.inicio)) return;
+    bookingAnotarAviso_(ev.uid + '@' + ev.inicio);
     avisarBookingCambio_('⚠️ <b>Booking movió una reserva a fechas tomadas</b>', [
       '👤 <b>' + escTg_(ya.huesped) + '</b>',
       '🛏 ' + escTg_(pieza),
@@ -4262,7 +4374,7 @@ function bookingActualizar_(ya, ev, rec, res) {
   var cambios = { checkIn: ev.inicio, checkOut: ev.fin };
   if (muerta) cambios.estado = 'confirmada';
   actualizar_('Reservas', 'id', ya.id, cambios);
-  sincronizarNoches_({ id: ya.id, recurso: rec.id, checkIn: ev.inicio, checkOut: ev.fin,
+  sincronizarNoches_({ id: ya.id, recurso: suPieza, checkIn: ev.inicio, checkOut: ev.fin,
                        total: ya.total }, 'Booking');
   res.movidas++;
 
@@ -4282,16 +4394,18 @@ function bookingActualizar_(ya, ev, rec, res) {
 function sincronizarBooking() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) {
-    return { cuando: ahora_(), creadas: 0, movidas: 0, canceladas: 0, chocadas: 0,
-             revisadas: 0, avisos: ['El sistema estaba ocupado; se reintenta solo.'] };
+    return { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
+             chocadas: 0, ecos: 0, revisadas: 0,
+             avisos: ['El sistema estaba ocupado; se reintenta solo.'] };
   }
   try {
     return bookingSincronizar_();
   } catch (e) {
     // Un disparador que revienta deja de correr y nadie se entera. Mejor
     // dejarlo escrito y que la pantalla lo muestre.
-    var mal = { cuando: ahora_(), creadas: 0, movidas: 0, canceladas: 0, chocadas: 0,
-                revisadas: 0, avisos: ['Falló la sincronización: ' + (e.message || e)] };
+    var mal = { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
+                chocadas: 0, ecos: 0, revisadas: 0,
+                avisos: ['Falló la sincronización: ' + (e.message || e)] };
     try {
       actualizarConfig_('bookingUltima', JSON.stringify(mal));
     } catch (e2) {}
@@ -4302,8 +4416,8 @@ function sincronizarBooking() {
 }
 
 function bookingSincronizar_() {
-  var res = { cuando: ahora_(), creadas: 0, movidas: 0, canceladas: 0, chocadas: 0,
-              revisadas: 0, avisos: [] };
+  var res = { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
+              chocadas: 0, ecos: 0, revisadas: 0, avisos: [] };
   var conUrl = recursos_().filter(function (r) { return !!bookingUrlDe_(r.id); });
   if (!conUrl.length) {
     res.avisos.push('Todavía no hay ninguna dirección de Booking pegada.');
@@ -4339,18 +4453,30 @@ function bookingSincronizar_() {
     });
     res.revisadas += eventos.length;
 
-    // Lo que ya está acá, de este alojamiento, y vino de este calendario.
-    var mias = {};
+    /* Dos índices, y la diferencia importa.
+
+       'conocidas' busca por identificador en TODAS las piezas, porque una
+       reserva de Booking se puede haber cambiado de habitación acá y sigue
+       siendo la misma. Mirando solo esta pieza se la daba por nueva y se
+       creaba una copia en cada pasada.
+
+       'mias' son las que llegaron por ESTE calendario —de ahí la columna
+       feedExterno, que no cambia aunque la reserva se mude de pieza—, y sirve
+       solo para el barrido de cancelaciones: desaparecer de este archivo dice
+       algo de estas y de ninguna otra. */
+    var conocidas = {}, mias = {};
     leer_('Reservas').forEach(function (x) {
-      if (String(x.recurso) !== String(rec.id)) return;
       var u = String(x.uidExterno || '');
-      if (u) mias[u] = x;
+      if (!u) return;
+      conocidas[u] = x;
+      var feed = String(x.feedExterno || x.recurso);
+      if (feed === String(rec.id)) mias[u] = x;
     });
 
     var vistos = {};
     eventos.forEach(function (ev) {
       vistos[ev.uid] = true;
-      if (mias[ev.uid]) bookingActualizar_(mias[ev.uid], ev, rec, res);
+      if (conocidas[ev.uid]) bookingActualizar_(conocidas[ev.uid], ev, rec, res);
       else bookingCrear_(ev, rec, res);
     });
 
@@ -4379,7 +4505,7 @@ function bookingSincronizar_() {
       res.canceladas++;
       avisarBookingCambio_('❌ <b>Booking canceló una reserva</b>', [
         '👤 <b>' + escTg_(x.huesped) + '</b>',
-        '🛏 ' + escTg_(pieza),
+        '🛏 ' + escTg_(nombreRecurso_(x.recurso)),
         '📅 ' + fechaTg_(x.checkIn) + ' → ' + fechaTg_(x.checkOut)
       ]);
     });
@@ -4398,6 +4524,8 @@ function bookingEstado(token) {
   try { ultima = JSON.parse(String(config_('bookingUltima', '') || 'null')); } catch (e) {}
   return {
     activo: String(config_('bookingAuto', 'no')) === 'si',
+    cada: bookingCada_(),
+    minutos: BOOKING_MINUTOS_,
     ultima: ultima,
     recursos: recursos_().map(function (r) {
       return {
@@ -4431,21 +4559,45 @@ function bookingSincronizarAhora(token) {
   return sincronizarBooking();
 }
 
-/* Enciende o apaga el disparador que lee Booking cada cuarto de hora. Se
-   borran primero los que hubiera: si no, cada vez que se apretara el botón
-   quedaría uno más y terminarían corriendo cinco a la vez. */
-function bookingAutomatico(token, encender) {
+/* Cada cuánto se mira Booking. Google solo acepta estos cinco valores para un
+   disparador por minutos; cualquier otro número lo rechaza. */
+var BOOKING_MINUTOS_ = [1, 5, 10, 15, 30];
+
+function bookingCada_() {
+  var n = Number(config_('bookingCada', 5)) || 5;
+  return BOOKING_MINUTOS_.indexOf(n) > -1 ? n : 5;
+}
+
+/* Enciende o apaga el disparador que lee Booking solo. Se borran primero los
+   que hubiera: si no, cada vez que se apretara el botón quedaría uno más y
+   terminarían corriendo cinco a la vez.
+
+   Sobre el intervalo. Cinco minutos es el que viene puesto y es el que
+   conviene. Se puede bajar a uno, pero Google le da a cada cuenta un rato
+   limitado de disparadores al día —una hora y media en las cuentas gratis— y
+   mirar Booking cada minuto son 1.440 pasadas diarias, cada una con una
+   llamada por habitación conectada. Con varias piezas eso se come la cuota
+   antes de que termine el día, y cuando se acaba el disparador deja de correr
+   entero: se pasa de revisar cada minuto a no revisar nada. Cinco minutos
+   gasta la quinta parte y la diferencia real son cuatro minutos de demora. */
+function bookingAutomatico(token, encender, cada) {
   var u = sesion_(token);
   exigirAdmin_(u);
+  var n = Number(cada) || bookingCada_();
+  if (BOOKING_MINUTOS_.indexOf(n) === -1) {
+    throw new Error('Google solo acepta ' + BOOKING_MINUTOS_.join(', ') + ' minutos.');
+  }
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'sincronizarBooking') ScriptApp.deleteTrigger(t);
   });
   if (encender) {
-    ScriptApp.newTrigger('sincronizarBooking').timeBased().everyMinutes(15).create();
+    ScriptApp.newTrigger('sincronizarBooking').timeBased().everyMinutes(n).create();
   }
+  actualizarConfig_('bookingCada', n);
   actualizarConfig_('bookingAuto', encender ? 'si' : 'no');
-  logCambio_(u.nombre, 'booking_auto', encender ? 'encendido' : 'apagado');
-  return { activo: !!encender };
+  logCambio_(u.nombre, 'booking_auto',
+             (encender ? 'encendido cada ' + n + ' min' : 'apagado'));
+  return { activo: !!encender, cada: n };
 }
 
 function linkFicha(token, idReserva) {
