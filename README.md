@@ -867,9 +867,13 @@ Lo que hay que saber:
 - **Nunca se pisa una reserva que ya existe.** Si Booking vende algo que acá ya
   estaba tomado, no entra: se cuenta como choque y avisa por Telegram para
   resolverlo a mano en el extranet.
-- **Un calendario vacío no borra la agenda.** Un archivo sin eventos es
-  indistinguible de "se cancelaron todas". Si viene vacío y acá hay reservas de
-  Booking vivas, no se cancela ninguna y queda dicho en la pantalla.
+- **Un calendario vacío cancela, pero recién a la segunda.** Un archivo sin
+  eventos es ambiguo: puede ser que se cancelaron todas —lo más común, porque
+  una pieza sola pasa medio año sin nada vendido— o Booking sirviendo mal el
+  archivo por un rato. Se pide que venga vacío **dos revisiones seguidas**: un
+  tropiezo pasajero no alcanza, una cancelación de verdad sí. En la primera la
+  pantalla avisa qué va a pasar, y apretar *Revisar ahora* otra vez lo hace en
+  el momento.
 - **Si Booking no contesta** —error 500, la red caída, una dirección que
   devuelve cualquier cosa— no se crea ni se cancela nada. Se anota el problema
   y se reintenta en la pasada siguiente.

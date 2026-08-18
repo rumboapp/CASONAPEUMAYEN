@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-27';
+var VERSION = '2026-08-28';
 
 function version() { return VERSION; }
 
@@ -4387,6 +4387,21 @@ function bookingActualizar_(ya, ev, rec, res) {
   ]);
 }
 
+/* Cuántas revisiones seguidas lleva este calendario llegando vacío. Vive en
+   la configuración y no en memoria porque cada pasada del disparador es una
+   ejecución nueva: en memoria se olvidaría siempre y nunca llegaría a dos. */
+function bookingVaciasSumar_(idRecurso) {
+  var n = (Number(config_('bookingVacio_' + idRecurso, 0)) || 0) + 1;
+  actualizarConfig_('bookingVacio_' + idRecurso, n);
+  return n;
+}
+
+function bookingVaciasBorrar_(idRecurso) {
+  if (Number(config_('bookingVacio_' + idRecurso, 0)) || 0) {
+    actualizarConfig_('bookingVacio_' + idRecurso, 0);
+  }
+}
+
 /* ---------- La pasada completa ----------
    Se llama sola desde el disparador cada cuarto de hora, y también a mano
    desde Configuración. Va con candado: si se cruza con alguien guardando una
@@ -4481,11 +4496,18 @@ function bookingSincronizar_() {
     });
 
     /* Lo que desapareció del calendario: Booking lo canceló.
-       Con una red de seguridad. Un archivo vacío es indistinguible de "se
-       cancelaron todas", y cancelar de golpe la agenda entera por un archivo
-       mal servido es mucho peor que enterarse tarde de una cancelación. Así
-       que si no vino ni un evento y acá hay reservas vivas, no se cancela
-       nada y se deja dicho. */
+
+       Con una red de seguridad, pero fina. Un archivo vacío es ambiguo: puede
+       ser que se cancelaron todas —lo más común, porque una pieza sola pasa
+       la mitad del año sin nada vendido— o puede ser Booking sirviendo mal el
+       archivo por un rato. La primera versión no cancelaba NUNCA con el
+       archivo vacío, y eso rompía el caso normal: cancelabas en Booking y la
+       reserva se quedaba pegada acá para siempre.
+
+       Ahora se pide que venga vacío DOS revisiones seguidas. Un tropiezo
+       pasajero no alcanza; una cancelación de verdad sí, porque el archivo
+       sigue vacío en la pasada siguiente. La cuenta se guarda por calendario
+       y se borra apenas vuelve a llegar un evento. */
     var vivas = [];
     Object.keys(mias).forEach(function (u) {
       var x = mias[u];
@@ -4494,12 +4516,16 @@ function bookingSincronizar_() {
       if (ymd_(x.checkOut) < hoy) return;
       vivas.push(x);
     });
+    if (eventos.length) bookingVaciasBorrar_(rec.id);
     if (!vivas.length) return;
-    if (!eventos.length) {
-      res.avisos.push(pieza + ': el calendario vino vacío y acá hay ' + vivas.length +
-                      ' reserva(s) de Booking. No se canceló ninguna, por si acaso.');
+    if (!eventos.length && bookingVaciasSumar_(rec.id) < 2) {
+      res.avisos.push(pieza + ': el calendario vino vacío. Si sigue así en la ' +
+        'próxima revisión se cancela' + (vivas.length === 1 ? ' la reserva que hay'
+                                                            : 'n las ' + vivas.length + ' que hay') +
+        '. Aprieta "Revisar ahora" otra vez si quieres que sea al tiro.');
       return;
     }
+    bookingVaciasBorrar_(rec.id);
     vivas.forEach(function (x) {
       actualizar_('Reservas', 'id', x.id, { estado: 'cancelada' });
       res.canceladas++;
