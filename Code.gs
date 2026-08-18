@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-28';
+var VERSION = '2026-08-29';
 
 function version() { return VERSION; }
 
@@ -1139,6 +1139,7 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
       estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
       programa: String(r.programa || ''),
       programaNombre: String(r.programaNombre || ''),
+      refExterna: String(r.refExterna || ''),
       notas: r.notas || '', grupo: String(r.grupo || ''),
       pax: Number(r.pax) || 1, ninos: Number(r.ninos) || 0,
       extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
@@ -4410,7 +4411,7 @@ function sincronizarBooking() {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) {
     return { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
-             chocadas: 0, ecos: 0, revisadas: 0,
+             chocadas: 0, ecos: 0, revisadas: 0, numeradas: 0, sinCargar: 0,
              avisos: ['El sistema estaba ocupado; se reintenta solo.'] };
   }
   try {
@@ -4419,7 +4420,7 @@ function sincronizarBooking() {
     // Un disparador que revienta deja de correr y nadie se entera. Mejor
     // dejarlo escrito y que la pantalla lo muestre.
     var mal = { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
-                chocadas: 0, ecos: 0, revisadas: 0,
+                chocadas: 0, ecos: 0, revisadas: 0, numeradas: 0, sinCargar: 0,
                 avisos: ['Falló la sincronización: ' + (e.message || e)] };
     try {
       actualizarConfig_('bookingUltima', JSON.stringify(mal));
@@ -4432,11 +4433,12 @@ function sincronizarBooking() {
 
 function bookingSincronizar_() {
   var res = { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
-              chocadas: 0, ecos: 0, revisadas: 0, avisos: [] };
+              chocadas: 0, ecos: 0, revisadas: 0, numeradas: 0, sinCargar: 0, avisos: [] };
   var conUrl = recursos_().filter(function (r) { return !!bookingUrlDe_(r.id); });
   if (!conUrl.length) {
     res.avisos.push('Todavía no hay ninguna dirección de Booking pegada.');
     actualizarConfig_('bookingUltima', JSON.stringify(res));
+    bookingCorreoDeLaPasada_(res);
     return res;
   }
   var hoy = hoy_();
@@ -4537,8 +4539,25 @@ function bookingSincronizar_() {
     });
   });
 
+  bookingCorreoDeLaPasada_(res);
   actualizarConfig_('bookingUltima', JSON.stringify(res));
   return res;
+}
+
+/* El correo va pegado a la misma pasada: un solo disparador hace las dos
+   cosas. Envuelto, porque un problema leyendo el correo no puede llevarse por
+   delante la sincronización del calendario, que es la que de verdad importa. */
+function bookingCorreoDeLaPasada_(res) {
+  if (!bookingCorreoActivo_()) return;
+  try {
+    var c = bookingRevisarCorreo_();
+    res.numeradas = c.numeradas;
+    res.canceladas += c.canceladas;
+    res.sinCargar = c.sinCargar;
+    (c.avisos || []).forEach(function (a) { res.avisos.push(a); });
+  } catch (e) {
+    res.avisos.push('No se pudo revisar el correo: ' + (e.message || e));
+  }
 }
 
 /* ---------- Lo que usa la pantalla de Configuración ---------- */
@@ -4550,6 +4569,7 @@ function bookingEstado(token) {
   try { ultima = JSON.parse(String(config_('bookingUltima', '') || 'null')); } catch (e) {}
   return {
     activo: String(config_('bookingAuto', 'no')) === 'si',
+    correo: bookingCorreoActivo_(),
     cada: bookingCada_(),
     minutos: BOOKING_MINUTOS_,
     ultima: ultima,
@@ -4624,6 +4644,267 @@ function bookingAutomatico(token, encender, cada) {
   logCambio_(u.nombre, 'booking_auto',
              (encender ? 'encendido cada ' + n + ' min' : 'apagado'));
   return { activo: !!encender, cada: n };
+}
+
+
+/* ===================== EL CORREO DE BOOKING =====================
+
+   El calendario dice QUÉ pieza y QUÉ días. El correo dice el NÚMERO de la
+   reserva. Ninguno de los dos dice el nombre del huésped —Booking eso lo
+   guarda dentro del extranet y no lo publica en ninguna parte— así que lo
+   mejor que se puede hacer es dejar el número pegado a la reserva y, con él,
+   un enlace de un toque que abre esa reserva exacta en el extranet, donde sí
+   sale de quién es.
+
+   Cómo se cruzan. El asunto del correo trae las dos cosas que hacen falta:
+
+     Booking.com - ¡Nueva reserva! (6276704596, viernes, 21 de agosto de 2026)
+
+   el número y el día de llegada. Con esa fecha se busca la reserva que entró
+   por el calendario y todavía no tiene número. Si hay exactamente una, es esa.
+   Si hay dos que llegan el mismo día, no se adivina: se avisa y decide una
+   persona.
+
+   Y sirve para algo más. Si llega un correo de una reserva que acá no está
+   —porque esa habitación todavía no tiene su calendario pegado— el grupo se
+   entera igual. Es la única red que cubre las piezas sin conectar.
+
+   Se lee y nada más. El permiso que pide es de SOLO LECTURA: está declarado
+   en appsscript.json como gmail.readonly, así que aunque el código quisiera,
+   no puede mandar, borrar ni mover un correo. */
+
+var BOOKING_MESES_ = {
+  enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6, julio: 7,
+  agosto: 8, septiembre: 9, setiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7,
+  august: 8, september: 9, october: 10, november: 11, december: 12
+};
+
+/* "viernes, 21 de agosto de 2026" → "2026-08-21". Aguanta también el inglés,
+   por si la cuenta se cambia de idioma alguna vez. */
+function bookingFechaTexto_(t) {
+  var m = String(t || '').match(
+    /(\d{1,2})\s+(?:de\s+)?([A-Za-zÁÉÍÓÚÑáéíóúñ]+)\s+(?:de\s+)?(\d{4})/);
+  if (!m) return '';
+  var mes = BOOKING_MESES_[m[2].toLowerCase()];
+  if (!mes) return '';
+  return m[3] + '-' + ('0' + mes).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+}
+
+function bookingTipoCorreo_(asunto) {
+  var a = String(asunto || '').toLowerCase();
+  if (/cancelad|cancelled|canceled/.test(a)) return 'cancelada';
+  if (/modificad|modified|cambio en la reserva/.test(a)) return 'modificada';
+  if (/nueva reserva|new booking|new reservation/.test(a)) return 'nueva';
+  return '';                                   // promociones, avisos, facturas
+}
+
+/* Todo lo que se le puede sacar a un correo, sin abrirlo entero. */
+function bookingLeerCorreo_(asunto, cuerpo) {
+  var tipo = bookingTipoCorreo_(asunto);
+  if (!tipo) return null;
+  var num = (String(asunto).match(/\b(\d{9,10})\b/) || [])[1] || '';
+  if (!num && cuerpo) {
+    // En el cuerpo el número viaja dos veces: en el título de la confirmación
+    // y dentro del enlace al extranet. El del enlace es el más fiable.
+    num = (String(cuerpo).match(/res_id=(\d{9,10})/) || [])[1] ||
+          (String(cuerpo).match(/\b(\d{9,10})\b/) || [])[1] || '';
+  }
+  return { tipo: tipo, numero: num, fecha: bookingFechaTexto_(asunto) };
+}
+
+/* El identificador del establecimiento, para armar el enlace al extranet. No
+   se pregunta: viaja en cada correo y se aprende solo la primera vez. */
+function bookingHotelId_(cuerpo) {
+  var g = String(config_('bookingHotelId', '') || '');
+  if (g) return g;
+  var m = String(cuerpo || '').match(/hotel_id=(\d+)/);
+  if (m) { actualizarConfig_('bookingHotelId', m[1]); return m[1]; }
+  return '';
+}
+
+function bookingLinkReserva_(num) {
+  if (!num) return '';
+  var h = String(config_('bookingHotelId', '') || '');
+  return 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html' +
+         '?res_id=' + encodeURIComponent(num) +
+         (h ? '&hotel_id=' + encodeURIComponent(h) : '') + '&lang=es';
+}
+
+/* Los correos ya mirados. Se guardan sus identificadores para no volver a
+   procesarlos, y se recortan: con catorce días de búsqueda, doscientos
+   sobran. Va en la configuración y no en memoria porque cada pasada del
+   disparador es una ejecución nueva. */
+function bookingCorreosVistos_() {
+  try {
+    var l = JSON.parse(String(config_('bookingCorreosVistos', '') || '[]'));
+    var m = {};
+    l.forEach(function (x) { m[x] = 1; });
+    return { mapa: m, lista: l };
+  } catch (e) { return { mapa: {}, lista: [] }; }
+}
+
+function bookingCorreosGuardar_(v) {
+  var l = v.lista;
+  if (l.length > 200) l = l.slice(l.length - 200);
+  actualizarConfig_('bookingCorreosVistos', JSON.stringify(l));
+}
+
+/* ---------- La pasada por el correo ---------- */
+function bookingRevisarCorreo_() {
+  var res = { mirados: 0, numeradas: 0, canceladas: 0, sinCargar: 0, dudosas: 0, avisos: [] };
+  if (typeof GmailApp === 'undefined') {
+    res.avisos.push('Este script todavía no tiene permiso para leer el correo.');
+    return res;
+  }
+
+  var hilos;
+  try {
+    hilos = GmailApp.search('from:booking.com newer_than:14d', 0, 40);
+  } catch (e) {
+    res.avisos.push('No se pudo leer el correo: ' + (e.message || e));
+    return res;
+  }
+
+  var vistos = bookingCorreosVistos_();
+  var ahora = new Date().getTime();
+
+  hilos.forEach(function (h) {
+    h.getMessages().forEach(function (m) {
+      var id;
+      try { id = m.getId(); } catch (e) { return; }
+      if (vistos.mapa[id]) return;
+
+      var asunto = '', cuerpo = '';
+      try { asunto = m.getSubject() || ''; } catch (e) {}
+      var datos = bookingLeerCorreo_(asunto, '');
+      if (!datos) { vistos.mapa[id] = 1; vistos.lista.push(id); return; }
+
+      // El cuerpo solo se pide si hace falta: es lo caro de leer un correo.
+      if (!datos.numero || !config_('bookingHotelId', '')) {
+        try { cuerpo = m.getPlainBody() || ''; } catch (e) {}
+        datos = bookingLeerCorreo_(asunto, cuerpo);
+        bookingHotelId_(cuerpo);
+      }
+      res.mirados++;
+      if (!datos.numero) { vistos.mapa[id] = 1; vistos.lista.push(id); return; }
+
+      var edad = 0;
+      try { edad = ahora - m.getDate().getTime(); } catch (e) {}
+
+      if (bookingCruzarCorreo_(datos, edad, res)) {
+        vistos.mapa[id] = 1;
+        vistos.lista.push(id);
+      }
+      // Si devuelve false, el correo queda SIN marcar a propósito: es una
+      // reserva recién caída que el calendario todavía no alcanzó a traer, y
+      // se vuelve a intentar en la pasada siguiente.
+    });
+  });
+
+  bookingCorreosGuardar_(vistos);
+  return res;
+}
+
+/* Cruza UN correo con lo que hay acá. Devuelve true si el correo ya se puede
+   dar por procesado, false si conviene reintentarlo más tarde. */
+function bookingCruzarCorreo_(datos, edad, res) {
+  var todas = leer_('Reservas');
+  var conNumero = todas.filter(function (x) {
+    return String(x.refExterna || '') === datos.numero;
+  })[0];
+
+  if (conNumero) {
+    if (datos.tipo === 'cancelada' &&
+        conNumero.estado !== 'cancelada' && conNumero.estado !== 'no_show') {
+      // El correo de cancelación llega al instante; el calendario se demora en
+      // vaciarse y encima necesita dos pasadas. Con el número en la mano no
+      // hay ambigüedad ninguna, así que se cancela al tiro.
+      actualizar_('Reservas', 'id', conNumero.id, { estado: 'cancelada' });
+      res.canceladas++;
+      avisarBookingCambio_('❌ <b>Booking canceló una reserva</b>', [
+        '👤 <b>' + escTg_(conNumero.huesped) + '</b>',
+        '🛏 ' + escTg_(nombreRecurso_(conNumero.recurso)),
+        '📅 ' + fechaTg_(conNumero.checkIn) + ' → ' + fechaTg_(conNumero.checkOut),
+        '🔖 N° ' + escTg_(datos.numero) + '  ·  lo dijo el correo'
+      ]);
+    }
+    return true;
+  }
+
+  if (datos.tipo === 'cancelada') return true;   // nunca llegó a estar acá
+  if (!datos.fecha) return true;                 // sin fecha no hay con qué cruzar
+
+  var candidatas = todas.filter(function (x) {
+    return String(x.canal || '') === 'booking' &&
+      !String(x.refExterna || '') &&
+      x.estado !== 'cancelada' && x.estado !== 'no_show' &&
+      ymd_(x.checkIn) === datos.fecha;
+  });
+
+  if (candidatas.length === 1) {
+    actualizar_('Reservas', 'id', candidatas[0].id, { refExterna: datos.numero });
+    res.numeradas++;
+    var link = bookingLinkReserva_(datos.numero);
+    avisarBookingCambio_('🔖 <b>Reserva de Booking N° ' + escTg_(datos.numero) + '</b>', [
+      '🛏 ' + escTg_(nombreRecurso_(candidatas[0].recurso)),
+      '📅 ' + fechaTg_(candidatas[0].checkIn) + ' → ' + fechaTg_(candidatas[0].checkOut),
+      '', 'Booking no manda el nombre del huésped en ninguna parte. Acá se ve:',
+      link
+    ]);
+    return true;
+  }
+
+  if (candidatas.length > 1) {
+    res.dudosas++;
+    res.avisos.push('Llegaron ' + candidatas.length + ' reservas de Booking el ' +
+      datos.fecha + '. No se puede saber cuál es la N° ' + datos.numero +
+      ' sin mirarlo, así que ninguna quedó numerada.');
+    return true;
+  }
+
+  /* No hay ninguna. Dos motivos posibles, y se distinguen por el reloj:
+     - Recién cayó y el calendario todavía no la trae: se deja sin marcar y se
+       reintenta. El calendario de Booking tarda unos minutos en incluirla.
+     - Ya pasó media hora: esa habitación no tiene su calendario pegado, y esta
+       es la única forma de enterarse. Se avisa. */
+  if (edad < 30 * 60 * 1000) return false;
+
+  res.sinCargar++;
+  res.avisos.push('Cayó una reserva en Booking (N° ' + datos.numero + ', llega el ' +
+    datos.fecha + ') que no está acá. Lo más probable es que esa habitación ' +
+    'todavía no tenga su calendario pegado.');
+  avisarBookingCambio_('📨 <b>Reserva de Booking sin cargar</b>', [
+    '🔖 N° ' + escTg_(datos.numero),
+    '📅 llega el ' + fechaTg_(datos.fecha),
+    '', 'No apareció sola en el calendario. Puede que esa pieza no tenga ' +
+        'pegada su dirección de Booking.',
+    bookingLinkReserva_(datos.numero)
+  ]);
+  return true;
+}
+
+function bookingCorreoActivo_() {
+  return String(config_('bookingCorreo', 'no')) === 'si';
+}
+
+function bookingCorreoEncender(token, encender) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  actualizarConfig_('bookingCorreo', encender ? 'si' : 'no');
+  logCambio_(u.nombre, 'booking_correo', encender ? 'encendido' : 'apagado');
+  return { activo: !!encender };
+}
+
+function bookingCorreoAhora(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var r = bookingRevisarCorreo_();
+  actualizarConfig_('bookingCorreoUltima', JSON.stringify(
+    { cuando: ahora_(), mirados: r.mirados, numeradas: r.numeradas,
+      canceladas: r.canceladas, sinCargar: r.sinCargar, dudosas: r.dudosas,
+      avisos: r.avisos }));
+  return r;
 }
 
 function linkFicha(token, idReserva) {

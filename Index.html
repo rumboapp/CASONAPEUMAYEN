@@ -835,6 +835,39 @@
           del todo.
         </p>
         <div class="err hide" id="impErr" style="margin-top:10px"></div>
+
+        <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
+
+        <div class="ctaTit">3 · El número de reserva, desde el correo</div>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">
+          Booking <b>no manda el nombre del huésped</b> en ninguna parte: ni en el
+          calendario ni en el correo. Solo vive dentro del extranet. Lo que el correo
+          sí trae es el <b>número de la reserva</b>, y con ese número se arma un enlace
+          que abre esa reserva exacta allá, donde sí sale de quién es.
+        </p>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">
+          Encendiendo esto, la app lee los correos de Booking en la misma pasada y le
+          pega el número a la reserva que corresponda. De paso hace dos cosas más:
+          <b>cancela al tiro</b> cuando llega el correo de cancelación —sin esperar las
+          dos revisiones del calendario— y <b>avisa si cayó una reserva que no está
+          acá</b>, que es la única forma de enterarse de una habitación a la que se le
+          olvidó pegar su calendario.
+        </p>
+
+        <div class="docFila" style="margin-top:12px;gap:10px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="impCorreo" style="width:auto;flex:0 0 auto;margin:0">
+            <span style="font-size:13px">Leer los correos de Booking</span>
+          </label>
+          <button class="btn gh sm" id="impCorreoAhora" style="margin-left:auto">Leer ahora</button>
+        </div>
+
+        <p class="muted" style="font-size:12px;margin-top:10px">
+          <b>El permiso es de solo lectura.</b> Está declarado así en el proyecto
+          (<code>gmail.readonly</code>), o sea que aunque el código quisiera, no puede
+          mandar, borrar ni mover un correo tuyo. La primera vez Google te va a pedir
+          que lo autorices de nuevo, porque el permiso es nuevo.
+        </p>
       </div>
 
       <!-- ---------- La planilla ----------
@@ -958,6 +991,10 @@
   <div class="mo">
     <header><h3 id="rTit">Nueva reserva</h3><button class="x" data-cerrar="mRes">×</button></header>
     <div class="body">
+      <a id="rBooking" class="hide" target="_blank" rel="noopener"
+         style="display:flex;align-items:center;gap:8px;font-size:12.5px;
+                background:var(--ac-soft);border:1px solid var(--line);border-radius:8px;
+                padding:9px 12px;margin-bottom:12px;text-decoration:none;color:var(--ac)"></a>
       <div id="rPaso" class="hide" style="display:flex;align-items:center;gap:10px;
            background:var(--bg);border:1px solid var(--line);border-radius:8px;
            padding:10px 12px;margin-bottom:14px;flex-wrap:wrap">
@@ -1591,7 +1628,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-28';
+var VERSION_ESPERADA = '2026-08-29';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -2704,6 +2741,7 @@ function nuevaReserva(rec, entrada, salida){
   $('rPax').value='';   // lo rellena ajustarPax() según lo que quepa
   $('rNinos').value=0;
   $('rExtranjero').checked=false; pintarMoneda();
+  pintarLinkBooking(null);
   PROG_ELEGIDO='';
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
@@ -2747,6 +2785,20 @@ $('rMasDatos').onclick=function(){ plegarExtra($('rExtra').classList.contains('h
   });
 });
 
+/* El enlace al extranet. Booking no manda el nombre del huésped en ninguna
+   parte, así que una reserva que entró sola se llama "Booking" hasta que
+   alguien la mira. Con el número que sacó el correo, esto lleva de un toque a
+   la reserva exacta en Booking, que es el único lugar donde el nombre existe. */
+function pintarLinkBooking(r){
+  var a=$('rBooking');
+  var num=r && r.refExterna ? String(r.refExterna) : '';
+  if(!num){ a.classList.add('hide'); a.removeAttribute('href'); return; }
+  a.href='https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html'+
+         '?res_id='+encodeURIComponent(num)+'&lang=es';
+  a.textContent='Reserva de Booking N° '+num+'  ·  abrir en el extranet para ver el nombre';
+  a.classList.remove('hide');
+}
+
 function abrirReserva(r){
   RES=r;
   RANGO={ in:r.checkIn, out:r.checkOut };
@@ -2755,6 +2807,7 @@ function abrirReserva(r){
   $('rNom').value=r.huesped; $('rTel').value=String(r.telefono||'');
   $('rMail').value=r.email||''; $('rCan').value=r.canal||'whatsapp';
   $('rEst').value=r.estado;
+  pintarLinkBooking(r);
   TOTAL_TOCADO=false;
   $('rVerNoches').classList.remove('hide');
   $('rTotNota').textContent='Suma de '+plural(noches(r.checkIn,r.checkOut),'noche','noches');
@@ -4537,6 +4590,7 @@ function pintarBookingEntrada(d){
   });
 
   $('impAuto').checked=!!d.activo;
+  $('impCorreo').checked=!!d.correo;
   var sel=$('impCada'); sel.innerHTML='';
   (d.minutos||[5]).forEach(function(m){
     var o=document.createElement('option');
@@ -4565,6 +4619,8 @@ function pintarUltimaBooking(u){
   // parezca que la revisión no hizo nada, pero no es novedad de nadie.
   if(u.ecos)       partes.push(u.ecos+(u.ecos===1?' bloqueo nuestro de vuelta'
                                                  :' bloqueos nuestros de vuelta'));
+  if(u.numeradas)  partes.push(u.numeradas+' con su número de Booking');
+  if(u.sinCargar)  partes.push(u.sinCargar+' que llegó por correo y no está acá');
   // Todo por textContent y no por innerHTML: acá adentro viajan mensajes de
   // error de Booking y nombres de habitación, que son texto ajeno.
   var t=document.createElement('div');
@@ -4591,6 +4647,31 @@ $('impAuto').onchange=guardarAutoBooking;
 // Cambiar el intervalo con la revisión apagada solo lo deja anotado; el
 // disparador se crea recién al encenderla.
 $('impCada').onchange=guardarAutoBooking;
+
+$('impCorreo').onchange=function(){
+  var enc=$('impCorreo').checked;
+  srv('bookingCorreoEncender')(enc)
+    .then(function(){ toast(enc ? 'Se van a leer los correos de Booking'
+                                : 'Ya no se leen los correos'); })
+    .catch(function(e){ $('impCorreo').checked=!enc; fallo(e); });
+};
+
+$('impCorreoAhora').onclick=function(){
+  ocupado('impCorreoAhora', srv('bookingCorreoAhora')())
+    .then(function(c){
+      var partes=[];
+      if(c.numeradas)  partes.push(c.numeradas+' con su número');
+      if(c.canceladas) partes.push(c.canceladas+' cancelada'+(c.canceladas===1?'':'s'));
+      if(c.sinCargar)  partes.push(c.sinCargar+' que no están acá');
+      toast(partes.length ? partes.join(', ')
+                          : 'Correos revisados, sin novedad');
+      if(c.numeradas||c.canceladas) recargarCal();
+      if((c.avisos||[]).length){
+        $('impErr').textContent=c.avisos.join(' · ');
+        $('impErr').classList.remove('hide');
+      } else { $('impErr').classList.add('hide'); }
+    }).catch(fallo);
+};
 
 $('impAhora').onclick=function(){
   ocupado('impAhora', srv('bookingSincronizarAhora')())

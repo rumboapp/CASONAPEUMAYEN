@@ -880,6 +880,52 @@ Lo que hay que saber:
 - **No es instantáneo.** Entre que Booking vende y esto lo ve pasan hasta
   quince minutos.
 
+### 3. El número de reserva, desde el correo
+
+Ni el calendario ni el correo traen **el nombre del huésped**. Booking eso no
+lo publica en ninguna parte: solo vive dentro del extranet. Lo que el correo sí
+trae, en el asunto, son las dos cosas que permiten cruzarlo con el calendario:
+
+```
+Booking.com - ¡Nueva reserva! (6276704596, viernes, 21 de agosto de 2026)
+                                ↑ el número        ↑ el día de llegada
+```
+
+Con esa fecha se busca la reserva que entró por el calendario y todavía no
+tiene número. Si hay exactamente una, es esa, y le queda escrito el número. Con
+el número, la reserva muestra un **enlace de un toque** que abre esa reserva
+exacta en el extranet — el único lugar donde el nombre existe. El identificador
+del establecimiento que ese enlace necesita se aprende solo del primer correo,
+no hay que configurarlo.
+
+Se enciende en *Configuración → Booking → 3*, y va pegado a la misma pasada del
+calendario: un solo disparador hace las dos cosas.
+
+Hace tres cosas más que el calendario no puede:
+
+- **Cancela al instante.** El correo de cancelación trae el número, así que no
+  hay ninguna ambigüedad que resolver: se cancela sin esperar las dos
+  revisiones vacías del calendario.
+- **Avisa de las reservas que no están acá.** Si llega un correo de una reserva
+  que no aparece —porque a esa habitación se le olvidó pegar su calendario— el
+  grupo se entera. Es la única red que cubre las piezas sin conectar. Espera
+  media hora antes de avisar: el calendario de Booking tarda unos minutos en
+  incluir una reserva recién caída, y hasta entonces el correo se deja sin
+  marcar y se reintenta.
+- **No adivina.** Si llegan dos reservas de Booking el mismo día, no se le pega
+  el número a ninguna: se avisa y lo mira una persona.
+
+**El permiso es de solo lectura.** Está declarado en `appsscript.json` como
+`gmail.readonly`, así que aunque el código quisiera, no puede mandar, borrar ni
+mover un correo. Ese archivo declara ahora todos los permisos de forma
+explícita; sin esa lista, usar `GmailApp` habría pedido acceso **completo** al
+buzón. Si alguna vez algo deja de funcionar después de tocar esa lista, borrar
+el bloque `oauthScopes` y volver a autorizar deja el proyecto como estaba.
+
+Y si el correo falla —sin permiso, sin red, cuota agotada— el calendario sigue
+andando igual: la lectura del correo va envuelta y su error se anota, no se
+propaga.
+
 ## Cierre de día
 
 Es lo que en un hotel grande se llama *night audit*, y es el corazón de que
