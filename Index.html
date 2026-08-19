@@ -76,7 +76,34 @@
 
   /* ---------- Barra del calendario ---------- */
   .cbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
-  .cbar .rng{font-weight:600;font-size:14px;min-width:190px}
+  /* El rango es un botón: apretarlo abre el salto a cualquier mes. Antes era
+     un rótulo, y llegar a enero era correr las flechas semana por semana. */
+  .cbar .rng{font-weight:600;font-size:14px;min-width:190px;text-align:left;
+    background:none;border:1px solid transparent;border-radius:6px;padding:5px 8px;
+    color:var(--tx);cursor:pointer;display:flex;align-items:center;gap:7px}
+  .cbar .rng:hover{border-color:var(--line);background:var(--surface)}
+  .cbar .rng::after{content:'';width:5px;height:5px;flex:0 0 auto;
+    border-right:2px solid var(--tx3);border-bottom:2px solid var(--tx3);
+    transform:rotate(45deg);margin-top:-3px}
+  .mespanel{position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:280px;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:12px;box-shadow:0 8px 28px rgba(0,0,0,.14)}
+  .mespanel-cab{display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:10px;font-size:14px}
+  .mesgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+  .mesgrid button{padding:9px 4px;border:1px solid var(--line);border-radius:7px;
+    background:var(--surface);font-size:12.5px;color:var(--tx);position:relative}
+  .mesgrid button:hover{background:var(--bg)}
+  .mesgrid button.aqui{border-color:var(--ac);color:var(--ac);font-weight:600}
+  .mesgrid button.eshoy{box-shadow:inset 0 0 0 1px var(--line)}
+  /* El puntito dice que ese mes tiene reservas. Es la mitad de la gracia:
+     se abre el selector y se ve de una dónde hay algo. */
+  .mesgrid button .pt{display:block;font-size:10px;color:var(--tx3);margin-top:2px}
+  .mesgrid button.aqui .pt{color:var(--ac)}
+  .mesgrid button.vacio{color:var(--tx3)}
+  .mespanel-pie{display:flex;align-items:center;gap:8px;margin-top:10px;
+    padding-top:10px;border-top:1px solid var(--line)}
+  .mespanel-pie input{flex:1;font-size:12.5px;padding:6px 8px}
   .nav-ico{width:30px;height:30px;border:1px solid var(--line);border-radius:6px;
     background:var(--surface);display:grid;place-items:center;color:var(--tx2)}
   .nav-ico:hover{background:var(--line2)}
@@ -408,7 +435,9 @@
     .cbar{gap:6px;display:grid;grid-template-columns:auto auto 1fr auto;
       grid-template-areas:"prev next rango dias" "nueva nueva grupo grupo";
       align-items:center}
-    .cbar .rng{grid-area:rango;min-width:0;font-size:13px;text-align:center}
+    .cbar .rng{min-width:0;font-size:13px;justify-content:center}
+    #cSalto{grid-area:rango;min-width:0}
+    .mespanel{width:min(300px,calc(100vw - 32px));left:50%;transform:translateX(-50%)}
     #cPrev{grid-area:prev} #cNext{grid-area:next}
     #cHoy{display:none}            /* el rango ya parte en hoy */
     #cDias{grid-area:dias}
@@ -573,7 +602,21 @@
         <button class="btn gh sm" id="cHoy">Hoy</button>
         <button class="btn sm" id="cNueva">+ Nueva reserva</button>
         <button class="btn gh sm" id="cGrupo">+ Reserva de grupo</button>
-        <div class="rng" id="cRng"></div>
+        <div class="menu" id="cSalto">
+          <button class="rng" id="cRng" type="button"></button>
+          <div class="mespanel hide" id="cMeses">
+            <div class="mespanel-cab">
+              <button class="nav-ico" id="cAnioAnt" type="button">‹</button>
+              <b id="cAnio"></b>
+              <button class="nav-ico" id="cAnioSig" type="button">›</button>
+            </div>
+            <div class="mesgrid" id="cMesGrid"></div>
+            <div class="mespanel-pie">
+              <button class="btn gh sm" id="cIrHoy" type="button">Hoy</button>
+              <input type="date" id="cFechaExacta" aria-label="Ir a una fecha exacta">
+            </div>
+          </div>
+        </div>
         <!-- Las opciones las arma opcionesDias() según lo que quepa en pantalla. -->
         <select id="cDias" style="width:auto"><option value="14">14 días</option></select>
         <div class="hint">Haz clic y arrastra sobre los días libres para crear una reserva</div>
@@ -1683,7 +1726,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-01';
+var VERSION_ESPERADA = '2026-09-02';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -2024,6 +2067,87 @@ function ver(id){
 $('cPrev').onclick=function(){ CAL.inicio=mas(CAL.inicio,-7); cargarCal(); };
 $('cNext').onclick=function(){ CAL.inicio=mas(CAL.inicio, 7); cargarCal(); };
 $('cHoy').onclick =function(){ CAL.inicio=ymd(new Date()); cargarCal(); };
+
+/* ---------- Saltar a cualquier mes ----------
+   Antes el rango era un rótulo y llegar a enero era apretar la flecha semana
+   por semana. Ahora es un botón: se abre, se elige el mes y listo.
+
+   El puntito con la cuenta es la otra mitad. Sin él el selector solo sirve si
+   ya sabes adónde vas; con él se abre y se ve de una en qué meses hay algo,
+   que es la pregunta de verdad cuando alguien pide fecha para el verano. */
+var SALTO = { anio:null, cuentas:{} };
+
+function abrirSalto(abrir){
+  var p=$('cMeses');
+  var mostrar = (abrir===undefined) ? p.classList.contains('hide') : abrir;
+  p.classList.toggle('hide', !mostrar);
+  if(!mostrar) return;
+  SALTO.anio = Number(CAL.inicio.slice(0,4));
+  $('cFechaExacta').value = CAL.inicio;
+  pintarSalto();
+}
+
+function pintarSalto(){
+  $('cAnio').textContent = SALTO.anio;
+  var grid=$('cMesGrid'); grid.innerHTML='';
+  var cuentas = SALTO.cuentas[SALTO.anio] || null;
+  var hoyY = new Date().getFullYear(), hoyM = new Date().getMonth();
+  var verY = Number(CAL.inicio.slice(0,4)), verM = Number(CAL.inicio.slice(5,7))-1;
+
+  MESES.forEach(function(nombre, i){
+    var b=document.createElement('button');
+    b.type='button';
+    b.appendChild(document.createTextNode(nombre.slice(0,3)));
+    var pt=document.createElement('span');
+    pt.className='pt';
+    if(cuentas){
+      var n=cuentas[i]||0;
+      pt.textContent = n ? '● '+n : '·';
+      if(!n) b.classList.add('vacio');
+    } else { pt.textContent='\u00a0'; }
+    b.appendChild(pt);
+    if(SALTO.anio===verY && i===verM) b.classList.add('aqui');
+    if(SALTO.anio===hoyY && i===hoyM) b.classList.add('eshoy');
+    b.onclick=function(){ irAlMes(SALTO.anio, i); };
+    grid.appendChild(b);
+  });
+
+  // Las cuentas se piden una vez por año y se guardan: abrir y cerrar el
+  // selector no puede costar un viaje al servidor cada vez.
+  if(!cuentas){
+    var anio=SALTO.anio;
+    srv('mesesConReservas')(anio).then(function(d){
+      SALTO.cuentas[d.anio]=d.meses;
+      if(SALTO.anio===d.anio && !$('cMeses').classList.contains('hide')) pintarSalto();
+    }).catch(function(){ /* sin las cuentas el selector sirve igual */ });
+  }
+}
+
+/* Al mes elegido se entra por el día 1, salvo que sea el mes en curso: ahí lo
+   que se quiere ver es hoy, no el principio del mes que ya pasó. */
+function irAlMes(anio, mes){
+  var hoyD=new Date();
+  CAL.inicio = (anio===hoyD.getFullYear() && mes===hoyD.getMonth())
+    ? ymd(hoyD)
+    : anio+'-'+('0'+(mes+1)).slice(-2)+'-01';
+  abrirSalto(false);
+  cargarCal();
+}
+
+$('cRng').onclick=function(e){ e.stopPropagation(); abrirSalto(); };
+$('cAnioAnt').onclick=function(){ SALTO.anio--; pintarSalto(); };
+$('cAnioSig').onclick=function(){ SALTO.anio++; pintarSalto(); };
+$('cIrHoy').onclick=function(){ CAL.inicio=ymd(new Date()); abrirSalto(false); cargarCal(); };
+$('cFechaExacta').onchange=function(){
+  var v=$('cFechaExacta').value;
+  if(!v) return;
+  CAL.inicio=v; abrirSalto(false); cargarCal();
+};
+$('cMeses').onclick=function(e){ e.stopPropagation(); };
+document.addEventListener('click', function(){ abrirSalto(false); });
+document.addEventListener('keydown', function(e){
+  if(e.key==='Escape') abrirSalto(false);
+});
 $('cDias').onchange=function(){ CAL.dias=+this.value; cargarCal(); };
 
 /* Apps Script falla de vez en cuando al despertar. En vez de dejar el
@@ -2239,7 +2363,11 @@ function pintarCal(animar){
   // sola vez: así el navegador calcula la disposición una vez y no cientos.
   var frag=document.createDocumentFragment();
   var dias=[]; for(var i=0;i<N;i++) dias.push(mas(CAL.inicio,i));
-  $('cRng').textContent = corto(dias[0])+' – '+corto(dias[N-1]);
+  // El año solo se escribe cuando NO es el de hoy. Mirando el verano que
+  // viene, "18 ene – 31 ene" a secas deja la duda de qué enero es.
+  var anioVista = dias[0].slice(0,4), anioHoy = String(new Date().getFullYear());
+  $('cRng').textContent = corto(dias[0])+' – '+corto(dias[N-1])+
+    (anioVista===anioHoy && dias[N-1].slice(0,4)===anioHoy ? '' : ' '+dias[N-1].slice(0,4));
 
   // En el teléfono los días se reparten el ancho disponible: la grilla cabe
   // entera y así los nombres nunca se van de la pantalla. En el computador

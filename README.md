@@ -1296,6 +1296,31 @@ categoría, cuántas unidades, desde qué precio y cuáles son.
 Con casi una sola unidad por variante, esa tabla también deja ver dónde está
 el riesgo real de sobreventa: las categorías con **una** unidad.
 
+## Saltar a un mes lejano
+
+El rango de fechas del calendario **es un botón**. Apretarlo abre los doce
+meses del año, con las flechas de año al lado y, abajo, *Hoy* y un campo para
+una fecha exacta. Antes era un rótulo, y llegar a enero significaba apretar la
+flecha semana por semana.
+
+Cada mes muestra **cuántas reservas tiene**. Esa es la mitad de la gracia: sin
+el número el selector solo sirve si ya sabes adónde vas; con él se abre y se ve
+de una que enero tiene tres y febrero ninguna, que es la pregunta de verdad
+cuando alguien pide fecha para el verano. Los meses vacíos quedan en gris, pero
+se puede entrar igual — ahí es justamente donde hay que vender.
+
+Detalles que importan:
+
+- Al mes elegido se entra por el **día 1**, salvo que sea el mes en curso: ahí
+  lo que se quiere ver es hoy, no el principio de un mes que ya pasó.
+- El rango escribe el **año** solo cuando no es el actual. Mirando el verano que
+  viene, *"18 ene – 31 ene"* a secas deja la duda de qué enero es.
+- Las cuentas se piden **una vez por año** y quedan guardadas: abrir y cerrar el
+  selector no puede costar un viaje al servidor cada vez. Si fallan, el selector
+  sirve igual, solo que sin los números.
+- Una reserva **a caballo entre dos meses cuenta en los dos**, y la última noche
+  es la anterior al check-out: quien sale el 1 de junio no ocupa junio.
+
 ## Cómo se cuentan las noches
 
 En el **selector de fechas** eliges entrada y salida: del 7 al 9 son 2 noches.

@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-01';
+var VERSION = '2026-09-02';
 
 function version() { return VERSION; }
 
@@ -1188,6 +1188,38 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
    total distinto al que suman las noches, lo reparte entre ellas. Así el
    número que se ve en la reserva y el detalle noche a noche nunca se
    contradicen. */
+/* ---------- En qué meses hay algo ----------
+   Para el selector de mes del calendario. Sin esto, buscar una reserva de
+   enero es correr las flechas semana por semana hasta topársela; con esto se
+   abre el selector y se ve de una que enero tiene tres y febrero ninguna.
+
+   Se cuentan RESERVAS que tocan cada mes, no noches: lo que se quiere saber
+   es "¿hay algo acá?", y una estadía larga no debe pesar más que una corta.
+   Una reserva a caballo entre dos meses cuenta en los dos. */
+function mesesConReservas(token, anio) {
+  sesion_(token);
+  var a = Number(anio) || Number(hoy_().slice(0, 4));
+  var cuenta = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  leer_('Reservas').forEach(function (r) {
+    if (r.estado === 'cancelada' || r.estado === 'no_show') return;
+    var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
+    if (!ci || !co || co <= ci) return;
+    // La última noche es la anterior al check-out: una reserva que sale el 1
+    // de febrero no ocupa febrero.
+    var ultima = ymd_(sumarDias_(co, -1));
+    // Se recorre por meses y no por días: una estadía de un mes no puede
+    // costar treinta vueltas cuando bastan dos.
+    var y = Number(ci.slice(0, 4)), m = Number(ci.slice(5, 7));
+    var yF = Number(ultima.slice(0, 4)), mF = Number(ultima.slice(5, 7));
+    while (y < yF || (y === yF && m <= mF)) {
+      if (y === a) cuenta[m - 1]++;
+      m++;
+      if (m > 12) { m = 1; y++; }
+    }
+  });
+  return { anio: a, meses: cuenta };
+}
+
 function ajustarPlan_(reserva, totalPedido, quien) {
   var r = sincronizarNoches_(reserva, quien);
   if (totalPedido === null || totalPedido === r.total) return r.total;
