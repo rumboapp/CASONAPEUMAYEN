@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-31';
+var VERSION = '2026-09-01';
 
 function version() { return VERSION; }
 
@@ -2996,7 +2996,12 @@ function enviarCierre_(dia, para) {
 
 function panelHoy(token, fecha) {
   sesion_(token);
-  var dia = ymd_(fecha) || hoy_();
+  return panelHoy_(ymd_(fecha) || hoy_());
+}
+
+/* El mismo panel, sin sesión: lo necesita el resumen que sale solo a las ocho
+   de la mañana, que no lo pide nadie desde una pantalla. */
+function panelHoy_(dia) {
   var recs = recursos_();
   var nombre = function (id) {
     var r = recs.filter(function (x) { return x.id === id; })[0];
@@ -3036,6 +3041,183 @@ function panelHoy(token, fecha) {
       return r.programa && ymd_(r.checkIn) >= dia && r.estado !== 'checkout';
     }).map(mapear)
   };
+}
+
+
+/* ===================== EL PARTE DE LA MAÑANA =====================
+
+   Un mensaje al grupo temprano con lo del día: quién llega, quién se va y
+   quién se queda. La idea es que a las ocho de la mañana todo el mundo sepa
+   cómo viene el día sin abrir la app ni preguntarle a nadie.
+
+   Qué lleva y qué no. Las llegadas y las salidas van con detalle, porque son
+   lo que hay que hacer hoy. Los que se quedan van en una sola línea: saber
+   que están alcanza, y una lista larga hace que nadie lea el mensaje entero.
+
+   Lo que de verdad justifica el mensaje son las marcas de atención: una ficha
+   sin firmar de alguien que llega hoy, y sobre todo un saldo pendiente de
+   alguien que se va hoy. Enterarse de eso a las ocho es a tiempo; enterarse
+   cuando el auto ya salió, no.
+
+   Si no pasa nada y no hay nadie alojado, no se manda nada. Un grupo que
+   recibe "hoy no hay novedades" todos los días termina con el bot silenciado,
+   y ahí se pierden también los avisos que sí importan. */
+
+var DIAS_LARGO_ = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+var MESES_LARGO_ = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
+                    'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+
+function fechaLargaTg_(ymd) {
+  var f = ymd_(ymd);
+  if (!f) return String(ymd || '');
+  var d = new Date(f + 'T12:00');
+  if (isNaN(d.getTime())) return f;
+  return DIAS_LARGO_[d.getDay()] + ' ' + d.getDate() + ' de ' + MESES_LARGO_[d.getMonth()];
+}
+
+/* El saldo de una reserva, en la moneda en que se le va a cobrar a ese
+   huésped. Al extranjero no se le habla en pesos ni acá. */
+function saldoTg_(r) {
+  var pesos = Number(r.saldo) || 0;
+  if (pesos <= 0) return '';
+  return r.extranjero
+    ? usd_(pesos, Number(r.dolar) || dolarHoy_().valor)
+    : plataTxt_(pesos);
+}
+
+/* Una lista larga rompe el mensaje —Telegram corta en 4.096 letras— y encima
+   nadie la lee. Se muestran las primeras y se dice cuántas quedaron. */
+function recorteTg_(lista, tope) {
+  if (lista.length <= tope) return { muestra: lista, resto: 0 };
+  return { muestra: lista.slice(0, tope), resto: lista.length - tope };
+}
+
+function armarResumenDia_(dia) {
+  var p = panelHoy_(dia);
+  var hayGente = p.llegadas.length || p.salidas.length || p.enCasa.length;
+  if (!hayGente) return '';
+
+  var lineas = ['☀️ <b>' + escTg_(fechaLargaTg_(dia)) + '</b>'];
+
+  if (p.llegadas.length) {
+    lineas.push('');
+    lineas.push('🔑 <b>Llegan ' + p.llegadas.length + '</b>');
+    var lleg = recorteTg_(p.llegadas, 12);
+    lleg.muestra.forEach(function (r) {
+      var n = noches_(r.checkIn, r.checkOut);
+      lineas.push('• <b>' + escTg_(r.huesped) + '</b> — ' + escTg_(r.recurso));
+      var detalle = [plural_(n, 'noche', 'noches')];
+      if (r.programa) detalle.push('🎁 ' + r.programa);
+      var s = saldoTg_(r);
+      if (s) detalle.push('quedan ' + s + ' por cobrar');
+      lineas.push('   ' + escTg_(detalle.join('  ·  ')));
+      if (!r.firmada) lineas.push('   ⚠️ ficha sin firmar');
+    });
+    if (lleg.resto) lineas.push('   …y ' + lleg.resto + ' más');
+  }
+
+  if (p.salidas.length) {
+    lineas.push('');
+    lineas.push('🚪 <b>Se van ' + p.salidas.length + '</b>');
+    var sal = recorteTg_(p.salidas, 12);
+    sal.muestra.forEach(function (r) {
+      lineas.push('• <b>' + escTg_(r.huesped) + '</b> — ' + escTg_(r.recurso));
+      // Lo más importante del mensaje entero. Un saldo pendiente a las ocho de
+      // la mañana se cobra; el mismo saldo cuando el auto ya salió, no.
+      var s = saldoTg_(r);
+      if (s) lineas.push('   ⚠️ <b>quedan ' + escTg_(s) + ' por cobrar</b>');
+    });
+    if (sal.resto) lineas.push('   …y ' + sal.resto + ' más');
+    lineas.push('🧹 Después habrá que limpiar: ' +
+      escTg_(sal.muestra.map(function (r) { return r.recurso; }).join(', ')) +
+      (sal.resto ? ' y ' + sal.resto + ' más' : ''));
+  }
+
+  // Los que siguen alojados: una sola línea. Saber que están alcanza, y una
+  // lista larga hace que nadie lea el mensaje completo.
+  var siguen = p.enCasa.filter(function (r) { return r.checkOut !== dia; });
+  if (siguen.length) {
+    lineas.push('');
+    var q = recorteTg_(siguen, 8);
+    lineas.push('🏠 <b>Se quedan ' + siguen.length + '</b>  ·  ' +
+      escTg_(q.muestra.map(function (r) { return r.recurso; }).join(', ')) +
+      (q.resto ? ' y ' + q.resto + ' más' : ''));
+  }
+
+  if (!p.llegadas.length && !p.salidas.length) {
+    lineas.push('');
+    lineas.push('Sin llegadas ni salidas hoy.');
+  }
+  return lineas.join('\n');
+}
+
+/* Lo que llama el disparador de la mañana. Sin token: no lo pide nadie. */
+function resumenDelDia() {
+  try {
+    if (!resumenActivo_()) return false;
+    var texto = armarResumenDia_(hoy_());
+    if (!texto) return false;              // lodge vacío y sin movimiento
+    return avisar_('resumen', texto);
+  } catch (e) {
+    // Un resumen que revienta no puede dejar el disparador muerto en silencio.
+    try { logCambio_('sistema', 'resumen_error', String(e.message || e)); } catch (e2) {}
+    return false;
+  }
+}
+
+function resumenActivo_() { return String(config_('resumenDiario', 'no')) === 'si'; }
+
+function resumenHora_() {
+  var h = Number(config_('resumenHora', 8));
+  return (h >= 0 && h <= 23) ? Math.floor(h) : 8;
+}
+
+/* Enciende o apaga el parte de la mañana. Se borran primero los disparadores
+   que hubiera, para que cambiar la hora no deje dos mensajes al día. */
+function resumenAutomatico(token, encender, hora) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var h = (hora === undefined || hora === null || hora === '') ? resumenHora_() : Number(hora);
+  if (!(h >= 0 && h <= 23)) throw new Error('Esa hora no existe.');
+  h = Math.floor(h);
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'resumenDelDia') ScriptApp.deleteTrigger(t);
+  });
+  if (encender) {
+    ScriptApp.newTrigger('resumenDelDia').timeBased().atHour(h).everyDays(1).create();
+  }
+  actualizarConfig_('resumenHora', h);
+  actualizarConfig_('resumenDiario', encender ? 'si' : 'no');
+  logCambio_(u.nombre, 'resumen_diario',
+             encender ? 'encendido a las ' + h + ':00' : 'apagado');
+  return { activo: !!encender, hora: h };
+}
+
+/* Para probarlo sin esperar a mañana. Manda el de hoy aunque esté apagado, y
+   dice qué pasó, que es lo que uno quiere saber al apretar el botón. */
+function resumenProbar(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var texto = armarResumenDia_(hoy_());
+  if (!texto) {
+    return { mandado: false,
+             motivo: 'Hoy no hay nadie alojado ni llega o se va nadie, así que no ' +
+                     'habría mensaje. Un grupo que recibe "sin novedades" todos los ' +
+                     'días termina silenciando al bot.' };
+  }
+  if (!telegramActivo_()) {
+    return { mandado: false, texto: texto,
+             motivo: 'El bot de Telegram todavía no está conectado, así que no se ' +
+                     'mandó. Así se vería el mensaje.' };
+  }
+  return { mandado: telegramMandar_(texto), texto: texto };
+}
+
+function resumenEstado(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  return { activo: resumenActivo_(), hora: resumenHora_(),
+           conBot: telegramActivo_() };
 }
 
 /* ===================== ASEO ===================== */

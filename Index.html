@@ -937,6 +937,47 @@
         <div class="err hide" id="cfgTgErr" style="margin-top:10px"></div>
       </div>
 
+      <!-- ---------- El parte de la mañana ----------
+           Un mensaje temprano al grupo con lo del día. Va después de la
+           tarjeta de Telegram porque no sirve de nada sin el bot conectado. -->
+      <div class="card">
+        <h2>El parte de la mañana</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Un mensaje al grupo temprano con lo del día: <b>quién llega, quién se va y
+          quién se queda</b>. La idea es que todos sepan cómo viene el día sin abrir
+          la app ni preguntarle a nadie.
+        </p>
+        <p class="muted" style="font-size:12.5px;margin-bottom:12px">
+          Lo que de verdad lo justifica son las marcas de atención: una <b>ficha sin
+          firmar</b> de alguien que llega hoy, y sobre todo un <b>saldo pendiente</b> de
+          alguien que se va hoy. Enterarse de eso a las ocho de la mañana es a tiempo;
+          enterarse cuando el auto ya salió, no.
+        </p>
+
+        <div class="docFila" style="gap:10px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="resAuto" style="width:auto;flex:0 0 auto;margin:0">
+            <span style="font-size:13px">Mandar el parte cada mañana a las</span>
+          </label>
+          <select id="resHora" style="width:auto;flex:0 0 auto;font-size:13px"></select>
+          <button class="btn gh sm" id="resProbar" style="margin-left:auto">Ver cómo queda</button>
+        </div>
+
+        <div id="resEstado" class="muted" style="font-size:12px;margin-top:10px"></div>
+        <pre id="resMuestra" class="hide" style="margin-top:10px;padding:12px;
+             background:var(--bg);border:1px solid var(--line);border-radius:8px;
+             font-size:12px;white-space:pre-wrap;overflow-x:auto"></pre>
+
+        <p class="muted" style="font-size:12px;margin-top:12px">
+          <b>La hora es aproximada.</b> Google corre estas tareas dentro de la hora que
+          se le pide, así que a las 8 quiere decir entre las 8:00 y las 9:00.
+          <b>Si no hay nadie alojado ni llega o se va nadie, no se manda nada</b>: un
+          grupo que recibe "sin novedades" todos los días termina silenciando al bot, y
+          ahí se pierden también los avisos que sí importan.
+        </p>
+        <div class="err hide" id="resErr" style="margin-top:10px"></div>
+      </div>
+
       <div class="card">
         <h2>Normas de convivencia</h2>
         <p class="muted" style="font-size:13px;margin-bottom:12px">
@@ -1642,7 +1683,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-31';
+var VERSION_ESPERADA = '2026-09-01';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -4460,6 +4501,7 @@ function cargarConfiguracion(){
   cargarProgramas();
   cargarIcal();
   cargarBookingEntrada();
+  cargarResumen();
   plegarConfiguracion();
   srv('configuracion')().then(function(d){
     CFG=d; pintarConfiguracion(); plegarConfiguracion();
@@ -4775,6 +4817,56 @@ $('impAhora').onclick=function(){
                         : 'Revisado, sin novedad');
       // Si algo cambió, el calendario de atrás ya no está al día.
       if(u.creadas||u.adoptadas||u.movidas||u.canceladas) recargarCal();
+    }).catch(fallo);
+};
+
+/* ---------- El parte de la mañana ---------- */
+function cargarResumen(){
+  srv('resumenEstado')().then(function(d){
+    var sel=$('resHora'); sel.innerHTML='';
+    for(var h=0;h<24;h++){
+      var o=document.createElement('option');
+      o.value=h; o.textContent=(h<10?'0':'')+h+':00';
+      if(h===d.hora) o.selected=true;
+      sel.appendChild(o);
+    }
+    $('resAuto').checked=!!d.activo;
+    // Sin bot conectado el interruptor no sirve de nada, y es mejor decirlo
+    // que dejar a alguien esperando un mensaje que nunca va a llegar.
+    $('resEstado').textContent = !d.conBot
+      ? 'Falta conectar el bot de Telegram, más arriba. Sin eso no se manda nada.'
+      : d.activo ? 'Encendido. Sale cada mañana alrededor de las '+
+                   ((d.hora<10?'0':'')+d.hora)+':00.'
+                 : 'Apagado.';
+  }).catch(function(e){
+    $('resErr').textContent=e.message||String(e);
+    $('resErr').classList.remove('hide');
+  });
+}
+
+function guardarResumen(){
+  var enc=$('resAuto').checked, hora=Number($('resHora').value)||0;
+  srv('resumenAutomatico')(enc, hora)
+    .then(function(){ cargarResumen();
+      toast(enc ? 'El parte sale cada mañana a las '+((hora<10?'0':'')+hora)+':00'
+                : 'Parte de la mañana apagado'); })
+    .catch(function(e){ $('resAuto').checked=!enc; fallo(e); });
+}
+$('resAuto').onchange=guardarResumen;
+$('resHora').onchange=guardarResumen;
+
+$('resProbar').onclick=function(){
+  ocupado('resProbar', srv('resumenProbar')())
+    .then(function(d){
+      var pre=$('resMuestra');
+      if(d.texto){
+        // El mensaje viaja con las etiquetas de Telegram; acá se muestra el
+        // texto pelado, que es lo que se quiere revisar.
+        pre.textContent=d.texto.replace(/<[^>]+>/g,'');
+        pre.classList.remove('hide');
+      } else { pre.classList.add('hide'); }
+      toast(d.mandado ? 'Mandado al grupo' : (d.motivo||'No se mandó'), !d.mandado);
+      if(d.motivo){ $('resEstado').textContent=d.motivo; }
     }).catch(fallo);
 };
 

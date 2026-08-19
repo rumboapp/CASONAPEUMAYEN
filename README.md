@@ -937,6 +937,50 @@ Y si el correo falla —sin permiso, sin red, cuota agotada— el calendario sig
 andando igual: la lectura del correo va envuelta y su error se anota, no se
 propaga.
 
+## El parte de la mañana
+
+Un mensaje al grupo de Telegram temprano con lo del día. Se enciende en
+*Configuración → El parte de la mañana*, con la hora a elección.
+
+```
+☀️ miércoles 19 de agosto
+
+🔑 Llegan 1
+• Familia Rojas — Habitación 1 · Matrimonial
+   2 noches  ·  quedan $120.000 por cobrar
+   ⚠️ ficha sin firmar
+
+🚪 Se van 2
+• Pareja Torres — Habitación 2 · Twin
+• Juan Moroso — Habitación 3 · Matrimonial + cama adicional
+   ⚠️ quedan $100.000 por cobrar
+🧹 Después habrá que limpiar: Habitación 2, Habitación 3
+
+🏠 Se quedan 1  ·  Habitación 4 · Matrimonial
+```
+
+Las decisiones que lo hacen útil:
+
+- **Llegadas y salidas con detalle, los que se quedan en una línea.** Lo
+  primero es lo que hay que hacer hoy; lo segundo se sabe y basta. Una lista
+  larga hace que nadie lea el mensaje entero.
+- **Las marcas de atención son lo que justifica el mensaje.** Una ficha sin
+  firmar de quien llega hoy —todavía hay tiempo de mandarle el enlace— y sobre
+  todo un **saldo pendiente de quien se va hoy**. Enterarse de eso a las ocho
+  de la mañana es a tiempo; enterarse cuando el auto ya salió, no. Van solo
+  cuando corresponde: una marca que aparece siempre deja de significar algo.
+- **Al extranjero se le habla en dólares**, igual que en pantalla y en su
+  cuenta.
+- **Si no hay nadie alojado ni llega o se va nadie, no se manda nada.** Un
+  grupo que recibe "sin novedades" todos los días termina silenciando al bot, y
+  ahí se pierden también los avisos que sí importan. Con gente alojada sí sale,
+  aunque no haya movimiento.
+- **La hora es aproximada.** Google corre las tareas programadas dentro de la
+  hora pedida, así que "a las 8" son entre las 8:00 y las 9:00.
+
+El botón *Ver cómo queda* manda el parte de hoy en el momento y lo muestra en
+pantalla, sin esperar a mañana.
+
 ## Cierre de día
 
 Es lo que en un hotel grande se llama *night audit*, y es el corazón de que
