@@ -57,6 +57,20 @@
 
   .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
   .card h2{font-size:14px;font-weight:600;margin-bottom:12px}
+  /* Tarjetas que se pliegan. La Configuración creció hasta no caber en una
+     pantalla, y casi todo lo de adentro se toca una vez y nunca más: al
+     plegarlas queda un índice de una línea por tema. */
+  .card.pleg > h2{margin-bottom:0;cursor:pointer;display:flex;align-items:center;
+    gap:9px;user-select:none;padding:2px 0}
+  .card.pleg > h2::before{content:'';width:7px;height:7px;flex:0 0 auto;
+    border-right:2px solid var(--tx3);border-bottom:2px solid var(--tx3);
+    transform:rotate(-45deg);margin-left:2px;transition:transform .15s}
+  .card.pleg.abierta > h2::before{transform:rotate(45deg)}
+  .card.pleg > h2 .pista{margin-left:auto;font-size:11.5px;font-weight:400;
+    color:var(--tx3)}
+  .card.pleg.abierta > h2{margin-bottom:12px}
+  .card.pleg > .cuerpo{display:none}
+  .card.pleg.abierta > .cuerpo{display:block}
   .muted{color:var(--tx2)}
   .empty{color:var(--tx3);font-size:13px;padding:10px 0}
 
@@ -1628,7 +1642,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-08-30';
+var VERSION_ESPERADA = '2026-08-31';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -2791,11 +2805,14 @@ $('rMasDatos').onclick=function(){ plegarExtra($('rExtra').classList.contains('h
    la reserva exacta en Booking, que es el único lugar donde el nombre existe. */
 function pintarLinkBooking(r){
   var a=$('rBooking');
-  var num=r && r.refExterna ? String(r.refExterna) : '';
-  if(!num){ a.classList.add('hide'); a.removeAttribute('href'); return; }
-  a.href='https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html'+
-         '?res_id='+encodeURIComponent(num)+'&lang=es';
-  a.textContent='Reserva de Booking N° '+num+'  ·  abrir en el extranet para ver el nombre';
+  // La dirección viene armada del servidor y NO se arma acá: le hace falta el
+  // identificador del establecimiento, que la pantalla no conoce. Armándola
+  // en el navegador salía sin esa parte, y Booking abría una página vacía.
+  var url=r && r.linkBooking ? String(r.linkBooking) : '';
+  if(!url){ a.classList.add('hide'); a.removeAttribute('href'); return; }
+  a.href=url;
+  a.textContent='Reserva de Booking N° '+String(r.refExterna||'')+
+                '  ·  abrir en el extranet para ver el nombre';
   a.classList.remove('hide');
 }
 
@@ -4443,7 +4460,83 @@ function cargarConfiguracion(){
   cargarProgramas();
   cargarIcal();
   cargarBookingEntrada();
-  srv('configuracion')().then(function(d){ CFG=d; pintarConfiguracion(); }).catch(fallo);
+  plegarConfiguracion();
+  srv('configuracion')().then(function(d){
+    CFG=d; pintarConfiguracion(); plegarConfiguracion();
+  }).catch(fallo);
+}
+
+/* ---------- Configuración plegable ----------
+   No hace falta tocar el HTML de cada tarjeta: se toma lo que hay después
+   del título y se mete en una caja que se muestra o se esconde. Así una
+   tarjeta nueva queda plegable sola, sin acordarse de nada.
+
+   Cuál queda abierta se guarda en el navegador. Quien está peleando con lo
+   de Booking la va a abrir diez veces seguidas, y volver a buscarla cada vez
+   sería peor que no haber plegado nada. */
+var CFG_ABIERTAS = (function(){
+  try{ return JSON.parse(localStorage.getItem('cfgAbiertas')||'null') || {}; }
+  catch(_){ return {}; }
+})();
+
+function recordarAbiertas(){
+  try{ localStorage.setItem('cfgAbiertas', JSON.stringify(CFG_ABIERTAS)); }catch(_){}
+}
+
+/* Una línea que diga qué hay adentro sin abrirlo. Se calcula al vuelo porque
+   depende de lo que esté configurado en ese momento. */
+function pistaTarjeta(titulo){
+  if(!CFG) return '';
+  var campo=function(clave){
+    var c=(CFG.campos||[]).filter(function(x){ return x.clave===clave; })[0];
+    return c ? String(c.valor||'') : '';
+  };
+  if(titulo==='Valor del dólar'){
+    var v=Number(campo('dolarManual'))||0;
+    return v>0 ? 'fijo en $'+plataSimple(v) : 'el del día';
+  }
+  if(titulo==='Programas'){
+    var n=(CAL.programas||[]).length;
+    return n ? n+(n===1?' programa':' programas') : 'ninguno todavía';
+  }
+  if(titulo==='Avisos al grupo de Telegram'){
+    if(!CFG.telegram) return '';
+    return CFG.telegram.activo ? 'conectado'
+         : CFG.telegram.conToken ? 'falta el grupo' : 'apagado';
+  }
+  return '';
+}
+
+function plegarConfiguracion(){
+  var vista=$('v-cfg');
+  if(!vista) return;
+  Array.prototype.forEach.call(vista.querySelectorAll('.card'), function(card){
+    var h2=card.querySelector('h2');
+    if(!h2) return;
+    var titulo=h2.textContent.trim();
+
+    if(!card.classList.contains('pleg')){
+      var cuerpo=document.createElement('div');
+      cuerpo.className='cuerpo';
+      while(h2.nextSibling) cuerpo.appendChild(h2.nextSibling);
+      card.appendChild(cuerpo);
+      var pista=document.createElement('span');
+      pista.className='pista';
+      h2.appendChild(pista);
+      card.classList.add('pleg');
+      h2.onclick=function(){
+        var abre=!card.classList.contains('abierta');
+        card.classList.toggle('abierta', abre);
+        CFG_ABIERTAS[titulo]=abre;
+        recordarAbiertas();
+      };
+      // Todo cerrado la primera vez: la gracia es ver el índice completo de
+      // una mirada. Después manda lo que dejó abierto la última vez.
+      card.classList.toggle('abierta', !!CFG_ABIERTAS[titulo]);
+    }
+    var p=h2.querySelector('.pista');
+    if(p) p.textContent=pistaTarjeta(titulo);
+  });
 }
 
 function pintarConfiguracion(){

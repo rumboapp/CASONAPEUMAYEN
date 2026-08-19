@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-08-30';
+var VERSION = '2026-08-31';
 
 function version() { return VERSION; }
 
@@ -1140,6 +1140,10 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
       programa: String(r.programa || ''),
       programaNombre: String(r.programaNombre || ''),
       refExterna: String(r.refExterna || ''),
+      // El enlace lo arma el servidor y no la pantalla: necesita el
+      // identificador del establecimiento, que solo vive acá. Armándolo en el
+      // navegador salía sin esa parte y Booking no sabía qué ficha abrir.
+      linkBooking: r.refExterna ? bookingLinkReserva_(String(r.refExterna)) : '',
       notas: r.notas || '', grupo: String(r.grupo || ''),
       pax: Number(r.pax) || 1, ninos: Number(r.ninos) || 0,
       extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
