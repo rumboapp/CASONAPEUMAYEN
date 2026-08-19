@@ -896,7 +896,9 @@ tiene número. Si hay exactamente una, es esa, y le queda escrito el número. Co
 el número, la reserva muestra un **enlace de un toque** que abre esa reserva
 exacta en el extranet — el único lugar donde el nombre existe. El identificador
 del establecimiento que ese enlace necesita se aprende solo del primer correo,
-no hay que configurarlo.
+no hay que configurarlo. El enlace lo arma **el servidor** y viaja armado a la
+pantalla: ese identificador solo vive del lado del servidor, y construyéndolo
+en el navegador salía sin esa parte y Booking abría una página vacía.
 
 Se enciende en *Configuración → Booking → 3*, y va pegado a la misma pasada del
 calendario: un solo disparador hace las dos cosas.
@@ -1030,6 +1032,19 @@ reintenta solo hasta tres veces y, si aun así falla, aparece un botón
 *Reintentar* en lugar de dejarte la pantalla en blanco.
 
 ## Configuración
+
+La pestaña creció hasta no caber en una pantalla —Booking solo se llevó media—
+así que **cada tarjeta se pliega**. Cerradas queda un índice de una línea por
+tema, con una pista al lado que dice qué hay adentro sin abrirlo: *"fijo en
+$950"*, *"3 programas"*, *"conectado"*. Se abre apretando el título, y lo que
+queda abierto se recuerda en el navegador: quien está peleando con lo de
+Booking la abre diez veces seguidas, y volver a buscarla cada vez sería peor
+que no haber plegado nada.
+
+No hay nada que hacer al agregar una tarjeta nueva: el plegado toma lo que haya
+después del `<h2>` y lo mete en una caja, así que una tarjeta escrita como
+siempre queda plegable sola.
+
 
 Pestaña **Configuración** (solo administración). Arriba de todo está el
 **valor del dólar**, porque es lo que más se toca y lo deciden ustedes: se
