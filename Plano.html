@@ -233,7 +233,7 @@ footer .sep{margin-left:auto}
     <button class="btn" id="bGuardar">Guardar copia</button>
     <button class="btn" id="bAbrir">Abrir copia</button>
     <button class="btn" id="bImagen">Imagen</button>
-    <button class="btn fuerte" id="bImprimir">Imprimir / PDF</button>
+    <button class="btn fuerte" id="bPdf">PDF</button>
   </div>
 </header>
 
@@ -1311,6 +1311,130 @@ document.getElementById('bObsNueva').onclick = function(){
 
 /* El título y la superficie total, arriba de la lámina que se imprime o se
    guarda como imagen. Es lo primero que mira quien recibe el plano. */
+/* ==================================================================
+   LA LÁMINA EN PDF
+
+   El navegador no siempre deja imprimir —dentro de una ventana ajena
+   está bloqueado— así que la lámina se arma acá: una hoja A4 apaisada
+   con su marco, el plano ajustado adentro y el rótulo al pie. Se
+   dibuja, se convierte en imagen y se envuelve en un archivo PDF de
+   una página, sin depender de nada externo.
+   ================================================================== */
+var PAGINA = {an:841.89, al:595.28};    /* A4 apaisado, en puntos */
+
+function laminaSvg(){
+  var T = tema(true), L = limites();
+  var f = function(n){ return n.toFixed(2); };
+  var fecha = new Date();
+  var dd = String(fecha.getDate()).padStart(2,'0') + '-' +
+           String(fecha.getMonth()+1).padStart(2,'0') + '-' + fecha.getFullYear();
+
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + PAGINA.an + '" height="' + PAGINA.al + '" ' +
+      'viewBox="0 0 ' + PAGINA.an + ' ' + PAGINA.al + '">' +
+    '<rect width="' + PAGINA.an + '" height="' + PAGINA.al + '" fill="#FFFFFF" />' +
+    '<rect x="24" y="24" width="793.89" height="547" fill="none" stroke="#14181F" stroke-width="1.2" />' +
+    /* el plano, ajustado solo al hueco que le queda */
+    '<svg x="46" y="46" width="749.89" height="434" ' +
+      'viewBox="' + f(L.x - 30) + ' ' + f(L.y - 30) + ' ' + f(L.an + 60) + ' ' + f(L.al + 60) + '" ' +
+      'preserveAspectRatio="xMidYMid meet">' + contenido(T, true) + '</svg>' +
+    /* el rótulo */
+    '<line x1="46" y1="500" x2="795.89" y2="500" stroke="#14181F" stroke-width="1.2" />' +
+    '<text x="46" y="528" font-family="Archivo, Helvetica, Arial, sans-serif" font-size="20" ' +
+      'font-weight="600" fill="#14181F">' + esc(plano.nombre) + '</text>' +
+    '<text x="46" y="546" font-family="IBM Plex Mono, Courier New, monospace" font-size="9.5" ' +
+      'fill="#5A646B">Plano de planta · ' + dd + '</text>' +
+    '<text x="795.89" y="528" text-anchor="end" font-family="IBM Plex Mono, Courier New, monospace" ' +
+      'font-size="20" font-weight="600" fill="#14181F">' + numero(totalM2(), 2) + ' m²</text>' +
+    '<text x="795.89" y="546" text-anchor="end" font-family="IBM Plex Mono, Courier New, monospace" ' +
+      'font-size="9.5" fill="#5A646B">Superficie total</text>' +
+    '</svg>';
+}
+
+/* La lámina pasada a imagen, a 300 puntos por pulgada, que es lo que
+   pide una impresión decente. */
+function laminaCanvas(){
+  return new Promise(function(listo, falla){
+    var escala = 300/72;
+    var c = document.createElement('canvas');
+    c.width = Math.round(PAGINA.an * escala);
+    c.height = Math.round(PAGINA.al * escala);
+    var img = new Image();
+    img.onload = function(){
+      var g = c.getContext('2d');
+      g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(img, 0, 0, c.width, c.height);
+      listo(c);
+    };
+    img.onerror = function(){ falla(new Error('no se pudo dibujar la lámina')); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(laminaSvg());
+  });
+}
+
+/* Un PDF de una página con la imagen adentro, escrito byte por byte.
+   Es el formato mínimo que entienden todos los lectores. */
+function pdfConImagen(jpeg, anchoPx, altoPx, titulo){
+  var partes = [], largo = 0, posiciones = [];
+  function meter(x){
+    var b = typeof x === 'string' ? Uint8Array.from(x, function(ch){ return ch.charCodeAt(0) & 0xFF; }) : x;
+    partes.push(b); largo += b.length;
+  }
+  function objeto(n, cuerpo, flujo){
+    posiciones[n] = largo;
+    meter(n + ' 0 obj\n' + cuerpo + '\n');
+    if(flujo){ meter('stream\n'); meter(flujo); meter('\nendstream\n'); }
+    meter('endobj\n');
+  }
+  function textoPdf(t){
+    var h = 'FEFF';
+    for(var i = 0; i < t.length; i++) h += ('000' + t.charCodeAt(i).toString(16).toUpperCase()).slice(-4);
+    return '<' + h + '>';
+  }
+
+  var an = PAGINA.an.toFixed(2), al = PAGINA.al.toFixed(2);
+  var dibujo = 'q\n' + an + ' 0 0 ' + al + ' 0 0 cm\n/I0 Do\nQ';
+
+  meter('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+  objeto(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  objeto(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  objeto(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + an + ' ' + al + '] ' +
+            '/Resources << /XObject << /I0 4 0 R >> >> /Contents 5 0 R >>');
+  objeto(4, '<< /Type /XObject /Subtype /Image /Width ' + anchoPx + ' /Height ' + altoPx +
+            ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + jpeg.length + ' >>', jpeg);
+  objeto(5, '<< /Length ' + dibujo.length + ' >>', dibujo);
+  objeto(6, '<< /Title ' + textoPdf(titulo) + ' /Creator ' + textoPdf('Plano Casona Peumayén') + ' >>');
+
+  var xref = largo;
+  var tabla = 'xref\n0 7\n0000000000 65535 f \n';
+  for(var n = 1; n <= 6; n++) tabla += ('0000000000' + posiciones[n]).slice(-10) + ' 00000 n \n';
+  meter(tabla);
+  meter('trailer\n<< /Size 7 /Root 1 0 R /Info 6 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+
+  var todo = new Uint8Array(largo), i = 0;
+  partes.forEach(function(b){ todo.set(b, i); i += b.length; });
+  return new Blob([todo], {type:'application/pdf'});
+}
+
+function nombreArchivo(ext){
+  var t = (plano.nombre || 'plano').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase().slice(0, 60);
+  return (t || 'plano') + '.' + ext;
+}
+
+/* Entregar el archivo. Dentro de la ventana de un chat la descarga la
+   ofrece el propio visor; abierto como archivo suelto, el navegador. */
+function entregar(blob, archivo){
+  return (window.claude && window.claude.use ? window.claude.use('downloads') : Promise.resolve(null))
+    .then(function(d){
+      if(d) return d.save({filename:archivo, data:blob}).then(function(){ return 'guardado'; });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = archivo;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+      return 'guardado';
+    });
+}
+
 /* La hoja completa: el dibujo con aire alrededor y, abajo, la franja del
    rótulo, que es donde van el título y la superficie total. */
 function hoja(){
@@ -1433,14 +1557,49 @@ document.getElementById('bImagen').onclick = function(){
 /* Imprimir: se cambia el SVG a la versión de papel, se imprime y se vuelve
    a dejar como estaba. Eligiendo «Guardar como PDF» queda el archivo para
    presentar. */
-document.getElementById('bImprimir').onclick = function(){
-  var T = tema(true), h = hoja();
-  var guardadoSel = sel; sel = null;
-  svg.setAttribute('viewBox', h.x + ' ' + h.y + ' ' + h.an + ' ' + h.al);
-  svg.innerHTML = '<rect x="' + h.x + '" y="' + h.y + '" width="' + h.an + '" height="' + h.al +
-    '" fill="#fff" />' + contenido(T, true) + rotulo(h);
-  window.print();
-  setTimeout(function(){ sel = guardadoSel; pintar(); }, 400);
+document.getElementById('bPdf').onclick = function(){
+  abrirCaja('<h3>PDF de la lámina</h3><p>Armando la hoja…</p>');
+  laminaCanvas().then(function(c){
+    var vista = c.toDataURL('image/jpeg', 0.86);
+    abrirCaja(
+      '<h3>PDF de la lámina</h3>' +
+      '<p>Hoja A4 apaisada, con el plano ajustado y el rótulo al pie. Así se va a ver el archivo.</p>' +
+      '<img src="' + vista + '" alt="Lámina del plano">' +
+      '<div class="pie-caja">' +
+        '<span id="avisoPdf" class="vacio" style="margin-right:auto"></span>' +
+        '<button class="btn" id="bCerrarPdf">Cerrar</button>' +
+        '<button class="btn fuerte" id="bBajarPdf">Guardar el PDF</button></div>'
+    );
+    document.getElementById('bCerrarPdf').onclick = cerrarCaja;
+    document.getElementById('bBajarPdf').onclick = function(){
+      var boton = this, nota = document.getElementById('avisoPdf');
+      boton.disabled = true; nota.textContent = 'Preparando el archivo…';
+      c.toBlob(function(jpg){
+        jpg.arrayBuffer().then(function(buf){
+          var pdf = pdfConImagen(new Uint8Array(buf), c.width, c.height, plano.nombre);
+          return entregar(pdf, nombreArchivo('pdf'));
+        }).then(function(){
+          nota.textContent = 'Listo.'; boton.disabled = false;
+          decir('PDF guardado.');
+        }).catch(function(e){
+          boton.disabled = false;
+          var codigo = e && e.code;
+          if(codigo === 'declined'){ nota.textContent = 'No se guardó.'; return; }
+          if(codigo === 'extension_not_enabled' || codigo === 'rejected_extension'){
+            nota.textContent = 'Aquí no se puede guardar PDF: se guardará como imagen.';
+            c.toBlob(function(png){ entregar(png, nombreArchivo('png')); }, 'image/png');
+            return;
+          }
+          nota.textContent = 'El navegador no dejó guardarlo. Guarda la imagen de arriba con el botón derecho.';
+        });
+      }, 'image/jpeg', 0.92);
+    };
+  }).catch(function(){
+    abrirCaja('<h3>PDF de la lámina</h3><p>No se pudo armar la hoja en este navegador. ' +
+      'Usa «Imagen», que da el mismo plano en un archivo PNG.</p>' +
+      '<div class="pie-caja"><button class="btn fuerte" id="bCerrarPdf2">Cerrar</button></div>');
+    document.getElementById('bCerrarPdf2').onclick = cerrarCaja;
+  });
 };
 
 /* ---------------- arranque ---------------- */

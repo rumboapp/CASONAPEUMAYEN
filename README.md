@@ -1520,10 +1520,16 @@ El trabajo se guarda solo en el mismo navegador. Para tener respaldo, o para
 seguir en otro computador, **Guardar copia** entrega el plano como un texto que
 se pega en un correo, y **Abrir copia** lo devuelve.
 
-Para entregarlo: **Imprimir / PDF** (eligiendo "Guardar como PDF" en el
-diálogo) o **Imagen**, que arma un PNG que se guarda con el botón derecho.
-Los dos salen en papel blanco con tinta negra, aunque en pantalla se esté
-trabajando en modo oscuro.
+Para entregarlo, el botón **PDF**: arma una hoja A4 apaisada con su marco, el
+plano ajustado adentro y el rótulo al pie —título a la izquierda, superficie
+total a la derecha—, la muestra en pantalla para revisarla y la guarda como
+archivo. El PDF lo escribe la propia página, sin imprimir y sin depender de
+ningún programa: por eso funciona también donde el navegador tiene bloqueada
+la impresión. Si el visor no admite guardar PDF, ofrece la misma hoja en PNG.
+
+**Imagen** sigue estando, para cuando se quiere solo el dibujo suelto en PNG.
+Las dos salidas van en papel blanco con tinta negra, aunque en pantalla se
+esté trabajando en modo oscuro.
 
 El plano que aparece al abrir es el dibujo a mano pasado en limpio: sirve de
 punto de partida, no es un levantamiento medido. Las medidas se corrigen una
