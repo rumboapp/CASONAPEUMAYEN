@@ -337,6 +337,7 @@ var CAT = {
   meson:     {nom:'Mesón',              fam:'cocina',  an:240, al:60,  texto:'Mesón de trabajo'},
   cocinaeq:  {nom:'Cocina',             fam:'cocina',  an:180, al:70,  texto:'Cocina 6 platos'},
   horno:     {nom:'Horno',              fam:'cocina',  an:90,  al:70,  texto:'Horno'},
+  freidora:  {nom:'Freidora',           fam:'cocina',  an:60,  al:70,  texto:'Freidora'},
   campana:   {nom:'Campana',            fam:'cocina',  an:280, al:90,  texto:'Campana con extracción'},
   refri:     {nom:'Refrigerador',       fam:'cocina',  an:75,  al:70,  texto:'Refrigerador'},
   freezer:   {nom:'Freezer',            fam:'cocina',  an:130, al:70,  texto:'Freezer −18 °C'},
@@ -384,6 +385,7 @@ function planoInicial(){
       {id:nuevo(), tipo:'campana',   zona:'cocina', x:420, y:360, an:280, al:110, rot:0, texto:'Campana con extracción'},
       {id:nuevo(), tipo:'cocinaeq',  zona:'cocina', x:430, y:380, an:180, al:70,  rot:0, texto:'Cocina 6 platos'},
       {id:nuevo(), tipo:'horno',     zona:'cocina', x:620, y:380, an:90,  al:70,  rot:0, texto:'Horno'},
+      {id:nuevo(), tipo:'freidora',  zona:'cocina', x:620, y:265, an:60,  al:70,  rot:0, texto:'Freidora'},
       {id:nuevo(), tipo:'meson',     zona:'cocina', x:420, y:100, an:300, al:60,  rot:0, texto:'Mesón de trabajo'},
       {id:nuevo(), tipo:'lavaplatos',zona:'cocina', x:730, y:100, an:120, al:60,  rot:0, texto:'Lavaplatos 2 senos'},
       {id:nuevo(), tipo:'lavamanos', zona:'cocina', x:730, y:195, an:45,  al:40,  rot:0, texto:'Lavamanos'},
@@ -519,12 +521,87 @@ function esc(t){
 }
 function rot(it){ return it.rot ? ' rotate(' + it.rot + ' ' + (it.an/2) + ' ' + (it.al/2) + ')' : ''; }
 
-var SIN_NOMBRE = {recinto:1, muro:1, puerta:1, ventana:1, texto:1, campana:1};
-function etiqueta(it, T){
-  if(!it.texto || SIN_NOMBRE[it.tipo]) return '';
-  return '<text x="' + (it.an/2) + '" y="' + (it.al + 16) + '" text-anchor="middle" ' +
-    'font-family="IBM Plex Mono, monospace" font-size="13" fill="' + T.suave +
-    '" style="pointer-events:none">' + esc(it.texto) + '</text>';
+/* ---------------- los nombres ----------------
+   Los nombres NO se dibujan junto a su pieza: se guardan y se pintan
+   todos al final, encima de cualquier muro u objeto, cada uno sobre su
+   propio fondo. Así ninguno queda tapado por lo que se dibuje después,
+   pase lo que pase con las piezas encima. */
+var SIN_NOMBRE = {recinto:1, muro:1, puerta:1, ventana:1, texto:1};
+
+/* Dónde cae un punto de la pieza una vez girada, en coordenadas del plano. */
+function enElPlano(it, px, py){
+  var a = (it.rot || 0) * Math.PI / 180;
+  var cx = it.an/2, cy = it.al/2, dx = px - cx, dy = py - cy;
+  var co = Math.cos(a), si = Math.sin(a);
+  return {x:it.x + cx + dx*co - dy*si, y:it.y + cy + dx*si + dy*co};
+}
+
+/* El rectángulo que va a ocupar un letrero, para saber si choca con otro. */
+function cajaLetrero(x, y, texto, tam, centrado){
+  var ancho = texto.length * tam * 0.58 + tam * 0.9, alto = tam * 1.5;
+  var x1 = centrado ? x - ancho/2 : x - tam*0.45, y1 = y - alto*0.76;
+  return {x1:x1, y1:y1, x2:x1 + ancho, y2:y1 + alto, r:tam*0.28};
+}
+function chocan(a, b){
+  return !(a.x2 < b.x1 || a.x1 > b.x2 || a.y2 < b.y1 || a.y1 > b.y2);
+}
+
+/* Un letrero: el texto sobre un fondo del color del papel. */
+function letrero(caja, x, y, texto, tam, color, T, centrado){
+  return '<rect x="' + caja.x1.toFixed(1) + '" y="' + caja.y1.toFixed(1) + '" width="' + (caja.x2-caja.x1).toFixed(1) +
+    '" height="' + (caja.y2-caja.y1).toFixed(1) + '" rx="' + caja.r.toFixed(1) + '" fill="' + T.papel + '" opacity="0.86" />' +
+    '<text x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '"' + (centrado ? ' text-anchor="middle"' : '') +
+    ' font-family="IBM Plex Mono, monospace" font-size="' + tam + '" fill="' + color + '">' + esc(texto) + '</text>';
+}
+
+function etiquetasHtml(items, T){
+  var s = '<g style="pointer-events:none">', puestos = [];
+
+  /* Primero los recintos: su nombre va clavado en su esquina y no se
+     mueve, así que los demás letreros son los que le hacen el quite. */
+  items.forEach(function(it){
+    if(it.tipo === 'recinto'){
+      var c = corteDe(it);
+      var lx = it.x + ((c && c.esq === 'nw') ? c.an + 16 : 16);
+      var linea = (plano.verM2Recinto ? numero(areaM2(it)) + ' m² · ' : '') +
+                  numero(it.an/100, 2) + ' × ' + numero(it.al/100, 2) + ' m' + (c ? ' en L' : '');
+      var ancho = Math.max(it.texto.length * 13.5, linea.length * 9) + 18;
+      s += '<rect x="' + (lx - 9) + '" y="' + (it.y + 10) + '" width="' + ancho + '" height="52" rx="6" fill="' +
+        T.papel + '" opacity="0.86" />';
+      s += '<text x="' + lx + '" y="' + (it.y + 32) + '" font-family="Archivo, Helvetica, sans-serif" ' +
+        'font-size="24" font-weight="600" fill="' + T.tinta + '">' + esc(it.texto) + '</text>';
+      s += '<text x="' + lx + '" y="' + (it.y + 54) + '" font-family="IBM Plex Mono, monospace" ' +
+        'font-size="15" fill="' + T.tenue + '">' + esc(linea) + '</text>';
+      puestos.push({x1:lx - 9, y1:it.y + 10, x2:lx - 9 + ancho, y2:it.y + 62});
+    }
+  });
+
+  /* Y ahora los nombres de las piezas. Si un letrero cae encima de otro
+     ya puesto, se corre unos centímetros arriba o abajo hasta encontrar
+     hueco; si no lo hay, se queda donde le toca. */
+  var DESVIOS = [0, 20, -20, 40, -40, 62, -62];
+  items.forEach(function(it){
+    var tam, color, centrado, pos, texto;
+    if(it.tipo === 'texto' && it.texto){
+      texto = it.texto; tam = Math.min(26, it.al*0.8); color = T.tinta; centrado = false;
+      pos = enElPlano(it, 0, it.al/2);
+    } else if(it.texto && !SIN_NOMBRE[it.tipo]){
+      texto = it.texto; tam = 13; color = (it.tipo === 'campana' ? T.azul : T.suave); centrado = true;
+      pos = enElPlano(it, it.an/2, it.al + 16);
+    } else return;
+
+    var elegida = null, y = pos.y;
+    for(var i = 0; i < DESVIOS.length; i++){
+      var prueba = cajaLetrero(pos.x, pos.y + DESVIOS[i], texto, tam, centrado);
+      if(i === 0) elegida = prueba;                /* si no hay hueco, va en su sitio */
+      if(!puestos.some(function(q){ return chocan(prueba, q); })){
+        elegida = prueba; y = pos.y + DESVIOS[i]; break;
+      }
+    }
+    puestos.push(elegida);
+    s += letrero(elegida, pos.x, y, texto, tam, color, T, centrado);
+  });
+  return s + '</g>';
 }
 
 /* ---------------- recintos en L ----------------
@@ -579,15 +656,6 @@ var DIBUJO = {
       s += '<rect x="6" y="6" width="' + Math.max(0,it.an-12) + '" height="' + Math.max(0,it.al-12) +
            '" fill="none" stroke="' + col + '" stroke-width="1" opacity=".35" />';
     }
-    /* el nombre se corre si el recorte se comió la esquina de arriba */
-    var lx = (c && c.esq === 'nw') ? c.an + 16 : 16;
-    s += '<text x="' + lx + '" y="32" font-family="Archivo, Helvetica, sans-serif" font-size="24" font-weight="600" fill="' + T.tinta +
-         '" style="pointer-events:none">' + esc(it.texto) + '</text>';
-    var linea = (plano.verM2Recinto ? numero(areaM2(it)) + ' m² · ' : '') +
-                numero(it.an/100, 2) + ' × ' + numero(it.al/100, 2) + ' m' + (c ? ' en L' : '');
-    s += '<text x="' + lx + '" y="54" ' +
-         'font-family="IBM Plex Mono, monospace" font-size="15" fill="' + T.tenue +
-         '" style="pointer-events:none">' + linea + '</text>';
     return s;
   },
   muro: function(it, T){
@@ -643,13 +711,23 @@ var DIBUJO = {
       '<line x1="' + (it.an*0.2) + '" y1="' + (it.al*0.16) + '" x2="' + (it.an*0.8) + '" y2="' + (it.al*0.16) +
       '" stroke="' + T.piezaLinea + '" stroke-width="2" />';
   },
+  freidora: function(it, T){
+    /* dos canastillos con su mango, que es como se reconoce de un vistazo */
+    var s = caja(it, T), n = it.an >= 55 ? 2 : 1, i;
+    for(i = 0; i < n; i++){
+      var x = it.an*(i + 0.5)/n;
+      s += '<rect x="' + (x - it.an*0.17) + '" y="' + (it.al*0.2) + '" width="' + (it.an*0.34) +
+        '" height="' + (it.al*0.45) + '" rx="3" fill="none" stroke="' + T.piezaLinea + '" stroke-width="2" />';
+      s += '<line x1="' + x + '" y1="' + (it.al*0.65) + '" x2="' + x + '" y2="' + (it.al*0.84) +
+        '" stroke="' + T.piezaLinea + '" stroke-width="2" />';
+    }
+    return s;
+  },
   campana: function(it, T){
     var s = '<rect width="' + it.an + '" height="' + it.al + '" fill="none" stroke="' + T.azul +
       '" stroke-width="2.5" stroke-dasharray="10 6" />';
     s += '<path d="M' + (it.an*0.42) + ' ' + (it.al*0.5) + ' l' + (it.an*0.16) + ' 0 m-' + (it.an*0.08) + ' -' +
       (it.al*0.16) + ' l0 ' + (it.al*0.32) + '" stroke="' + T.azul + '" stroke-width="2.5" fill="none" />';
-    s += '<text x="' + (it.an/2) + '" y="' + (it.al - 8) + '" text-anchor="middle" font-family="IBM Plex Mono, monospace" ' +
-      'font-size="13" fill="' + T.azul + '" style="pointer-events:none">' + esc(it.texto) + '</text>';
     return s;
   },
   refri: function(it, T){ return frio(it, T); },
@@ -700,9 +778,8 @@ var DIBUJO = {
       'font-family="IBM Plex Mono, monospace" font-weight="600" font-size="' + (it.al*0.5) + '" fill="' + T.rojo + '">E</text>';
   },
   texto: function(it, T){
-    return '<rect width="' + it.an + '" height="' + it.al + '" fill="none" />' +
-      '<text x="0" y="' + (it.al/2) + '" dominant-baseline="middle" font-family="Archivo, Helvetica, sans-serif" ' +
-      'font-size="' + Math.min(26, it.al*0.8) + '" fill="' + T.tinta + '">' + esc(it.texto) + '</text>';
+    /* sólo la zona que se puede agarrar: las letras las pone etiquetasHtml */
+    return '<rect width="' + it.an + '" height="' + it.al + '" fill="transparent" />';
   }
 };
 function caja(it, T){
@@ -756,8 +833,11 @@ function contenido(T, paraPapel){
   orden.forEach(function(it){
     var f = DIBUJO[it.tipo] || DIBUJO.meson;
     s += '<g data-id="' + it.id + '" transform="translate(' + it.x + ' ' + it.y + ')' + rot(it) + '" ' +
-      'style="cursor:move">' + f(it, T) + etiqueta(it, T) + '</g>';
+      'style="cursor:move">' + f(it, T) + '</g>';
   });
+
+  /* y ahora sí los nombres, todos juntos y por encima de todo */
+  s += etiquetasHtml(orden, T);
 
   /* observaciones de la SEREMI, numeradas sobre el plano */
   plano.obs.forEach(function(o, i){
@@ -1008,6 +1088,13 @@ function pintarPie(){
 /* ---------------- catálogo en el panel izquierdo ---------------- */
 function miniatura(tipo){
   var T = tema(false);
+  /* el texto suelto no tiene dibujo propio: su icono son dos renglones */
+  if(tipo === 'texto'){
+    return '<svg viewBox="-3 -3 40 32" aria-hidden="true">' +
+      '<line x1="2" y1="9" x2="32" y2="9" stroke="' + T.piezaLinea + '" stroke-width="2.5" />' +
+      '<line x1="2" y1="17" x2="24" y2="17" stroke="' + T.piezaLinea + '" stroke-width="2.5" />' +
+      '<line x1="2" y1="25" x2="29" y2="25" stroke="' + T.piezaLinea + '" stroke-width="2.5" opacity=".5" /></svg>';
+  }
   var f = DIBUJO[tipo === 'recintoL' ? 'recinto' : tipo] || DIBUJO.meson;
   var cuerpo = f({tipo:'recinto' === tipo || 'recintoL' === tipo ? 'recinto' : tipo, an:34, al:26, rot:0, texto:'',
                   corte:(tipo === 'recintoL' ? {esq:'ne', an:13, al:10} : null),
@@ -1018,7 +1105,7 @@ function miniatura(tipo){
 function pintarCatalogo(){
   var grupos = {
     catRecintos:['recinto','recintoL','muro'],
-    catCocina:['lavamanos','lavaplatos','lavafondos','meson','cocinaeq','horno','campana','refri','freezer','camara','estante'],
+    catCocina:['lavamanos','lavaplatos','lavafondos','meson','cocinaeq','horno','freidora','campana','refri','freezer','camara','estante'],
     catBanos:['wc','ducha','urinario','casillero'],
     catVarios:['mesa','basurero','extintor','puerta','ventana','texto']
   };

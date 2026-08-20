@@ -1484,9 +1484,9 @@ Se abre de dos maneras, la que sea más cómoda:
 Cómo se usa:
 
 - **Panel izquierdo**: las piezas. Un clic las agrega al centro de la vista —
-  recintos, lavamanos, lavaplatos, cocina, horno, campana, freezer, cámara de
-  frío, WC, duchas, casilleros, puertas y ventanas, con medidas reales de
-  partida en centímetros.
+  recintos, lavamanos, lavaplatos, cocina, horno, freidora, campana, freezer,
+  cámara de frío, WC, duchas, casilleros, puertas y ventanas, con medidas
+  reales de partida en centímetros.
 - **En el plano**: se arrastra para mover, se tira de las esquinas para cambiar
   el tamaño, la rueda del ratón acerca y aleja y arrastrando el fondo se
   desplaza la vista. Las flechas del teclado mueven de a 5 cm (con Shift, de a
@@ -1499,6 +1499,10 @@ Cómo se usa:
   todo lo que hay dentro — así se saca del plano el sector de casa habitación
   que la SEREMI pidió eliminar. Y el ojo la esconde sin borrarla, para ver cómo
   queda antes de decidir.
+- **Los nombres**: se dibujan al final, sobre su propio fondo y por encima de
+  todo lo demás, así que ninguno queda tapado por un muro ni por otro mueble.
+  Si dos caen en el mismo punto, el segundo se corre solo hasta encontrar
+  hueco, y siempre se leen derechos aunque la pieza esté girada.
 - **Recintos en L**: además del rectángulo hay «Recinto en L», que es el mismo
   rectángulo con una esquina recortada. Se elige cuál de las cuatro esquinas y
   cuánto mide el recorte, y la superficie se calcula ya descontada. Cualquier
