@@ -152,7 +152,12 @@ h2{
 }
 .zona:hover{background:var(--tabla2); border-color:var(--linea)}
 .zona .punto{width:9px; height:9px; border-radius:50%; flex:none}
-.zona .nom{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px}
+.zona .nom{
+  flex:1; min-width:0; font-size:13px; border:1px solid transparent; background:none;
+  border-radius:5px; padding:3px 5px; transition:border-color .12s, background .12s;
+}
+.zona .nom:hover{border-color:var(--borde); background:var(--tabla)}
+.zona .nom:focus{outline:none; border-color:var(--azul); background:var(--tabla); box-shadow:0 0 0 2px var(--azul-suave)}
 .zona .cuenta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--tenue)}
 .zona button{
   border:0; background:none; cursor:pointer; padding:2px 4px; border-radius:5px;
@@ -161,17 +166,33 @@ h2{
 .zona button:hover{background:var(--rojo-suave); color:var(--rojo)}
 .zona.apagada .nom{color:var(--tenue); text-decoration:line-through}
 
-/* observaciones seremi */
-.obs{display:flex; gap:9px; padding:8px 0; border-bottom:1px dashed var(--linea)}
-.obs:last-of-type{border-bottom:0}
-.obs .n{
-  flex:none; width:19px; height:19px; border-radius:50%; background:var(--rojo);
+/* notas y observaciones */
+.nota{display:flex; gap:9px; padding:9px 0; border-bottom:1px dashed var(--linea)}
+.nota:last-of-type{border-bottom:0}
+.nota .n{
+  flex:none; width:20px; height:20px; border-radius:50%; background:var(--rojo);
   color:#fff; font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600;
-  display:flex; align-items:center; justify-content:center; margin-top:1px;
+  display:flex; align-items:center; justify-content:center; margin-top:3px;
 }
-.obs p{margin:0; font-size:12.5px; line-height:1.5}
-.obs .quitar{border:0; background:none; color:var(--tenue); cursor:pointer; padding:0 2px; align-self:flex-start}
-.obs .quitar:hover{color:var(--rojo)}
+.nota textarea{
+  flex:1; min-width:0; min-height:42px; resize:none; overflow:hidden; font-size:12.5px; line-height:1.5;
+  border:1px solid transparent; background:var(--tabla2); border-radius:8px; padding:7px 9px;
+  transition:border-color .12s, box-shadow .12s;
+}
+.nota textarea::placeholder{color:var(--tenue)}
+.nota textarea:hover{border-color:var(--borde)}
+.nota textarea:focus{outline:none; border-color:var(--azul); box-shadow:0 0 0 2px var(--azul-suave)}
+.nota .quitar{
+  border:0; background:none; color:var(--tenue); cursor:pointer; padding:2px 3px;
+  align-self:flex-start; margin-top:3px; border-radius:5px; line-height:1;
+}
+.nota .quitar:hover{background:var(--rojo-suave); color:var(--rojo)}
+
+/* el botón que pide confirmación una segunda vez, en vez de una ventanita */
+.confirmar{
+  background:var(--rojo-suave) !important; color:var(--rojo) !important;
+  border-color:var(--rojo) !important; font-size:11px; padding:2px 7px;
+}
 
 /* pie */
 footer{
@@ -283,9 +304,9 @@ footer .sep{margin-left:auto}
       <button class="btn" id="bZonaNueva" style="margin-top:9px; width:100%">Agregar zona</button>
     </div>
     <div class="bloque">
-      <h2>Observaciones SEREMI</h2>
+      <h2>Notas del plano</h2>
       <div id="listaObs"></div>
-      <button class="btn" id="bObsNueva" style="margin-top:9px; width:100%">Anotar observación</button>
+      <button class="btn" id="bObsNueva" style="margin-top:9px; width:100%">Agregar nota</button>
     </div>
   </aside>
 </main>
@@ -469,6 +490,7 @@ function normalizar(p){
   if(!p.siguiente) p.siguiente = p.items.length + 100;
   if(p.verM2Recinto === undefined) p.verM2Recinto = false;
   if(!p.total || !p.total.modo) p.total = {modo:'manual', valor:0};
+  if(!(p.total.cocina > 0)) p.total.cocina = 0;
   if(!(p.total.valor > 0)){                 /* arranca con la suma de lo dibujado */
     p.total.valor = Math.round(p.items.reduce(function(a, i){
       if(i.tipo !== 'recinto') return a;
@@ -647,6 +669,16 @@ function numero(n, dec){ return n.toFixed(dec == null ? 1 : dec).replace('.', ',
 function totalM2(){
   if(plano.total && plano.total.modo === 'manual' && plano.total.valor > 0) return plano.total.valor;
   return plano.items.reduce(function(a, i){ return i.tipo === 'recinto' ? a + areaM2(i) : a; }, 0);
+}
+/* Lo que suman los recintos de una zona, buscándola por su nombre. */
+function sumaZona(texto){
+  var z = plano.zonas.filter(function(x){
+    return x.nombre.toLowerCase().indexOf(texto) >= 0;
+  })[0];
+  if(!z) return 0;
+  return plano.items.reduce(function(a, i){
+    return (i.tipo === 'recinto' && i.zona === z.id) ? a + areaM2(i) : a;
+  }, 0);
 }
 function sumaM2(){
   return plano.items.reduce(function(a, i){ return i.tipo === 'recinto' ? a + areaM2(i) : a; }, 0);
@@ -870,14 +902,15 @@ function contenido(T, paraPapel){
   return s;
 }
 
-function pintar(){
+function pintar(soloLienzo){
   var T = tema(false);
   var caja = svg.getBoundingClientRect();
   var an = caja.width / zoom, al = caja.height / zoom;
   svg.setAttribute('viewBox', panX + ' ' + panY + ' ' + an + ' ' + al);
   svg.innerHTML = '<rect x="' + panX + '" y="' + panY + '" width="' + an + '" height="' + al + '" fill="' + T.fondo + '" />' + contenido(T, false);
-  pintarPaneles();
-  pintarTotal();
+  /* mientras se arrastra sólo se repinta el dibujo: rehacer los paneles
+     le quitaría el foco a lo que se esté escribiendo */
+  if(!soloLienzo){ pintarPaneles(); pintarTotal(); }
   pintarPie();
 }
 
@@ -969,7 +1002,7 @@ function pintarPaneles(){
     var n = plano.items.filter(function(i){ return i.zona === z.id; }).length;
     return '<div class="zona' + (z.visible ? '' : ' apagada') + '">' +
       '<span class="punto" style="background:' + z.color + '"></span>' +
-      '<span class="nom" data-renombra="' + z.id + '" title="Cambiar el nombre">' + esc(z.nombre) + '</span>' +
+      '<input class="nom" data-renombra="' + z.id + '" value="' + esc(z.nombre) + '" title="Cambiar el nombre">' +
       '<span class="cuenta">' + n + '</span>' +
       '<button data-ver="' + z.id + '" title="Mostrar u ocultar">' + (z.visible ? '👁' : '◌') + '</button>' +
       '<button data-borrazona="' + z.id + '" title="Eliminar la zona completa">✕</button>' +
@@ -979,17 +1012,17 @@ function pintarPaneles(){
     b.onclick = function(){ var z = zonaDe(b.dataset.ver); z.visible = !z.visible; guardar(); pintar(); };
   });
   lz.querySelectorAll('[data-renombra]').forEach(function(b){
-    b.onclick = function(){
+    b.addEventListener('change', function(){
       var z = zonaDe(b.dataset.renombra);
-      var n = prompt('Nombre de la zona', z.nombre);
-      if(n){ marcar(); z.nombre = n; guardar(); pintar(); }
-    };
+      if(!this.value.trim()) { this.value = z.nombre; return; }
+      marcar(); z.nombre = this.value.trim(); guardar(); pintar();
+    });
   });
   lz.querySelectorAll('[data-borrazona]').forEach(function(b){
     b.onclick = function(){
       var z = zonaDe(b.dataset.borrazona);
       var n = plano.items.filter(function(i){ return i.zona === z.id; }).length;
-      if(!confirm('Eliminar la zona «' + z.nombre + '» y sus ' + n + ' elementos del plano.\n\nEsto no se puede deshacer con el botón del navegador, pero sí con Deshacer.')) return;
+      if(!confirmar2(b, '¿Borrar ' + n + '?')) return;     /* pide un segundo clic */
       marcar();
       plano.items = plano.items.filter(function(i){ return i.zona !== z.id; });
       plano.zonas = plano.zonas.filter(function(x){ return x.id !== z.id; });
@@ -998,21 +1031,23 @@ function pintarPaneles(){
     };
   });
 
-  /* observaciones */
+  /* notas: se escriben aquí mismo, en su propio campo */
   var lo = document.getElementById('listaObs');
-  lo.innerHTML = plano.obs.length
+  lo.innerHTML = (plano.obs.length
     ? plano.obs.map(function(o, i){
-        return '<div class="obs"><span class="n">' + (i+1) + '</span>' +
-          '<p data-editaobs="' + o.id + '" style="cursor:text">' + esc(o.texto) + '</p>' +
-          '<button class="quitar" data-borraobs="' + o.id + '" title="Quitar">✕</button></div>';
+        return '<div class="nota"><span class="n">' + (i+1) + '</span>' +
+          '<textarea data-nota="' + o.id + '" rows="2" placeholder="Escribe la nota…">' + esc(o.texto) + '</textarea>' +
+          '<button class="quitar" data-borraobs="' + o.id + '" title="Quitar la nota">✕</button></div>';
       }).join('')
-    : '<p class="vacio">Sin observaciones anotadas. Aquí van los puntos que pidió corregir la SEREMI; cada uno queda numerado sobre el plano.</p>';
-  lo.querySelectorAll('[data-editaobs]').forEach(function(e){
-    e.onclick = function(){
-      var o = plano.obs.filter(function(x){ return x.id === e.dataset.editaobs; })[0];
-      var t = prompt('Observación', o.texto);
-      if(t !== null){ marcar(); o.texto = t; guardar(); pintar(); }
-    };
+    : '<p class="vacio">Sin notas todavía. Cada nota queda numerada sobre el plano —el número se arrastra hasta el punto que corresponde— y el texto sale listado al costado en el PDF.</p>');
+  lo.querySelectorAll('[data-nota]').forEach(function(e){
+    crecer(e);                                   /* que se vea entera, sin scroll */
+    e.addEventListener('input', function(){ crecer(this); });
+    e.addEventListener('change', function(){
+      var o = plano.obs.filter(function(x){ return x.id === e.dataset.nota; })[0];
+      if(!o) return;
+      marcar(); o.texto = this.value; guardar(); pintar();
+    });
   });
   lo.querySelectorAll('[data-borraobs]').forEach(function(e){
     e.onclick = function(){
@@ -1021,6 +1056,28 @@ function pintarPaneles(){
       guardar(); pintar();
     };
   });
+}
+
+/* Que el campo de una nota crezca con lo que se escribe. */
+function crecer(t){
+  t.style.height = 'auto';
+  t.style.height = (t.scrollHeight + 2) + 'px';
+}
+
+/* Pedir confirmación sin ventanita: el botón se transforma y hay que
+   volver a apretarlo. Dentro de la ventana de un chat el navegador
+   bloquea confirm() y prompt(), así que no se pueden usar. */
+function confirmar2(boton, texto){
+  if(boton.dataset.seguro === '1') return true;
+  var antes = boton.textContent;
+  boton.dataset.seguro = '1';
+  boton.textContent = texto;
+  boton.classList.add('confirmar');
+  setTimeout(function(){
+    if(boton.dataset.seguro !== '1') return;
+    boton.dataset.seguro = ''; boton.textContent = antes; boton.classList.remove('confirmar');
+  }, 4000);
+  return false;
 }
 
 /* Los controles de forma del recinto: rectángulo o L, con qué esquina se
@@ -1062,9 +1119,19 @@ function pintarTotal(){
         '<p class="vacio numero">Los recintos del plano suman ' + numero(sumaM2(), 2) + ' m².</p>'
       : '<p class="vacio">Se suman los ' + plano.items.filter(function(i){ return i.tipo === 'recinto'; }).length +
         ' recintos dibujados. Cámbialo a «La escribo yo» para poner la cifra del certificado.</p>') +
+    '<div class="campo"><label for="fCocina">Superficie de la cocina (m²)</label>' +
+      '<input id="fCocina" class="numero" type="number" step="0.01" min="0" value="' + (t.cocina || 0) + '"></div>' +
+    '<p class="vacio numero">' + (sumaZona('cocina') > 0
+        ? 'Los recintos de la zona Cocina suman ' + numero(sumaZona('cocina'), 2) + ' m².'
+        : 'Va al pie del PDF, junto a la total. En cero, no se imprime.') + '</p>' +
     '<label class="chk"><input type="checkbox" id="fVerM2"' + (plano.verM2Recinto ? ' checked' : '') + '>' +
       'Mostrar los m² y las medidas dentro de cada recinto</label>';
 
+  document.getElementById('fCocina').addEventListener('change', function(){
+    var v = parseFloat(this.value);
+    if(isNaN(v) || v < 0) return;
+    marcar(); plano.total.cocina = v; guardar(); pintar();
+  });
   document.getElementById('fNombre').addEventListener('change', function(){
     marcar(); plano.nombre = this.value; guardar(); pintar();
   });
@@ -1202,16 +1269,16 @@ svg.addEventListener('pointermove', function(ev){
   if(arrastre.modo === 'pan'){
     panX = arrastre.px - (ev.clientX - arrastre.cx)/zoom;
     panY = arrastre.py - (ev.clientY - arrastre.cy)/zoom;
-    pintar();
+    pintar(true);
   } else if(arrastre.modo === 'mover'){
     var it = itemDe(sel); if(!it) return;
     it.x = ajusta(arrastre.x0 + (p.x - arrastre.p0.x));
     it.y = ajusta(arrastre.y0 + (p.y - arrastre.p0.y));
-    pintar();
+    pintar(true);
   } else if(arrastre.modo === 'obs'){
     arrastre.obs.x = ajusta(arrastre.x0 + (p.x - arrastre.p0.x));
     arrastre.obs.y = ajusta(arrastre.y0 + (p.y - arrastre.p0.y));
-    pintar();
+    pintar(true);
   } else if(arrastre.modo === 'medir'){
     var t = arrastre.tirador, b = arrastre.base, it3 = itemDe(sel);
     var dx = p.x - arrastre.p0.x, dy = p.y - arrastre.p0.y;
@@ -1224,15 +1291,17 @@ svg.addEventListener('pointermove', function(ev){
     if(al < 10){ al = 10; y = b.y; }
     it3.x = ajusta(x); it3.y = ajusta(y);
     it3.an = Math.max(10, ajusta(an)); it3.al = Math.max(10, ajusta(al));
-    pintar();
+    pintar(true);
   }
 });
 
 function soltar(ev){
-  if(arrastre && arrastre.modo !== 'pan') guardar();
+  var hubo = arrastre && arrastre.modo !== 'pan';
+  if(hubo) guardar();
   arrastre = null;
   svg.classList.remove('moviendo');
   if(ev && ev.pointerId != null && svg.hasPointerCapture(ev.pointerId)) svg.releasePointerCapture(ev.pointerId);
+  if(hubo) pintar();          /* al soltar, los paneles se ponen al día */
 }
 svg.addEventListener('pointerup', soltar);
 svg.addEventListener('pointercancel', soltar);
@@ -1287,26 +1356,30 @@ document.getElementById('bRehacer').onclick = rehacer;
 /* ---------------- zonas y observaciones nuevas ---------------- */
 var COLORES = ['#1F45B0','#0F7B6C','#8A5A00','#A6231C','#5B3FA8','#0E6E8C'];
 document.getElementById('bZonaNueva').onclick = function(){
-  var n = prompt('Nombre de la zona nueva', 'Zona');
-  if(!n) return;
   marcar();
+  var id = 'z' + Date.now();
   plano.zonas.push({
-    id:'z' + Date.now(), nombre:n,
+    id:id, nombre:'Zona ' + (plano.zonas.length + 1),
     color:COLORES[plano.zonas.length % COLORES.length], visible:true
   });
   guardar(); pintar();
+  var campo = document.querySelector('[data-renombra="' + id + '"]');
+  if(campo){ campo.focus(); campo.select(); }
 };
 document.getElementById('bObsNueva').onclick = function(){
-  var t = prompt('¿Qué observación hay que dejar anotada?');
-  if(!t) return;
   marcar();
-  var caja = svg.getBoundingClientRect();
+  var caja = svg.getBoundingClientRect(), id = 'o' + Date.now();
   plano.obs.push({
-    id:'o' + Date.now(), texto:t,
-    x:ajusta(panX + caja.width/zoom/2), y:ajusta(panY + caja.height/zoom/2)
+    id:id, texto:'',
+    /* cada nota nueva cae un poco más allá que la anterior, para que no
+       se apilen todas en el mismo punto */
+    x:ajusta(panX + caja.width/zoom/2 + (plano.obs.length % 6)*55),
+    y:ajusta(panY + caja.height/zoom/2 + (plano.obs.length % 6)*45)
   });
   guardar(); pintar();
-  decir('Observación ' + plano.obs.length + ' agregada al centro de la vista. Arrastra el número al lugar que corresponde.');
+  var campo = document.querySelector('[data-nota="' + id + '"]');
+  if(campo) campo.focus();
+  decir('Nota ' + plano.obs.length + ' agregada. Escríbela a la derecha y arrastra el número hasta su lugar en el plano.');
 };
 
 /* El título y la superficie total, arriba de la lámina que se imprime o se
@@ -1322,6 +1395,58 @@ document.getElementById('bObsNueva').onclick = function(){
    ================================================================== */
 var PAGINA = {an:841.89, al:595.28};    /* A4 apaisado, en puntos */
 
+/* Cortar un texto en renglones que quepan en un ancho dado. */
+function partirTexto(t, largoMax){
+  var palabras = String(t).trim().split(/\s+/), lineas = [], linea = '';
+  palabras.forEach(function(pal){
+    if(!linea) linea = pal;
+    else if((linea + ' ' + pal).length <= largoMax) linea += ' ' + pal;
+    else { lineas.push(linea); linea = pal; }
+  });
+  if(linea) lineas.push(linea);
+  return lineas;
+}
+
+/* La columna de notas al costado del plano: el mismo número que lleva el
+   círculo rojo sobre el dibujo, y al lado el texto. */
+function columnaNotas(x, y, an, alto){
+  var notas = plano.obs.map(function(o, i){ return {n:i+1, texto:o.texto}; })
+                       .filter(function(o){ return o.texto && o.texto.trim(); });
+  if(!notas.length) return '';
+
+  var anTexto = an - 22, tam = 9, salto = 12, cabeza = 30, cortadas = false;
+  for(var intento = 0; intento < 5; intento++){
+    var renglones = 0;
+    notas.forEach(function(o){ renglones += partirTexto(o.texto, Math.floor(anTexto / (tam*0.47))).length; });
+    if(cabeza + renglones*salto + notas.length*7 <= alto) break;
+    tam -= 0.5; salto -= 0.6;
+  }
+
+  var s = '<text x="' + x + '" y="' + (y + 11) + '" font-family="IBM Plex Mono, Courier New, monospace" ' +
+    'font-size="8.5" letter-spacing="1.1" fill="#5A646B">OBSERVACIONES</text>' +
+    '<line x1="' + x + '" y1="' + (y + 20) + '" x2="' + (x + an) + '" y2="' + (y + 20) +
+    '" stroke="#C4CABF" stroke-width="1" />';
+
+  var cursor = y + cabeza + 4;
+  notas.forEach(function(o){
+    var lineas = partirTexto(o.texto, Math.floor(anTexto / (tam*0.47)));
+    if(cursor + lineas.length*salto > y + alto){ cortadas = true; return; }
+    s += '<circle cx="' + (x + 7) + '" cy="' + (cursor - tam*0.35) + '" r="7" fill="#A6231C" />' +
+      '<text x="' + (x + 7) + '" y="' + (cursor - tam*0.35) + '" text-anchor="middle" dominant-baseline="central" ' +
+      'font-family="IBM Plex Mono, Courier New, monospace" font-size="8" font-weight="600" fill="#FFFFFF">' + o.n + '</text>';
+    lineas.forEach(function(t, k){
+      s += '<text x="' + (x + 22) + '" y="' + (cursor + k*salto) + '" ' +
+        'font-family="Archivo, Helvetica, Arial, sans-serif" font-size="' + tam + '" fill="#14181F">' + esc(t) + '</text>';
+    });
+    cursor += lineas.length*salto + 9;
+  });
+  if(cortadas){
+    s += '<text x="' + x + '" y="' + (y + alto - 2) + '" font-family="Archivo, Helvetica, Arial, sans-serif" ' +
+      'font-size="8" fill="#5A646B">…hay más notas de las que caben en la hoja.</text>';
+  }
+  return s;
+}
+
 function laminaSvg(){
   var T = tema(true), L = limites();
   var f = function(n){ return n.toFixed(2); };
@@ -1329,25 +1454,45 @@ function laminaSvg(){
   var dd = String(fecha.getDate()).padStart(2,'0') + '-' +
            String(fecha.getMonth()+1).padStart(2,'0') + '-' + fecha.getFullYear();
 
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="' + PAGINA.an + '" height="' + PAGINA.al + '" ' +
+  /* si hay notas escritas, se les reserva una columna a la derecha */
+  var hayNotas = plano.obs.some(function(o){ return o.texto && o.texto.trim(); });
+  var anColumna = hayNotas ? 196 : 0;
+  var anPlano = 749.89 - (hayNotas ? anColumna + 20 : 0);
+
+  var s = '<svg xmlns="http://www.w3.org/2000/svg" width="' + PAGINA.an + '" height="' + PAGINA.al + '" ' +
       'viewBox="0 0 ' + PAGINA.an + ' ' + PAGINA.al + '">' +
     '<rect width="' + PAGINA.an + '" height="' + PAGINA.al + '" fill="#FFFFFF" />' +
     '<rect x="24" y="24" width="793.89" height="547" fill="none" stroke="#14181F" stroke-width="1.2" />' +
     /* el plano, ajustado solo al hueco que le queda */
-    '<svg x="46" y="46" width="749.89" height="434" ' +
+    '<svg x="46" y="46" width="' + f(anPlano) + '" height="434" ' +
       'viewBox="' + f(L.x - 30) + ' ' + f(L.y - 30) + ' ' + f(L.an + 60) + ' ' + f(L.al + 60) + '" ' +
-      'preserveAspectRatio="xMidYMid meet">' + contenido(T, true) + '</svg>' +
-    /* el rótulo */
-    '<line x1="46" y1="500" x2="795.89" y2="500" stroke="#14181F" stroke-width="1.2" />' +
+      'preserveAspectRatio="xMidYMid meet">' + contenido(T, true) + '</svg>';
+
+  if(hayNotas){
+    s += '<line x1="' + f(46 + anPlano + 10) + '" y1="46" x2="' + f(46 + anPlano + 10) + '" y2="480" ' +
+      'stroke="#C4CABF" stroke-width="1" />';
+    s += columnaNotas(46 + anPlano + 20, 46, anColumna, 434);
+  }
+
+  /* el rótulo: título a la izquierda, las superficies a la derecha */
+  s += '<line x1="46" y1="500" x2="795.89" y2="500" stroke="#14181F" stroke-width="1.2" />' +
     '<text x="46" y="528" font-family="Archivo, Helvetica, Arial, sans-serif" font-size="20" ' +
       'font-weight="600" fill="#14181F">' + esc(plano.nombre) + '</text>' +
     '<text x="46" y="546" font-family="IBM Plex Mono, Courier New, monospace" font-size="9.5" ' +
-      'fill="#5A646B">Plano de planta · ' + dd + '</text>' +
-    '<text x="795.89" y="528" text-anchor="end" font-family="IBM Plex Mono, Courier New, monospace" ' +
+      'fill="#5A646B">Plano de planta · ' + dd + '</text>';
+
+  if(plano.total.cocina > 0){
+    s += '<text x="620.89" y="528" text-anchor="end" font-family="IBM Plex Mono, Courier New, monospace" ' +
+      'font-size="20" font-weight="600" fill="#14181F">' + numero(plano.total.cocina, 2) + ' m²</text>' +
+      '<text x="620.89" y="546" text-anchor="end" font-family="IBM Plex Mono, Courier New, monospace" ' +
+      'font-size="9.5" fill="#5A646B">Superficie cocina</text>';
+  }
+  s += '<text x="795.89" y="528" text-anchor="end" font-family="IBM Plex Mono, Courier New, monospace" ' +
       'font-size="20" font-weight="600" fill="#14181F">' + numero(totalM2(), 2) + ' m²</text>' +
     '<text x="795.89" y="546" text-anchor="end" font-family="IBM Plex Mono, Courier New, monospace" ' +
-      'font-size="9.5" fill="#5A646B">Superficie total</text>' +
-    '</svg>';
+      'font-size="9.5" fill="#5A646B">Superficie total</text>';
+
+  return s + '</svg>';
 }
 
 /* La lámina pasada a imagen, a 300 puntos por pulgada, que es lo que
@@ -1493,14 +1638,15 @@ document.getElementById('bAbrir').onclick = function(){
     '<h3>Abrir una copia</h3>' +
     '<p>Pega aquí el texto que guardaste antes. Reemplaza el plano que está en pantalla, pero se puede volver atrás con Deshacer.</p>' +
     '<textarea id="txtPega" placeholder="Pega aquí el texto del plano"></textarea>' +
-    '<div class="pie-caja"><button class="btn" id="bCerrar2">Cancelar</button>' +
+    '<div class="pie-caja"><span id="errorCopia" class="vacio" style="margin-right:auto; color:var(--rojo)"></span>' +
+    '<button class="btn" id="bCerrar2">Cancelar</button>' +
     '<button class="btn peligro" id="bDeCero">Empezar de nuevo</button>' +
     '<button class="btn fuerte" id="bCargar">Abrir</button></div>'
   );
   document.getElementById('bCerrar2').onclick = cerrarCaja;
   document.getElementById('bDeCero').onclick = function(){
-    if(!confirm('Volver al plano de partida y perder los cambios actuales.')) return;
-    marcar(); plano = planoInicial(); sel = null; guardar(); cerrarCaja(); encajar();
+    if(!confirmar2(this, '¿Seguro? Se pierde lo hecho')) return;
+    marcar(); plano = normalizar(planoInicial()); sel = null; guardar(); cerrarCaja(); encajar();
   };
   document.getElementById('bCargar').onclick = function(){
     var t = document.getElementById('txtPega').value.trim();
@@ -1512,7 +1658,8 @@ document.getElementById('bAbrir').onclick = function(){
       sel = null; guardar(); cerrarCaja(); encajar();
       decir('Plano abierto.');
     }catch(e){
-      alert('Ese texto no es un plano guardado. Copia de nuevo el texto completo, desde la primera llave hasta la última.');
+      var m = document.getElementById('errorCopia');
+      if(m) m.textContent = 'Ese texto no es un plano guardado. Cópialo completo, desde la primera llave hasta la última.';
     }
   };
 };
