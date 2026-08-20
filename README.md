@@ -1492,9 +1492,13 @@ Cómo se usa:
   desplaza la vista. Las flechas del teclado mueven de a 5 cm (con Shift, de a
   50 cm) y Suprimir borra. Ctrl+Z deshace.
 - **Panel derecho**: el nombre, las medidas exactas y la zona de lo que esté
-  seleccionado; el listado de zonas; y las observaciones de la SEREMI, que
-  quedan numeradas sobre el plano y se arrastran hasta el punto que
-  corresponde.
+  seleccionado; el título y las superficies de la lámina; el listado de zonas;
+  y las notas del plano.
+- **Notas**: se escriben en su propio campo, ahí mismo, y el campo crece con el
+  texto. Cada nota queda numerada sobre el plano —el número se arrastra hasta
+  el punto que corresponde— y el texto sale listado en una columna al costado
+  del PDF, con el mismo número. Es donde van los puntos que pidió corregir la
+  SEREMI.
 - **Zonas**: cada elemento pertenece a una. La ✕ de una zona borra de una vez
   todo lo que hay dentro — así se saca del plano el sector de casa habitación
   que la SEREMI pidió eliminar. Y el ojo la esconde sin borrarla, para ver cómo
@@ -1507,11 +1511,13 @@ Cómo se usa:
   rectángulo con una esquina recortada. Se elige cuál de las cuatro esquinas y
   cuánto mide el recorte, y la superficie se calcula ya descontada. Cualquier
   recinto se pasa de rectángulo a L, y al revés, en «Forma».
-- **Título y superficie total**: los dos los escribe quien hace el plano, en
-  el panel de la derecha, y salen en el rótulo al pie de la lámina —el título
-  a la izquierda, la superficie a la derecha—. La superficie también se puede
-  pedir calculada, sumando los recintos, aunque la suma de los rectángulos
-  dibujados casi nunca es la que se declara.
+- **Título y superficies**: los escribe quien hace el plano, en el panel de la
+  derecha, y salen en el rótulo al pie de la lámina: el título a la izquierda,
+  y a la derecha dos cifras, la superficie de la cocina y la total. Como
+  referencia, el panel muestra cuánto suman los recintos dibujados —en total y
+  los de la zona Cocina—, y la total se puede pedir calculada, aunque la suma
+  de los rectángulos casi nunca es la que se declara. Si la de la cocina va en
+  cero, no se imprime.
 - **Dentro del plano, sólo los nombres**: cada recinto muestra su nombre y nada
   más. Los metros cuadrados y las medidas de cada uno se encienden, si hacen
   falta, con el interruptor del mismo panel.
@@ -1521,9 +1527,9 @@ seguir en otro computador, **Guardar copia** entrega el plano como un texto que
 se pega en un correo, y **Abrir copia** lo devuelve.
 
 Para entregarlo, el botón **PDF**: arma una hoja A4 apaisada con su marco, el
-plano ajustado adentro y el rótulo al pie —título a la izquierda, superficie
-total a la derecha—, la muestra en pantalla para revisarla y la guarda como
-archivo. El PDF lo escribe la propia página, sin imprimir y sin depender de
+plano ajustado adentro, la columna de notas al costado —cuando hay notas
+escritas— y el rótulo al pie, la muestra en pantalla para revisarla y la
+guarda como archivo. El PDF lo escribe la propia página, sin imprimir y sin depender de
 ningún programa: por eso funciona también donde el navegador tiene bloqueada
 la impresión. Si el visor no admite guardar PDF, ofrece la misma hoja en PNG.
 
@@ -1534,3 +1540,11 @@ esté trabajando en modo oscuro.
 El plano que aparece al abrir es el dibujo a mano pasado en limpio: sirve de
 punto de partida, no es un levantamiento medido. Las medidas se corrigen una
 por una en el panel de la derecha, con el metro en la mano.
+
+### Nada de ventanitas del navegador
+
+El editor del plano no usa `prompt()`, `confirm()` ni `alert()`. Dentro de una
+ventana ajena —la de un chat, por ejemplo— el navegador las bloquea sin avisar,
+y un botón que dependa de ellas simplemente no hace nada. Todo lo que hay que
+escribir se escribe en un campo de la página, y lo que hay que confirmar se
+confirma apretando el mismo botón una segunda vez.
