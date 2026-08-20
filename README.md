@@ -1507,11 +1507,14 @@ Cómo se usa:
   rectángulo con una esquina recortada. Se elige cuál de las cuatro esquinas y
   cuánto mide el recorte, y la superficie se calcula ya descontada. Cualquier
   recinto se pasa de rectángulo a L, y al revés, en «Forma».
-- **Superficie total**: es un solo número, arriba a la derecha, y sale impreso
-  en la lámina. Normalmente se escribe a mano —la suma de los rectángulos
-  dibujados casi nunca es la superficie que se declara—, pero se puede pedir
-  que la calcule sumando los recintos. Los metros cuadrados recinto por recinto
-  vienen apagados; se encienden con el interruptor del mismo panel.
+- **Título y superficie total**: los dos los escribe quien hace el plano, en
+  el panel de la derecha, y salen en el rótulo al pie de la lámina —el título
+  a la izquierda, la superficie a la derecha—. La superficie también se puede
+  pedir calculada, sumando los recintos, aunque la suma de los rectángulos
+  dibujados casi nunca es la que se declara.
+- **Dentro del plano, sólo los nombres**: cada recinto muestra su nombre y nada
+  más. Los metros cuadrados y las medidas de cada uno se encienden, si hacen
+  falta, con el interruptor del mismo panel.
 
 El trabajo se guarda solo en el mismo navegador. Para tener respaldo, o para
 seguir en otro computador, **Guardar copia** entrega el plano como un texto que

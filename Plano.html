@@ -274,7 +274,7 @@ footer .sep{margin-left:auto}
   <aside class="der">
     <div class="bloque" id="panelSel"></div>
     <div class="bloque">
-      <h2>Superficie total</h2>
+      <h2>Título y superficie</h2>
       <div id="panelTotal"></div>
     </div>
     <div class="bloque">
@@ -563,16 +563,22 @@ function etiquetasHtml(items, T){
     if(it.tipo === 'recinto'){
       var c = corteDe(it);
       var lx = it.x + ((c && c.esq === 'nw') ? c.an + 16 : 16);
-      var linea = (plano.verM2Recinto ? numero(areaM2(it)) + ' m² · ' : '') +
-                  numero(it.an/100, 2) + ' × ' + numero(it.al/100, 2) + ' m' + (c ? ' en L' : '');
+      /* El nombre y nada más. Las medidas y los m² sólo aparecen si se
+         encienden a propósito: el plano se lee mejor sin ellos. */
+      var linea = plano.verM2Recinto
+        ? numero(areaM2(it)) + ' m² · ' + numero(it.an/100, 2) + ' × ' + numero(it.al/100, 2) + ' m' + (c ? ' en L' : '')
+        : '';
       var ancho = Math.max(it.texto.length * 13.5, linea.length * 9) + 18;
-      s += '<rect x="' + (lx - 9) + '" y="' + (it.y + 10) + '" width="' + ancho + '" height="52" rx="6" fill="' +
-        T.papel + '" opacity="0.86" />';
+      var alto = linea ? 52 : 32;
+      s += '<rect x="' + (lx - 9) + '" y="' + (it.y + 10) + '" width="' + ancho + '" height="' + alto +
+        '" rx="6" fill="' + T.papel + '" opacity="0.86" />';
       s += '<text x="' + lx + '" y="' + (it.y + 32) + '" font-family="Archivo, Helvetica, sans-serif" ' +
         'font-size="24" font-weight="600" fill="' + T.tinta + '">' + esc(it.texto) + '</text>';
-      s += '<text x="' + lx + '" y="' + (it.y + 54) + '" font-family="IBM Plex Mono, monospace" ' +
-        'font-size="15" fill="' + T.tenue + '">' + esc(linea) + '</text>';
-      puestos.push({x1:lx - 9, y1:it.y + 10, x2:lx - 9 + ancho, y2:it.y + 62});
+      if(linea){
+        s += '<text x="' + lx + '" y="' + (it.y + 54) + '" font-family="IBM Plex Mono, monospace" ' +
+          'font-size="15" fill="' + T.tenue + '">' + esc(linea) + '</text>';
+      }
+      puestos.push({x1:lx - 9, y1:it.y + 10, x2:lx - 9 + ancho, y2:it.y + 10 + alto});
     }
   });
 
@@ -1044,6 +1050,8 @@ function formaHtml(it){
 function pintarTotal(){
   var t = plano.total, manual = t.modo === 'manual';
   document.getElementById('panelTotal').innerHTML =
+    '<div class="campo"><label for="fNombre">Título de la lámina</label>' +
+      '<input id="fNombre" value="' + esc(plano.nombre) + '"></div>' +
     '<p class="granTotal">' + numero(totalM2(), manual ? 2 : 1) + '<small>m²</small></p>' +
     '<div class="campo"><label for="fModo">De dónde sale</label><select id="fModo">' +
       '<option value="manual"' + (manual ? ' selected' : '') + '>La escribo yo</option>' +
@@ -1055,8 +1063,11 @@ function pintarTotal(){
       : '<p class="vacio">Se suman los ' + plano.items.filter(function(i){ return i.tipo === 'recinto'; }).length +
         ' recintos dibujados. Cámbialo a «La escribo yo» para poner la cifra del certificado.</p>') +
     '<label class="chk"><input type="checkbox" id="fVerM2"' + (plano.verM2Recinto ? ' checked' : '') + '>' +
-      'Mostrar los m² dentro de cada recinto</label>';
+      'Mostrar los m² y las medidas dentro de cada recinto</label>';
 
+  document.getElementById('fNombre').addEventListener('change', function(){
+    marcar(); plano.nombre = this.value; guardar(); pintar();
+  });
   document.getElementById('fModo').addEventListener('change', function(){
     marcar();
     plano.total.modo = this.value;
@@ -1300,11 +1311,27 @@ document.getElementById('bObsNueva').onclick = function(){
 
 /* El título y la superficie total, arriba de la lámina que se imprime o se
    guarda como imagen. Es lo primero que mira quien recibe el plano. */
-function encabezado(L, m){
-  return '<text x="' + (L.x - m + 20) + '" y="' + (L.y - m + 34) + '" font-family="Archivo, Helvetica, sans-serif" ' +
-    'font-size="26" font-weight="600" fill="#14181F">' + esc(plano.nombre) + '</text>' +
-    '<text x="' + (L.x - m + 20) + '" y="' + (L.y - m + 58) + '" font-family="IBM Plex Mono, monospace" ' +
-    'font-size="18" fill="#4A555C">Superficie total: ' + numero(totalM2(), 2) + ' m²</text>';
+/* La hoja completa: el dibujo con aire alrededor y, abajo, la franja del
+   rótulo, que es donde van el título y la superficie total. */
+function hoja(){
+  var L = limites(), lado = 60, arriba = 50, abajo = 150;
+  return {x:L.x - lado, y:L.y - arriba,
+          an:L.an + lado*2, al:L.al + arriba + abajo, abajo:abajo};
+}
+
+/* El rótulo al pie: una línea, el título a la izquierda y la superficie
+   total a la derecha. Los dos los escribe quien hace el plano. */
+function rotulo(h){
+  var y = h.y + h.al - h.abajo + 46;
+  return '<line x1="' + (h.x + 60) + '" y1="' + y + '" x2="' + (h.x + h.an - 60) + '" y2="' + y +
+    '" stroke="#14181F" stroke-width="2" />' +
+    '<text x="' + (h.x + 60) + '" y="' + (y + 44) + '" font-family="Archivo, Helvetica, sans-serif" ' +
+    'font-size="30" font-weight="600" fill="#14181F">' + esc(plano.nombre) + '</text>' +
+    '<text x="' + (h.x + h.an - 60) + '" y="' + (y + 44) + '" text-anchor="end" ' +
+    'font-family="IBM Plex Mono, monospace" font-size="26" font-weight="600" fill="#14181F">' +
+    numero(totalM2(), 2) + ' m²</text>' +
+    '<text x="' + (h.x + h.an - 60) + '" y="' + (y + 70) + '" text-anchor="end" ' +
+    'font-family="IBM Plex Mono, monospace" font-size="15" fill="#4A555C">Superficie total</text>';
 }
 
 /* ---------------- ventana modal ---------------- */
@@ -1370,14 +1397,13 @@ document.getElementById('bAbrir').onclick = function(){
    directo no siempre está permitido en la ventana donde corre la página,
    así que se guarda con el botón derecho sobre la imagen. */
 document.getElementById('bImagen').onclick = function(){
-  var T = tema(true), L = limites(), m = 60;
-  var an = L.an + m*2, al = L.al + m*2, escala = Math.min(3, 2400/an);
+  var T = tema(true), h = hoja();
+  var an = h.an, al = h.al, escala = Math.min(3, 2400/an);
   var cuerpo =
     '<svg xmlns="http://www.w3.org/2000/svg" width="' + Math.round(an*escala) + '" height="' + Math.round(al*escala) + '" ' +
-    'viewBox="' + (L.x - m) + ' ' + (L.y - m) + ' ' + an + ' ' + al + '">' +
-    '<rect x="' + (L.x - m) + '" y="' + (L.y - m) + '" width="' + an + '" height="' + al + '" fill="#fff" />' +
-    contenido(T, true) +
-    encabezado(L, m) + '</svg>';
+    'viewBox="' + h.x + ' ' + h.y + ' ' + an + ' ' + al + '">' +
+    '<rect x="' + h.x + '" y="' + h.y + '" width="' + an + '" height="' + al + '" fill="#fff" />' +
+    contenido(T, true) + rotulo(h) + '</svg>';
 
   abrirCaja('<h3>Imagen del plano</h3><p>Generando…</p>');
   var img = new Image();
@@ -1408,11 +1434,11 @@ document.getElementById('bImagen').onclick = function(){
    a dejar como estaba. Eligiendo «Guardar como PDF» queda el archivo para
    presentar. */
 document.getElementById('bImprimir').onclick = function(){
-  var T = tema(true), L = limites(), m = 60;
+  var T = tema(true), h = hoja();
   var guardadoSel = sel; sel = null;
-  svg.setAttribute('viewBox', (L.x - m) + ' ' + (L.y - m) + ' ' + (L.an + m*2) + ' ' + (L.al + m*2));
-  svg.innerHTML = '<rect x="' + (L.x - m) + '" y="' + (L.y - m) + '" width="' + (L.an + m*2) + '" height="' + (L.al + m*2) +
-    '" fill="#fff" />' + contenido(T, true) + encabezado(L, m);
+  svg.setAttribute('viewBox', h.x + ' ' + h.y + ' ' + h.an + ' ' + h.al);
+  svg.innerHTML = '<rect x="' + h.x + '" y="' + h.y + '" width="' + h.an + '" height="' + h.al +
+    '" fill="#fff" />' + contenido(T, true) + rotulo(h);
   window.print();
   setTimeout(function(){ sel = guardadoSel; pintar(); }, 400);
 };
