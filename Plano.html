@@ -136,6 +136,15 @@ h2{
 .numero{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums}
 .vacio{color:var(--tenue); font-size:12.5px; line-height:1.6}
 
+/* interruptores de sí o no */
+.chk{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--suave); cursor:pointer; margin-top:2px}
+.chk input{width:15px; height:15px; accent-color:var(--azul); flex:none; margin:0}
+.granTotal{
+  font-family:'IBM Plex Mono',monospace; font-size:26px; font-weight:600; color:var(--tinta);
+  font-variant-numeric:tabular-nums; letter-spacing:-.02em; margin:2px 0 8px;
+}
+.granTotal small{font-size:13px; font-weight:400; color:var(--tenue); margin-left:4px}
+
 /* zonas */
 .zona{
   display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
@@ -265,6 +274,10 @@ footer .sep{margin-left:auto}
   <aside class="der">
     <div class="bloque" id="panelSel"></div>
     <div class="bloque">
+      <h2>Superficie total</h2>
+      <div id="panelTotal"></div>
+    </div>
+    <div class="bloque">
       <h2>Zonas del plano</h2>
       <div id="listaZonas"></div>
       <button class="btn" id="bZonaNueva" style="margin-top:9px; width:100%">Agregar zona</button>
@@ -313,6 +326,7 @@ var aviso = document.getElementById('aviso');
    después no caben. */
 var CAT = {
   recinto:   {nom:'Recinto',            fam:'recinto', an:400, al:300, texto:'Recinto'},
+  recintoL:  {nom:'Recinto en L',       fam:'recinto', an:400, al:300, texto:'Recinto'},
   muro:      {nom:'Muro',               fam:'muro',    an:400, al:15,  texto:''},
   puerta:    {nom:'Puerta',             fam:'abertura',an:90,  al:15,  texto:''},
   ventana:   {nom:'Ventana',            fam:'abertura',an:120, al:15,  texto:''},
@@ -348,6 +362,8 @@ function planoInicial(){
   var id = 0, nuevo = function(){ return 'e' + (++id); };
   return {
     nombre:'Casona Peumayén — Planta cocina y servicios',
+    total:{modo:'manual', valor:0},
+    verM2Recinto:false,
     zonas:[
       {id:'cocina',  nombre:'Cocina',            color:'#1F45B0', visible:true},
       {id:'servicio',nombre:'Servicio y bodegas',color:'#0F7B6C', visible:true},
@@ -442,6 +458,26 @@ function cargar(){
   return planoInicial();
 }
 
+/* Un plano guardado antes de que existieran la superficie total y los
+   recintos en L no trae esos datos: se los ponemos al abrirlo, sin tocar
+   nada de lo que ya estaba dibujado. */
+function normalizar(p){
+  if(!p.obs) p.obs = [];
+  if(!p.zonas) p.zonas = planoInicial().zonas;
+  if(!p.siguiente) p.siguiente = p.items.length + 100;
+  if(p.verM2Recinto === undefined) p.verM2Recinto = false;
+  if(!p.total || !p.total.modo) p.total = {modo:'manual', valor:0};
+  if(!(p.total.valor > 0)){                 /* arranca con la suma de lo dibujado */
+    p.total.valor = Math.round(p.items.reduce(function(a, i){
+      if(i.tipo !== 'recinto') return a;
+      var c = i.corte, hueco = (c && c.an > 0 && c.al > 0) ? c.an*c.al : 0;
+      return a + (i.an*i.al - hueco)/10000;
+    }, 0) * 100) / 100;
+  }
+  p.items.forEach(function(i){ if(i.corte === undefined) i.corte = null; });
+  return p;
+}
+
 function decir(t){
   aviso.textContent = t; aviso.classList.add('ver');
   clearTimeout(decir.t); decir.t = setTimeout(function(){ aviso.classList.remove('ver'); }, 2600);
@@ -491,20 +527,67 @@ function etiqueta(it, T){
     '" style="pointer-events:none">' + esc(it.texto) + '</text>';
 }
 
+/* ---------------- recintos en L ----------------
+   Un recinto puede ser un rectángulo o una L: la L es el mismo
+   rectángulo con una esquina recortada. El recorte se guarda en
+   corte = {esq:'ne', an:150, al:100}, también en centímetros, y de ahí
+   salen tanto el dibujo como la superficie. */
+var ESQUINAS = {nw:'Arriba a la izquierda', ne:'Arriba a la derecha', sw:'Abajo a la izquierda', se:'Abajo a la derecha'};
+
+function corteDe(it){
+  var c = it.corte;
+  if(!c || !(c.an > 0) || !(c.al > 0)) return null;
+  return {esq:ESQUINAS[c.esq] ? c.esq : 'ne',
+          an:Math.min(c.an, it.an - 10), al:Math.min(c.al, it.al - 10)};
+}
+function contorno(it){
+  var c = corteDe(it), w = it.an, h = it.al;
+  if(!c) return [[0,0],[w,0],[w,h],[0,h]];
+  var cw = c.an, ch = c.al;
+  if(c.esq === 'nw') return [[cw,0],[w,0],[w,h],[0,h],[0,ch],[cw,ch]];
+  if(c.esq === 'ne') return [[0,0],[w-cw,0],[w-cw,ch],[w,ch],[w,h],[0,h]];
+  if(c.esq === 'sw') return [[0,0],[w,0],[w,h],[cw,h],[cw,h-ch],[0,h-ch]];
+  return [[0,0],[w,0],[w,h-ch],[w-cw,h-ch],[w-cw,h],[0,h]];
+}
+function puntos(ps){ return ps.map(function(q){ return q[0] + ',' + q[1]; }).join(' '); }
+
+/* Superficie en metros cuadrados, ya descontado el recorte de la L. */
+function areaM2(it){
+  var c = corteDe(it);
+  return (it.an*it.al - (c ? c.an*c.al : 0)) / 10000;
+}
+function numero(n, dec){ return n.toFixed(dec == null ? 1 : dec).replace('.', ','); }
+
+/* Superficie total del plano: la suma de los recintos, o la que se haya
+   escrito a mano. En un plano real la suma de los rectángulos casi nunca
+   es la superficie que se declara, así que manda el número escrito. */
+function totalM2(){
+  if(plano.total && plano.total.modo === 'manual' && plano.total.valor > 0) return plano.total.valor;
+  return plano.items.reduce(function(a, i){ return i.tipo === 'recinto' ? a + areaM2(i) : a; }, 0);
+}
+function sumaM2(){
+  return plano.items.reduce(function(a, i){ return i.tipo === 'recinto' ? a + areaM2(i) : a; }, 0);
+}
+
 var DIBUJO = {
   recinto: function(it, T){
     var z = zonaDe(it.zona), col = z ? z.color : T.muro;
-    var m2 = (it.an * it.al / 10000);
-    var s = '<rect width="' + it.an + '" height="' + it.al + '" fill="' + T.relleno + '" stroke="' + col +
-            '" stroke-width="6" />';
-    s += '<rect x="6" y="6" width="' + Math.max(0,it.an-12) + '" height="' + Math.max(0,it.al-12) +
-         '" fill="none" stroke="' + col + '" stroke-width="1" opacity=".35" />';
-    s += '<text x="16" y="32" font-family="Archivo, Helvetica, sans-serif" font-size="24" font-weight="600" fill="' + T.tinta +
+    var c = corteDe(it);
+    var s = '<polygon points="' + puntos(contorno(it)) + '" fill="' + T.relleno + '" stroke="' + col +
+            '" stroke-width="6" stroke-linejoin="miter" />';
+    if(!c){
+      s += '<rect x="6" y="6" width="' + Math.max(0,it.an-12) + '" height="' + Math.max(0,it.al-12) +
+           '" fill="none" stroke="' + col + '" stroke-width="1" opacity=".35" />';
+    }
+    /* el nombre se corre si el recorte se comió la esquina de arriba */
+    var lx = (c && c.esq === 'nw') ? c.an + 16 : 16;
+    s += '<text x="' + lx + '" y="32" font-family="Archivo, Helvetica, sans-serif" font-size="24" font-weight="600" fill="' + T.tinta +
          '" style="pointer-events:none">' + esc(it.texto) + '</text>';
-    s += '<text x="16" y="54" ' +
+    var linea = (plano.verM2Recinto ? numero(areaM2(it)) + ' m² · ' : '') +
+                numero(it.an/100, 2) + ' × ' + numero(it.al/100, 2) + ' m' + (c ? ' en L' : '');
+    s += '<text x="' + lx + '" y="54" ' +
          'font-family="IBM Plex Mono, monospace" font-size="15" fill="' + T.tenue +
-         '" style="pointer-events:none">' + m2.toFixed(1).replace('.', ',') + ' m² · ' +
-         (it.an/100).toFixed(2).replace('.', ',') + ' × ' + (it.al/100).toFixed(2).replace('.', ',') + ' m</text>';
+         '" style="pointer-events:none">' + linea + '</text>';
     return s;
   },
   muro: function(it, T){
@@ -708,6 +791,7 @@ function pintar(){
   svg.setAttribute('viewBox', panX + ' ' + panY + ' ' + an + ' ' + al);
   svg.innerHTML = '<rect x="' + panX + '" y="' + panY + '" width="' + an + '" height="' + al + '" fill="' + T.fondo + '" />' + contenido(T, false);
   pintarPaneles();
+  pintarTotal();
   pintarPie();
 }
 
@@ -736,13 +820,36 @@ function pintarPaneles(){
         '<div class="campo"><label for="fY">Posición Y</label><input id="fY" class="numero" type="number" step="5" value="' + it.y + '"></div>' +
       '</div>' +
       '<div class="campo"><label for="fZona">Zona</label><select id="fZona">' + op + '</select></div>' +
-      (it.tipo === 'recinto'
-        ? '<p class="vacio numero">Superficie: ' + (it.an*it.al/10000).toFixed(2).replace('.', ',') + ' m²</p>' : '') +
+      (it.tipo === 'recinto' ? formaHtml(it) : '') +
       '<div class="grupo" style="flex-wrap:wrap; margin-top:4px">' +
         '<button class="btn" id="bGirar">Girar 90°</button>' +
         '<button class="btn" id="bCopiar">Duplicar</button>' +
         '<button class="btn peligro" id="bBorrar">Borrar</button>' +
       '</div>';
+
+    if(it.tipo === 'recinto'){
+      document.getElementById('fForma').addEventListener('change', function(){
+        marcar();
+        it.corte = this.value === 'L'
+          ? {esq:'ne', an:Math.round(it.an*0.45), al:Math.round(it.al*0.45)}
+          : null;
+        guardar(); pintar();
+      });
+      if(it.corte){
+        document.getElementById('fEsq').addEventListener('change', function(){
+          marcar(); it.corte.esq = this.value; guardar(); pintar();
+        });
+        ['fCorteAn','fCorteAl'].forEach(function(id){
+          document.getElementById(id).addEventListener('change', function(){
+            var v = parseFloat(this.value);
+            if(isNaN(v) || v <= 0) return;
+            marcar();
+            it.corte[id === 'fCorteAn' ? 'an' : 'al'] = Math.round(v);
+            guardar(); pintar();
+          });
+        });
+      }
+    }
 
     var num = function(id, campo){
       document.getElementById(id).addEventListener('change', function(){
@@ -830,11 +937,69 @@ function pintarPaneles(){
   });
 }
 
+/* Los controles de forma del recinto: rectángulo o L, con qué esquina se
+   recorta y cuánto mide ese recorte. */
+function formaHtml(it){
+  var c = corteDe(it);
+  var h = '<div class="campo"><label for="fForma">Forma</label><select id="fForma">' +
+    '<option value="rect"' + (c ? '' : ' selected') + '>Rectángulo</option>' +
+    '<option value="L"' + (c ? ' selected' : '') + '>En L (esquina recortada)</option></select></div>';
+  if(c){
+    h += '<div class="campo"><label for="fEsq">Esquina que se recorta</label><select id="fEsq">' +
+      Object.keys(ESQUINAS).map(function(k){
+        return '<option value="' + k + '"' + (c.esq === k ? ' selected' : '') + '>' + ESQUINAS[k] + '</option>';
+      }).join('') + '</select></div>' +
+      '<div class="par">' +
+        '<div class="campo"><label for="fCorteAn">Recorte ancho (cm)</label>' +
+          '<input id="fCorteAn" class="numero" type="number" step="5" min="10" value="' + it.corte.an + '"></div>' +
+        '<div class="campo"><label for="fCorteAl">Recorte alto (cm)</label>' +
+          '<input id="fCorteAl" class="numero" type="number" step="5" min="10" value="' + it.corte.al + '"></div>' +
+      '</div>';
+  }
+  return h + '<p class="vacio numero">Superficie: ' + numero(areaM2(it), 2) + ' m²</p>';
+}
+
+/* La superficie total del plano: la escribe la persona, o la calcula sola
+   sumando los recintos. Y el interruptor de los m² recinto por recinto. */
+function pintarTotal(){
+  var t = plano.total, manual = t.modo === 'manual';
+  document.getElementById('panelTotal').innerHTML =
+    '<p class="granTotal">' + numero(totalM2(), manual ? 2 : 1) + '<small>m²</small></p>' +
+    '<div class="campo"><label for="fModo">De dónde sale</label><select id="fModo">' +
+      '<option value="manual"' + (manual ? ' selected' : '') + '>La escribo yo</option>' +
+      '<option value="auto"' + (manual ? '' : ' selected') + '>Sumar los recintos</option></select></div>' +
+    (manual
+      ? '<div class="campo"><label for="fTotal">Superficie total (m²)</label>' +
+        '<input id="fTotal" class="numero" type="number" step="0.01" min="0" value="' + (t.valor || 0) + '"></div>' +
+        '<p class="vacio numero">Los recintos del plano suman ' + numero(sumaM2(), 2) + ' m².</p>'
+      : '<p class="vacio">Se suman los ' + plano.items.filter(function(i){ return i.tipo === 'recinto'; }).length +
+        ' recintos dibujados. Cámbialo a «La escribo yo» para poner la cifra del certificado.</p>') +
+    '<label class="chk"><input type="checkbox" id="fVerM2"' + (plano.verM2Recinto ? ' checked' : '') + '>' +
+      'Mostrar los m² dentro de cada recinto</label>';
+
+  document.getElementById('fModo').addEventListener('change', function(){
+    marcar();
+    plano.total.modo = this.value;
+    if(this.value === 'manual' && !(plano.total.valor > 0)) plano.total.valor = Math.round(sumaM2()*100)/100;
+    guardar(); pintar();
+  });
+  if(manual){
+    document.getElementById('fTotal').addEventListener('change', function(){
+      var v = parseFloat(this.value);
+      if(isNaN(v) || v < 0) return;
+      marcar(); plano.total.valor = v; guardar(); pintar();
+    });
+  }
+  document.getElementById('fVerM2').addEventListener('change', function(){
+    marcar(); plano.verM2Recinto = this.checked; guardar(); pintar();
+  });
+}
+
 function pintarPie(){
   var rec = plano.items.filter(function(i){ return i.tipo === 'recinto'; });
-  var m2 = rec.reduce(function(a, i){ return a + i.an*i.al/10000; }, 0);
   document.getElementById('pieRecintos').textContent = rec.length;
-  document.getElementById('pieArea').textContent = m2.toFixed(1).replace('.', ',') + ' m²';
+  document.getElementById('pieArea').textContent = numero(totalM2(), 2) + ' m²' +
+    (plano.total.modo === 'manual' ? ' (a mano)' : '');
   document.getElementById('pieZoom').textContent = '×' + zoom.toFixed(2).replace('.', ',');
   document.getElementById('pieAjuste').textContent = AJUSTE + ' cm';
   document.getElementById('subtitulo').textContent = plano.nombre;
@@ -843,14 +1008,16 @@ function pintarPie(){
 /* ---------------- catálogo en el panel izquierdo ---------------- */
 function miniatura(tipo){
   var T = tema(false);
-  var f = DIBUJO[tipo] || DIBUJO.meson;
-  var cuerpo = f({tipo:tipo, an:34, al:26, rot:0, texto:'', zona:(plano && plano.zonas[0] ? plano.zonas[0].id : '')}, T);
+  var f = DIBUJO[tipo === 'recintoL' ? 'recinto' : tipo] || DIBUJO.meson;
+  var cuerpo = f({tipo:'recinto' === tipo || 'recintoL' === tipo ? 'recinto' : tipo, an:34, al:26, rot:0, texto:'',
+                  corte:(tipo === 'recintoL' ? {esq:'ne', an:13, al:10} : null),
+                  zona:(plano && plano.zonas[0] ? plano.zonas[0].id : '')}, T);
   cuerpo = cuerpo.replace(/<text[\s\S]*?<\/text>/g, '');   /* el icono va sin letras */
   return '<svg viewBox="-3 -3 40 32" aria-hidden="true">' + cuerpo + '</svg>';
 }
 function pintarCatalogo(){
   var grupos = {
-    catRecintos:['recinto','muro'],
+    catRecintos:['recinto','recintoL','muro'],
     catCocina:['lavamanos','lavaplatos','lavafondos','meson','cocinaeq','horno','campana','refri','freezer','camara','estante'],
     catBanos:['wc','ducha','urinario','casillero'],
     catVarios:['mesa','basurero','extintor','puerta','ventana','texto']
@@ -871,7 +1038,8 @@ function agregar(tipo){
   marcar();
   var caja = svg.getBoundingClientRect();
   var it = {
-    id:nuevoId(), tipo:tipo,
+    id:nuevoId(), tipo:(tipo === 'recintoL' ? 'recinto' : tipo),
+    corte:(tipo === 'recintoL' ? {esq:'ne', an:Math.round(d.an*0.45), al:Math.round(d.al*0.45)} : null),
     zona:(sel && itemDe(sel) ? itemDe(sel).zona : plano.zonas[0].id),
     x:Math.round((panX + caja.width/zoom/2 - d.an/2)/AJUSTE)*AJUSTE,
     y:Math.round((panY + caja.height/zoom/2 - d.al/2)/AJUSTE)*AJUSTE,
@@ -1043,6 +1211,15 @@ document.getElementById('bObsNueva').onclick = function(){
   decir('Observación ' + plano.obs.length + ' agregada al centro de la vista. Arrastra el número al lugar que corresponde.');
 };
 
+/* El título y la superficie total, arriba de la lámina que se imprime o se
+   guarda como imagen. Es lo primero que mira quien recibe el plano. */
+function encabezado(L, m){
+  return '<text x="' + (L.x - m + 20) + '" y="' + (L.y - m + 34) + '" font-family="Archivo, Helvetica, sans-serif" ' +
+    'font-size="26" font-weight="600" fill="#14181F">' + esc(plano.nombre) + '</text>' +
+    '<text x="' + (L.x - m + 20) + '" y="' + (L.y - m + 58) + '" font-family="IBM Plex Mono, monospace" ' +
+    'font-size="18" fill="#4A555C">Superficie total: ' + numero(totalM2(), 2) + ' m²</text>';
+}
+
 /* ---------------- ventana modal ---------------- */
 var velo = document.getElementById('velo'), cajaModal = document.getElementById('caja');
 function abrirCaja(html){ cajaModal.innerHTML = html; velo.classList.add('ver'); }
@@ -1093,8 +1270,7 @@ document.getElementById('bAbrir').onclick = function(){
     try{
       var p = JSON.parse(t);
       if(!p.items || !p.zonas) throw new Error('formato');
-      marcar(); plano = p; if(!plano.obs) plano.obs = [];
-      if(!plano.siguiente) plano.siguiente = plano.items.length + 100;
+      marcar(); plano = normalizar(p);
       sel = null; guardar(); cerrarCaja(); encajar();
       decir('Plano abierto.');
     }catch(e){
@@ -1114,9 +1290,7 @@ document.getElementById('bImagen').onclick = function(){
     'viewBox="' + (L.x - m) + ' ' + (L.y - m) + ' ' + an + ' ' + al + '">' +
     '<rect x="' + (L.x - m) + '" y="' + (L.y - m) + '" width="' + an + '" height="' + al + '" fill="#fff" />' +
     contenido(T, true) +
-    '<text x="' + (L.x - m + 20) + '" y="' + (L.y - m + 34) + '" font-family="Archivo, Helvetica, sans-serif" ' +
-    'font-size="26" font-weight="600" fill="#14181F">' + esc(plano.nombre) + '</text>' +
-    '</svg>';
+    encabezado(L, m) + '</svg>';
 
   abrirCaja('<h3>Imagen del plano</h3><p>Generando…</p>');
   var img = new Image();
@@ -1151,16 +1325,13 @@ document.getElementById('bImprimir').onclick = function(){
   var guardadoSel = sel; sel = null;
   svg.setAttribute('viewBox', (L.x - m) + ' ' + (L.y - m) + ' ' + (L.an + m*2) + ' ' + (L.al + m*2));
   svg.innerHTML = '<rect x="' + (L.x - m) + '" y="' + (L.y - m) + '" width="' + (L.an + m*2) + '" height="' + (L.al + m*2) +
-    '" fill="#fff" />' + contenido(T, true) +
-    '<text x="' + (L.x - m + 20) + '" y="' + (L.y - m + 34) + '" font-family="Archivo, Helvetica, sans-serif" ' +
-    'font-size="26" font-weight="600" fill="#14181F">' + esc(plano.nombre) + '</text>';
+    '" fill="#fff" />' + contenido(T, true) + encabezado(L, m);
   window.print();
   setTimeout(function(){ sel = guardadoSel; pintar(); }, 400);
 };
 
 /* ---------------- arranque ---------------- */
-plano = cargar();
-if(!plano.obs) plano.obs = [];
+plano = normalizar(cargar());
 pintarCatalogo();
 encajar();
 guardar();

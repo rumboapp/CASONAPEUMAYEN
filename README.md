@@ -1499,8 +1499,15 @@ Cómo se usa:
   todo lo que hay dentro — así se saca del plano el sector de casa habitación
   que la SEREMI pidió eliminar. Y el ojo la esconde sin borrarla, para ver cómo
   queda antes de decidir.
-- **Superficies**: cada recinto muestra sus metros cuadrados y sus medidas al
-  pie del nombre, y el total va abajo a la derecha.
+- **Recintos en L**: además del rectángulo hay «Recinto en L», que es el mismo
+  rectángulo con una esquina recortada. Se elige cuál de las cuatro esquinas y
+  cuánto mide el recorte, y la superficie se calcula ya descontada. Cualquier
+  recinto se pasa de rectángulo a L, y al revés, en «Forma».
+- **Superficie total**: es un solo número, arriba a la derecha, y sale impreso
+  en la lámina. Normalmente se escribe a mano —la suma de los rectángulos
+  dibujados casi nunca es la superficie que se declara—, pero se puede pedir
+  que la calcule sumando los recintos. Los metros cuadrados recinto por recinto
+  vienen apagados; se encienden con el interruptor del mismo panel.
 
 El trabajo se guarda solo en el mismo navegador. Para tener respaldo, o para
 seguir en otro computador, **Guardar copia** entrega el plano como un texto que
