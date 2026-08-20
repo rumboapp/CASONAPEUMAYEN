@@ -11,7 +11,7 @@ reservas.
 
 ## Los archivos
 
-Son **cinco**, y se copian tal cual:
+Son **seis**, y se copian tal cual:
 
 | Archivo | Qué es | Cómo se crea en Apps Script |
 |---|---|---|
@@ -19,6 +19,7 @@ Son **cinco**, y se copian tal cual:
 | `Index.html` | La aplicación interna del equipo | Archivo → HTML |
 | `Ficha.html` | La página que ve el huésped para firmar desde su teléfono | Archivo → HTML |
 | `Aseo.html` | La pantalla del equipo de aseo, con su propio enlace | Archivo → HTML |
+| `Plano.html` | El editor del plano de la planta, para el trámite sanitario | Archivo → HTML |
 | `appsscript.json` | Configuración del proyecto | Ya existe; se activa en ⚙️ Configuración → "Mostrar appsscript.json" |
 
 ## Instalación
@@ -29,6 +30,7 @@ Son **cinco**, y se copian tal cual:
 3. **Archivo → HTML**, llámalo `Index` (sin escribir `.html`) y pega
    `Index.html`. Repite con `Ficha` y con `Aseo`, pegando el archivo del
    mismo nombre.
+   Repite también con `Plano`.
 4. ⚙️ **Configuración del proyecto** → marca *Mostrar el archivo de manifiesto
    appsscript.json*. Vuelve al editor, abre `appsscript.json` en la lista de
    archivos de la izquierda y reemplaza su contenido.
@@ -1464,3 +1466,51 @@ editor la función `crearUsuario("nombre", "pin", "admin")`.
   mandarlo por WhatsApp o correo lo haces tú desde ahí. Era a propósito: los
   cuatro caminos que había antes terminaban igual, abriendo el PDF.
 - La app interna está solo en español; la página del huésped sí es bilingüe.
+
+
+## El plano de la planta
+
+`Plano.html` es un editor de planos de planta hecho para la visita de la
+SEREMI: se dibuja la cocina y los servicios arrastrando piezas, y sale una
+lámina lista para imprimir o mandar por correo.
+
+Se abre de dos maneras, la que sea más cómoda:
+
+- **Sin instalar nada**: se guarda `Plano.html` en el computador y se abre con
+  doble clic. Funciona sin internet.
+- **Dentro de la app**: pegado como archivo HTML en el proyecto, queda en la
+  URL de la aplicación agregándole `?plano=1` al final.
+
+Cómo se usa:
+
+- **Panel izquierdo**: las piezas. Un clic las agrega al centro de la vista —
+  recintos, lavamanos, lavaplatos, cocina, horno, campana, freezer, cámara de
+  frío, WC, duchas, casilleros, puertas y ventanas, con medidas reales de
+  partida en centímetros.
+- **En el plano**: se arrastra para mover, se tira de las esquinas para cambiar
+  el tamaño, la rueda del ratón acerca y aleja y arrastrando el fondo se
+  desplaza la vista. Las flechas del teclado mueven de a 5 cm (con Shift, de a
+  50 cm) y Suprimir borra. Ctrl+Z deshace.
+- **Panel derecho**: el nombre, las medidas exactas y la zona de lo que esté
+  seleccionado; el listado de zonas; y las observaciones de la SEREMI, que
+  quedan numeradas sobre el plano y se arrastran hasta el punto que
+  corresponde.
+- **Zonas**: cada elemento pertenece a una. La ✕ de una zona borra de una vez
+  todo lo que hay dentro — así se saca del plano el sector de casa habitación
+  que la SEREMI pidió eliminar. Y el ojo la esconde sin borrarla, para ver cómo
+  queda antes de decidir.
+- **Superficies**: cada recinto muestra sus metros cuadrados y sus medidas al
+  pie del nombre, y el total va abajo a la derecha.
+
+El trabajo se guarda solo en el mismo navegador. Para tener respaldo, o para
+seguir en otro computador, **Guardar copia** entrega el plano como un texto que
+se pega en un correo, y **Abrir copia** lo devuelve.
+
+Para entregarlo: **Imprimir / PDF** (eligiendo "Guardar como PDF" en el
+diálogo) o **Imagen**, que arma un PNG que se guarda con el botón derecho.
+Los dos salen en papel blanco con tinta negra, aunque en pantalla se esté
+trabajando en modo oscuro.
+
+El plano que aparece al abrir es el dibujo a mano pasado en limpio: sirve de
+punto de partida, no es un levantamiento medido. Las medidas se corrigen una
+por una en el panel de la derecha, con el metro en la mano.

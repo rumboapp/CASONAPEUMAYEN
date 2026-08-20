@@ -1,0 +1,1169 @@
+<title>Plano Casona Peumayén</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+/* ---------------------------------------------------------------
+   Paleta. El plano original está dibujado a lápiz sobre papel
+   cuadriculado y corregido con lápiz pasta azul: de ahí salen el
+   papel, la tinta y el azul. El rojo queda reservado para lo que
+   pidió la SEREMI, para que se vea de lejos qué hay que cambiar.
+   --------------------------------------------------------------- */
+:root{
+  --papel:#E9EAE4;      --tabla:#F7F7F4;      --tabla2:#EFF0EB;
+  --tinta:#1B2430;      --suave:#5F6B72;      --tenue:#8C979C;
+  --linea:#D3D7CE;      --borde:#C4CABF;
+  --azul:#1F45B0;       --azul-suave:#E2E7F7;
+  --rojo:#A6231C;       --rojo-suave:#F3E2E0;
+  --reja:#CDD3C9;       --reja-fuerte:#B4BCB0;
+  --sombra:0 1px 2px rgba(27,36,48,.08), 0 8px 24px rgba(27,36,48,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --papel:#11151A;    --tabla:#1A2027;      --tabla2:#151B21;
+    --tinta:#E7EAE6;    --suave:#9AA6AD;      --tenue:#6B777E;
+    --linea:#2B343C;    --borde:#39444C;
+    --azul:#86A4F2;     --azul-suave:#1E2A44;
+    --rojo:#E4796F;     --rojo-suave:#3A2320;
+    --reja:#232B33;     --reja-fuerte:#333F49;
+    --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --papel:#11151A;      --tabla:#1A2027;      --tabla2:#151B21;
+  --tinta:#E7EAE6;      --suave:#9AA6AD;      --tenue:#6B777E;
+  --linea:#2B343C;      --borde:#39444C;
+  --azul:#86A4F2;       --azul-suave:#1E2A44;
+  --rojo:#E4796F;       --rojo-suave:#3A2320;
+  --reja:#232B33;       --reja-fuerte:#333F49;
+  --sombra:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--papel); color:var(--tinta);
+  font-family:'Archivo','Helvetica Neue',Arial,sans-serif;
+  font-size:14px; line-height:1.45;
+  height:100vh; display:flex; flex-direction:column; overflow:hidden;
+  -webkit-text-size-adjust:100%;
+}
+button,input,select,textarea{font:inherit; color:inherit}
+.mono{font-family:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace}
+
+/* ------------------------------ barra superior ------------------ */
+header{
+  display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:10px 16px; background:var(--tabla);
+  border-bottom:1px solid var(--borde); box-shadow:var(--sombra); z-index:5;
+}
+.marca{display:flex; align-items:baseline; gap:10px; margin-right:auto; min-width:0}
+.marca b{font-size:16px; font-weight:700; letter-spacing:-.01em; white-space:nowrap}
+.marca span{
+  font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--tenue);
+  text-transform:uppercase; letter-spacing:.09em; white-space:nowrap;
+}
+.grupo{display:flex; gap:6px; align-items:center}
+.btn{
+  border:1px solid var(--borde); background:var(--tabla2); color:var(--tinta);
+  border-radius:7px; padding:7px 11px; cursor:pointer; font-size:13px;
+  font-weight:500; white-space:nowrap; transition:background .12s,border-color .12s;
+}
+.btn:hover{background:var(--azul-suave); border-color:var(--azul)}
+.btn:focus-visible{outline:2px solid var(--azul); outline-offset:2px}
+.btn[disabled]{opacity:.4; cursor:default}
+.btn[disabled]:hover{background:var(--tabla2); border-color:var(--borde)}
+.btn.fuerte{background:var(--azul); border-color:var(--azul); color:#fff}
+.btn.fuerte:hover{filter:brightness(1.08)}
+.btn.peligro:hover{background:var(--rojo-suave); border-color:var(--rojo); color:var(--rojo)}
+
+/* ------------------------------ estructura ---------------------- */
+main{flex:1; display:grid; grid-template-columns:238px 1fr 286px; min-height:0}
+aside{
+  background:var(--tabla); overflow-y:auto; overflow-x:hidden;
+  display:flex; flex-direction:column;
+}
+aside.izq{border-right:1px solid var(--borde)}
+aside.der{border-left:1px solid var(--borde)}
+.bloque{padding:14px 14px 16px; border-bottom:1px solid var(--linea)}
+.bloque:last-child{border-bottom:0}
+h2{
+  margin:0 0 10px; font-family:'IBM Plex Mono',monospace; font-size:10.5px;
+  font-weight:600; text-transform:uppercase; letter-spacing:.12em; color:var(--tenue);
+}
+.piezas{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+.pieza{
+  display:flex; flex-direction:column; align-items:center; gap:5px;
+  padding:8px 4px 7px; border:1px solid var(--borde); border-radius:8px;
+  background:var(--tabla2); cursor:pointer; text-align:center;
+  font-size:11px; line-height:1.2; transition:background .12s,border-color .12s;
+}
+.pieza:hover{background:var(--azul-suave); border-color:var(--azul)}
+.pieza:focus-visible{outline:2px solid var(--azul); outline-offset:1px}
+.pieza svg{width:34px; height:26px; display:block}
+.pieza.ancha{grid-column:1 / -1; flex-direction:row; justify-content:flex-start; padding:8px 10px; gap:9px}
+
+/* ------------------------------ lienzo -------------------------- */
+.lienzo{position:relative; background:var(--papel); overflow:hidden}
+#plano{width:100%; height:100%; display:block; touch-action:none; cursor:default}
+#plano.moviendo{cursor:grabbing}
+.flota{
+  position:absolute; left:14px; bottom:14px; display:flex; gap:6px;
+  background:var(--tabla); border:1px solid var(--borde); border-radius:9px;
+  padding:5px; box-shadow:var(--sombra);
+}
+.flota .btn{padding:5px 9px; font-size:12px}
+.aviso{
+  position:absolute; top:14px; left:50%; transform:translateX(-50%);
+  background:var(--tinta); color:var(--papel); padding:8px 14px; border-radius:8px;
+  font-size:12.5px; box-shadow:var(--sombra); opacity:0; pointer-events:none;
+  transition:opacity .18s; max-width:min(520px,86%); text-align:center;
+}
+.aviso.ver{opacity:1}
+
+/* ------------------------------ inspector ----------------------- */
+.campo{display:flex; flex-direction:column; gap:4px; margin-bottom:9px}
+.campo label{font-size:11px; color:var(--suave); font-weight:500}
+.campo input,.campo select,.campo textarea{
+  border:1px solid var(--borde); background:var(--tabla2); border-radius:6px;
+  padding:6px 8px; font-size:13px; width:100%;
+}
+.campo input:focus,.campo select:focus,.campo textarea:focus{
+  outline:none; border-color:var(--azul); box-shadow:0 0 0 2px var(--azul-suave);
+}
+.campo textarea{resize:vertical; min-height:56px}
+.par{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.numero{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums}
+.vacio{color:var(--tenue); font-size:12.5px; line-height:1.6}
+
+/* zonas */
+.zona{
+  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px;
+  border:1px solid transparent;
+}
+.zona:hover{background:var(--tabla2); border-color:var(--linea)}
+.zona .punto{width:9px; height:9px; border-radius:50%; flex:none}
+.zona .nom{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px}
+.zona .cuenta{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--tenue)}
+.zona button{
+  border:0; background:none; cursor:pointer; padding:2px 4px; border-radius:5px;
+  color:var(--tenue); font-size:13px; line-height:1;
+}
+.zona button:hover{background:var(--rojo-suave); color:var(--rojo)}
+.zona.apagada .nom{color:var(--tenue); text-decoration:line-through}
+
+/* observaciones seremi */
+.obs{display:flex; gap:9px; padding:8px 0; border-bottom:1px dashed var(--linea)}
+.obs:last-of-type{border-bottom:0}
+.obs .n{
+  flex:none; width:19px; height:19px; border-radius:50%; background:var(--rojo);
+  color:#fff; font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600;
+  display:flex; align-items:center; justify-content:center; margin-top:1px;
+}
+.obs p{margin:0; font-size:12.5px; line-height:1.5}
+.obs .quitar{border:0; background:none; color:var(--tenue); cursor:pointer; padding:0 2px; align-self:flex-start}
+.obs .quitar:hover{color:var(--rojo)}
+
+/* pie */
+footer{
+  display:flex; align-items:center; gap:18px; flex-wrap:wrap;
+  padding:7px 16px; background:var(--tabla); border-top:1px solid var(--borde);
+  font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--suave);
+  font-variant-numeric:tabular-nums;
+}
+footer b{color:var(--tinta); font-weight:600}
+footer .sep{margin-left:auto}
+
+/* ventana modal */
+.velo{
+  position:fixed; inset:0; background:rgba(17,21,26,.62); display:none;
+  align-items:center; justify-content:center; padding:24px; z-index:20;
+}
+.velo.ver{display:flex}
+.caja{
+  background:var(--tabla); border:1px solid var(--borde); border-radius:12px;
+  padding:20px; max-width:760px; width:100%; max-height:88vh; overflow:auto;
+  box-shadow:0 24px 60px rgba(0,0,0,.35);
+}
+.caja h3{margin:0 0 6px; font-size:17px}
+.caja p{margin:0 0 14px; color:var(--suave); font-size:13px}
+.caja textarea{
+  width:100%; min-height:230px; font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+  border:1px solid var(--borde); border-radius:8px; padding:10px; background:var(--tabla2);
+}
+.caja img{max-width:100%; border:1px solid var(--borde); border-radius:8px; background:#fff}
+.pie-caja{display:flex; gap:8px; justify-content:flex-end; margin-top:14px; flex-wrap:wrap}
+
+/* pantallas angostas: los paneles pasan a ser filas apiladas */
+@media (max-width:900px){
+  main{grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) auto}
+  aside.izq{display:none}
+  aside.der{border-left:0; border-top:1px solid var(--borde); max-height:38vh}
+}
+
+@media print{
+  header,aside,footer,.flota,.velo{display:none !important}
+  body{height:auto; display:block; background:#fff}
+  main{display:block}
+  .lienzo{background:#fff; overflow:visible; height:auto}
+  #plano{width:100%; height:auto}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none !important}}
+</style>
+
+<header>
+  <div class="marca">
+    <b>Casona Peumayén</b>
+    <span id="subtitulo">Planta — cocina y servicios</span>
+  </div>
+  <div class="grupo">
+    <button class="btn" id="bDeshacer" title="Ctrl+Z">Deshacer</button>
+    <button class="btn" id="bRehacer" title="Ctrl+Y">Rehacer</button>
+  </div>
+  <div class="grupo">
+    <button class="btn" id="bGuardar">Guardar copia</button>
+    <button class="btn" id="bAbrir">Abrir copia</button>
+    <button class="btn" id="bImagen">Imagen</button>
+    <button class="btn fuerte" id="bImprimir">Imprimir / PDF</button>
+  </div>
+</header>
+
+<main>
+  <!-- ---------------- catálogo ---------------- -->
+  <aside class="izq">
+    <div class="bloque">
+      <h2>Recintos</h2>
+      <div class="piezas" id="catRecintos"></div>
+    </div>
+    <div class="bloque">
+      <h2>Cocina</h2>
+      <div class="piezas" id="catCocina"></div>
+    </div>
+    <div class="bloque">
+      <h2>Baños y camarines</h2>
+      <div class="piezas" id="catBanos"></div>
+    </div>
+    <div class="bloque">
+      <h2>Mobiliario y aberturas</h2>
+      <div class="piezas" id="catVarios"></div>
+    </div>
+  </aside>
+
+  <!-- ---------------- lienzo ---------------- -->
+  <div class="lienzo">
+    <svg id="plano" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div class="flota">
+      <button class="btn" id="bMenos" title="Alejar">−</button>
+      <button class="btn" id="bMas" title="Acercar">+</button>
+      <button class="btn" id="bEncajar">Encajar</button>
+      <button class="btn" id="bReja">Cuadrícula</button>
+    </div>
+    <div class="aviso" id="aviso"></div>
+  </div>
+
+  <!-- ---------------- inspector ---------------- -->
+  <aside class="der">
+    <div class="bloque" id="panelSel"></div>
+    <div class="bloque">
+      <h2>Zonas del plano</h2>
+      <div id="listaZonas"></div>
+      <button class="btn" id="bZonaNueva" style="margin-top:9px; width:100%">Agregar zona</button>
+    </div>
+    <div class="bloque">
+      <h2>Observaciones SEREMI</h2>
+      <div id="listaObs"></div>
+      <button class="btn" id="bObsNueva" style="margin-top:9px; width:100%">Anotar observación</button>
+    </div>
+  </aside>
+</main>
+
+<footer>
+  <span>Zoom <b id="pieZoom">×1,00</b></span>
+  <span>Cursor <b id="pieXY" class="numero">—</b></span>
+  <span>Ajuste a <b id="pieAjuste">5 cm</b></span>
+  <span>Recintos <b id="pieRecintos">0</b></span>
+  <span>Superficie <b id="pieArea">0 m²</b></span>
+  <span class="sep" id="pieGuardado">—</span>
+</footer>
+
+<div class="velo" id="velo">
+  <div class="caja" id="caja"></div>
+</div>
+
+<script>
+/* ==================================================================
+   PLANO CASONA PEUMAYÉN
+   Editor de planta para el trámite sanitario. Todo pasa en el
+   navegador: no hay servidor, no se sube nada a ninguna parte y el
+   trabajo queda guardado en el mismo computador.
+
+   Las medidas del modelo son SIEMPRE centímetros. La pantalla solo
+   cambia el zoom; los números que se escriben y se leen son los
+   reales del local.
+   ================================================================== */
+
+var CM = 1;                       // unidad del modelo
+var AJUSTE = 5;                   // los movimientos caen cada 5 cm
+var svg = document.getElementById('plano');
+var aviso = document.getElementById('aviso');
+
+/* ---------------- catálogo de piezas ----------------
+   an/al = ancho y alto por omisión, en centímetros, tomados de
+   medidas de mobiliario de cocina real para no dibujar cosas que
+   después no caben. */
+var CAT = {
+  recinto:   {nom:'Recinto',            fam:'recinto', an:400, al:300, texto:'Recinto'},
+  muro:      {nom:'Muro',               fam:'muro',    an:400, al:15,  texto:''},
+  puerta:    {nom:'Puerta',             fam:'abertura',an:90,  al:15,  texto:''},
+  ventana:   {nom:'Ventana',            fam:'abertura',an:120, al:15,  texto:''},
+
+  lavamanos: {nom:'Lavamanos',          fam:'cocina',  an:45,  al:40,  texto:'Lavamanos'},
+  lavaplatos:{nom:'Lavaplatos',         fam:'cocina',  an:120, al:60,  texto:'Lavaplatos'},
+  lavafondos:{nom:'Lavafondos',         fam:'cocina',  an:80,  al:70,  texto:'Lavafondos'},
+  meson:     {nom:'Mesón',              fam:'cocina',  an:240, al:60,  texto:'Mesón de trabajo'},
+  cocinaeq:  {nom:'Cocina',             fam:'cocina',  an:180, al:70,  texto:'Cocina 6 platos'},
+  horno:     {nom:'Horno',              fam:'cocina',  an:90,  al:70,  texto:'Horno'},
+  campana:   {nom:'Campana',            fam:'cocina',  an:280, al:90,  texto:'Campana con extracción'},
+  refri:     {nom:'Refrigerador',       fam:'cocina',  an:75,  al:70,  texto:'Refrigerador'},
+  freezer:   {nom:'Freezer',            fam:'cocina',  an:130, al:70,  texto:'Freezer −18 °C'},
+  camara:    {nom:'Cámara de frío',     fam:'cocina',  an:200, al:180, texto:'Cámara 5 °C'},
+  estante:   {nom:'Estante',            fam:'cocina',  an:200, al:45,  texto:'Estantería'},
+
+  wc:        {nom:'WC',                 fam:'bano',    an:40,  al:65,  texto:'WC'},
+  ducha:     {nom:'Ducha',              fam:'bano',    an:90,  al:90,  texto:'Ducha'},
+  urinario:  {nom:'Urinario',           fam:'bano',    an:40,  al:35,  texto:'Urinario'},
+  casillero: {nom:'Casilleros',         fam:'bano',    an:120, al:45,  texto:'Casilleros'},
+
+  mesa:      {nom:'Mesa',               fam:'vario',   an:120, al:80,  texto:'Mesa'},
+  basurero:  {nom:'Basurero',           fam:'vario',   an:60,  al:60,  texto:'Basurero con tapa'},
+  extintor:  {nom:'Extintor',           fam:'vario',   an:30,  al:30,  texto:'Extintor'},
+  texto:     {nom:'Texto',              fam:'vario',   an:200, al:30,  texto:'Anotación'}
+};
+
+/* ---------------- el plano de partida ----------------
+   Es el dibujo a mano pasado en limpio: sirve de punto de partida
+   para corregirlo, no como levantamiento exacto. Las medidas se
+   ajustan una por una con el inspector de la derecha. */
+function planoInicial(){
+  var id = 0, nuevo = function(){ return 'e' + (++id); };
+  return {
+    nombre:'Casona Peumayén — Planta cocina y servicios',
+    zonas:[
+      {id:'cocina',  nombre:'Cocina',            color:'#1F45B0', visible:true},
+      {id:'servicio',nombre:'Servicio y bodegas',color:'#0F7B6C', visible:true},
+      {id:'publico', nombre:'Público',           color:'#8A5A00', visible:true},
+      {id:'casa',    nombre:'Casa habitación',   color:'#A6231C', visible:true}
+    ],
+    items:[
+      {id:nuevo(), tipo:'recinto', zona:'servicio', x:40,  y:40,  an:340, al:280, rot:0, texto:'Patio de servicio'},
+      {id:nuevo(), tipo:'recinto', zona:'cocina',   x:400, y:40,  an:460, al:420, rot:0, texto:'Cocina'},
+      {id:nuevo(), tipo:'recinto', zona:'cocina',   x:400, y:470, an:460, al:90,  rot:0, texto:'Pasillo'},
+      {id:nuevo(), tipo:'recinto', zona:'servicio', x:880, y:40,  an:380, al:200, rot:0, texto:'Bodega'},
+      {id:nuevo(), tipo:'recinto', zona:'servicio', x:880, y:260, an:380, al:220, rot:0, texto:'Baños y camarines'},
+      {id:nuevo(), tipo:'recinto', zona:'publico',  x:880, y:480, an:380, al:380, rot:0, texto:'Terraza'},
+      {id:nuevo(), tipo:'recinto', zona:'publico',  x:400, y:570, an:460, al:290, rot:0, texto:'Comedor'},
+      {id:nuevo(), tipo:'recinto', zona:'casa',     x:40,  y:340, an:340, al:250, rot:0, texto:'Estar (casa)'},
+      {id:nuevo(), tipo:'recinto', zona:'casa',     x:40,  y:610, an:340, al:250, rot:0, texto:'Dormitorio (casa)'},
+
+      {id:nuevo(), tipo:'campana',   zona:'cocina', x:420, y:360, an:280, al:110, rot:0, texto:'Campana con extracción'},
+      {id:nuevo(), tipo:'cocinaeq',  zona:'cocina', x:430, y:380, an:180, al:70,  rot:0, texto:'Cocina 6 platos'},
+      {id:nuevo(), tipo:'horno',     zona:'cocina', x:620, y:380, an:90,  al:70,  rot:0, texto:'Horno'},
+      {id:nuevo(), tipo:'meson',     zona:'cocina', x:420, y:100, an:300, al:60,  rot:0, texto:'Mesón de trabajo'},
+      {id:nuevo(), tipo:'lavaplatos',zona:'cocina', x:730, y:100, an:120, al:60,  rot:0, texto:'Lavaplatos 2 senos'},
+      {id:nuevo(), tipo:'lavamanos', zona:'cocina', x:730, y:195, an:45,  al:40,  rot:0, texto:'Lavamanos'},
+      {id:nuevo(), tipo:'lavafondos',zona:'cocina', x:420, y:210, an:80,  al:70,  rot:0, texto:'Lavafondos'},
+      {id:nuevo(), tipo:'freezer',   zona:'cocina', x:750, y:265, an:100, al:70,  rot:0, texto:'Freezer −18 °C'},
+      {id:nuevo(), tipo:'refri',     zona:'cocina', x:750, y:370, an:75,  al:70,  rot:0, texto:'Refrigerador'},
+      {id:nuevo(), tipo:'estante',   zona:'servicio', x:900, y:110, an:200, al:45, rot:0, texto:'Estantería'},
+      {id:nuevo(), tipo:'camara',    zona:'servicio', x:1120, y:90, an:120, al:140, rot:0, texto:'Cámara 5 °C'},
+      {id:nuevo(), tipo:'wc',        zona:'servicio', x:900, y:335, an:40, al:65, rot:0, texto:'WC'},
+      {id:nuevo(), tipo:'ducha',     zona:'servicio', x:970, y:335, an:90, al:90, rot:0, texto:'Ducha'},
+      {id:nuevo(), tipo:'lavamanos', zona:'servicio', x:1090, y:335, an:45, al:40, rot:0, texto:'Lavamanos'},
+      {id:nuevo(), tipo:'casillero', zona:'servicio', x:1120, y:400, an:120, al:45, rot:0, texto:'Casilleros'},
+      {id:nuevo(), tipo:'mesa',      zona:'publico',  x:470, y:640, an:120, al:80, rot:0, texto:'Mesa'},
+      {id:nuevo(), tipo:'mesa',      zona:'publico',  x:670, y:640, an:120, al:80, rot:0, texto:'Mesa'},
+      {id:nuevo(), tipo:'basurero',  zona:'servicio', x:60,  y:190, an:60, al:60, rot:0, texto:'Basurero con tapa'},
+
+      {id:nuevo(), tipo:'puerta',    zona:'cocina',   x:620, y:462, an:90,  al:15, rot:0, texto:''},
+      {id:nuevo(), tipo:'puerta',    zona:'cocina',   x:862, y:180, an:90,  al:15, rot:90, texto:''},
+      {id:nuevo(), tipo:'ventana',   zona:'cocina',   x:500, y:33,  an:160, al:15, rot:0, texto:''}
+    ],
+    obs:[
+      {id:'o1', x:800, y:180, texto:'Lavamanos exclusivo para manos, separado del lavaplatos, con agua caliente, jabón y toalla desechable.'},
+      {id:'o2', x:560, y:350, texto:'Campana con sistema de extracción de calor, olor y vapor sobre cocina y horno.'},
+      {id:'o3', x:880, y:250, texto:'Freezer a −18 °C y cámara a 5 °C, cada uno con termómetro a la vista.'},
+      {id:'o4', x:210, y:600, texto:'Eliminar del plano el sector de casa habitación: no forma parte del establecimiento.'}
+    ],
+    siguiente:id + 1
+  };
+}
+
+/* ---------------- estado ---------------- */
+var plano, sel = null, zoom = 0.5, panX = 0, panY = 0, verReja = true;
+var pilaAtras = [], pilaAdelante = [];
+var LLAVE = 'peumayen.plano.v1';
+
+function copia(o){ return JSON.parse(JSON.stringify(o)); }
+function nuevoId(){ return 'e' + (plano.siguiente++); }
+function zonaDe(id){ for(var i=0;i<plano.zonas.length;i++) if(plano.zonas[i].id===id) return plano.zonas[i]; return null; }
+function itemDe(id){ for(var i=0;i<plano.items.length;i++) if(plano.items[i].id===id) return plano.items[i]; return null; }
+
+function marcar(){                       /* guarda un paso para deshacer */
+  pilaAtras.push(copia(plano));
+  if(pilaAtras.length > 60) pilaAtras.shift();
+  pilaAdelante = [];
+}
+function deshacer(){
+  if(!pilaAtras.length) return;
+  pilaAdelante.push(copia(plano));
+  plano = pilaAtras.pop(); sel = null; guardar(); pintar();
+}
+function rehacer(){
+  if(!pilaAdelante.length) return;
+  pilaAtras.push(copia(plano));
+  plano = pilaAdelante.pop(); sel = null; guardar(); pintar();
+}
+
+function guardar(){
+  try{
+    localStorage.setItem(LLAVE, JSON.stringify(plano));
+    var h = new Date();
+    document.getElementById('pieGuardado').textContent =
+      'Guardado ' + String(h.getHours()).padStart(2,'0') + ':' + String(h.getMinutes()).padStart(2,'0');
+  }catch(e){
+    document.getElementById('pieGuardado').textContent = 'Sin guardado automático';
+  }
+}
+function cargar(){
+  try{
+    var t = localStorage.getItem(LLAVE);
+    if(t){ var p = JSON.parse(t); if(p && p.items) return p; }
+  }catch(e){}
+  return planoInicial();
+}
+
+function decir(t){
+  aviso.textContent = t; aviso.classList.add('ver');
+  clearTimeout(decir.t); decir.t = setTimeout(function(){ aviso.classList.remove('ver'); }, 2600);
+}
+
+/* ---------------- colores para dibujar ----------------
+   Se leen del CSS para que el plano siga el tema del navegador,
+   salvo cuando se exporta o se imprime: ahí siempre va en papel
+   blanco con tinta negra, que es como lo va a recibir la SEREMI. */
+function tema(paraPapel){
+  if(paraPapel) return {
+    fondo:'#FFFFFF', reja:'#E3E6DF', rejaFuerte:'#CBD0C6',
+    tinta:'#14181F', suave:'#4A555C', tenue:'#8A9299',
+    muro:'#14181F', relleno:'#FFFFFF', pieza:'#F1F2EE', piezaLinea:'#3C464E',
+    azul:'#1F45B0', rojo:'#A6231C', papel:'#FFFFFF'
+  };
+  var c = getComputedStyle(document.documentElement);
+  var v = function(n){ return c.getPropertyValue(n).trim(); };
+  var oscuro = matchMedia('(prefers-color-scheme: dark)').matches
+    ? document.documentElement.getAttribute('data-theme') !== 'light'
+    : document.documentElement.getAttribute('data-theme') === 'dark';
+  return {
+    fondo:v('--papel'), reja:v('--reja'), rejaFuerte:v('--reja-fuerte'),
+    tinta:v('--tinta'), suave:v('--suave'), tenue:v('--tenue'),
+    muro:v('--tinta'), relleno:oscuro ? 'rgba(231,234,230,.04)' : 'rgba(255,255,255,.66)',
+    pieza:oscuro ? 'rgba(231,234,230,.09)' : 'rgba(255,255,255,.9)',
+    piezaLinea:v('--suave'), azul:v('--azul'), rojo:v('--rojo'), papel:v('--papel')
+  };
+}
+
+/* ---------------- dibujo de cada pieza ----------------
+   Cada función recibe el rectángulo ya ubicado en 0,0 y devuelve el
+   interior en SVG. Los trazos van con atributos y no con clases,
+   para que la imagen exportada salga idéntica a la pantalla. */
+function esc(t){
+  return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+  });
+}
+function rot(it){ return it.rot ? ' rotate(' + it.rot + ' ' + (it.an/2) + ' ' + (it.al/2) + ')' : ''; }
+
+var SIN_NOMBRE = {recinto:1, muro:1, puerta:1, ventana:1, texto:1, campana:1};
+function etiqueta(it, T){
+  if(!it.texto || SIN_NOMBRE[it.tipo]) return '';
+  return '<text x="' + (it.an/2) + '" y="' + (it.al + 16) + '" text-anchor="middle" ' +
+    'font-family="IBM Plex Mono, monospace" font-size="13" fill="' + T.suave +
+    '" style="pointer-events:none">' + esc(it.texto) + '</text>';
+}
+
+var DIBUJO = {
+  recinto: function(it, T){
+    var z = zonaDe(it.zona), col = z ? z.color : T.muro;
+    var m2 = (it.an * it.al / 10000);
+    var s = '<rect width="' + it.an + '" height="' + it.al + '" fill="' + T.relleno + '" stroke="' + col +
+            '" stroke-width="6" />';
+    s += '<rect x="6" y="6" width="' + Math.max(0,it.an-12) + '" height="' + Math.max(0,it.al-12) +
+         '" fill="none" stroke="' + col + '" stroke-width="1" opacity=".35" />';
+    s += '<text x="16" y="32" font-family="Archivo, Helvetica, sans-serif" font-size="24" font-weight="600" fill="' + T.tinta +
+         '" style="pointer-events:none">' + esc(it.texto) + '</text>';
+    s += '<text x="16" y="54" ' +
+         'font-family="IBM Plex Mono, monospace" font-size="15" fill="' + T.tenue +
+         '" style="pointer-events:none">' + m2.toFixed(1).replace('.', ',') + ' m² · ' +
+         (it.an/100).toFixed(2).replace('.', ',') + ' × ' + (it.al/100).toFixed(2).replace('.', ',') + ' m</text>';
+    return s;
+  },
+  muro: function(it, T){
+    return '<rect width="' + it.an + '" height="' + it.al + '" fill="' + T.muro + '" />';
+  },
+  puerta: function(it, T){
+    var r = Math.min(it.an, 90);
+    return '<rect width="' + it.an + '" height="' + it.al + '" fill="' + T.papel + '" stroke="' + T.muro + '" stroke-width="2" />' +
+      '<path d="M0 ' + it.al + ' A ' + r + ' ' + r + ' 0 0 1 ' + r + ' ' + (it.al + r) + '" fill="none" stroke="' + T.piezaLinea + '" stroke-width="2" stroke-dasharray="6 5" />' +
+      '<line x1="0" y1="' + it.al + '" x2="0" y2="' + (it.al + r) + '" stroke="' + T.muro + '" stroke-width="3" />';
+  },
+  ventana: function(it, T){
+    return '<rect width="' + it.an + '" height="' + it.al + '" fill="' + T.papel + '" stroke="' + T.muro + '" stroke-width="2" />' +
+      '<line x1="0" y1="' + (it.al/2) + '" x2="' + it.an + '" y2="' + (it.al/2) + '" stroke="' + T.muro + '" stroke-width="2" />';
+  },
+  lavamanos: function(it, T){
+    var s = caja(it, T);
+    s += '<ellipse cx="' + (it.an/2) + '" cy="' + (it.al*0.52) + '" rx="' + (it.an*0.32) + '" ry="' + (it.al*0.3) +
+         '" fill="none" stroke="' + T.azul + '" stroke-width="2.5" />';
+    s += '<line x1="' + (it.an/2) + '" y1="4" x2="' + (it.an/2) + '" y2="' + (it.al*0.22) + '" stroke="' + T.azul + '" stroke-width="2.5" />';
+    return s;
+  },
+  lavaplatos: function(it, T){
+    var s = caja(it, T), n = it.an >= 100 ? 2 : 1, w = it.an / (n + 0.6), g = (it.an - n*w) / (n + 1);
+    for(var i = 0; i < n; i++){
+      s += '<rect x="' + (g + i*(w+g)) + '" y="' + (it.al*0.16) + '" width="' + w + '" height="' + (it.al*0.66) +
+           '" rx="4" fill="none" stroke="' + T.azul + '" stroke-width="2.5" />';
+    }
+    return s;
+  },
+  lavafondos: function(it, T){
+    return caja(it, T) + '<rect x="' + (it.an*0.12) + '" y="' + (it.al*0.14) + '" width="' + (it.an*0.76) +
+      '" height="' + (it.al*0.72) + '" rx="5" fill="none" stroke="' + T.azul + '" stroke-width="3" />';
+  },
+  meson: function(it, T){ return caja(it, T); },
+  estante: function(it, T){
+    var s = caja(it, T);
+    s += '<line x1="0" y1="' + (it.al/2) + '" x2="' + it.an + '" y2="' + (it.al/2) + '" stroke="' + T.piezaLinea + '" stroke-width="1.5" opacity=".6" />';
+    return s;
+  },
+  cocinaeq: function(it, T){
+    var s = caja(it, T), cols = it.an >= 150 ? 3 : 2, filas = 2, i, j;
+    for(i = 0; i < cols; i++) for(j = 0; j < filas; j++){
+      s += '<circle cx="' + (it.an*(i+0.5)/cols) + '" cy="' + (it.al*(j+0.5)/filas) + '" r="' +
+        (Math.min(it.an/cols, it.al/filas)*0.28) + '" fill="none" stroke="' + T.piezaLinea + '" stroke-width="2" />';
+    }
+    return s;
+  },
+  horno: function(it, T){
+    return caja(it, T) +
+      '<rect x="' + (it.an*0.12) + '" y="' + (it.al*0.3) + '" width="' + (it.an*0.76) + '" height="' + (it.al*0.5) +
+      '" rx="3" fill="none" stroke="' + T.piezaLinea + '" stroke-width="2" />' +
+      '<line x1="' + (it.an*0.2) + '" y1="' + (it.al*0.16) + '" x2="' + (it.an*0.8) + '" y2="' + (it.al*0.16) +
+      '" stroke="' + T.piezaLinea + '" stroke-width="2" />';
+  },
+  campana: function(it, T){
+    var s = '<rect width="' + it.an + '" height="' + it.al + '" fill="none" stroke="' + T.azul +
+      '" stroke-width="2.5" stroke-dasharray="10 6" />';
+    s += '<path d="M' + (it.an*0.42) + ' ' + (it.al*0.5) + ' l' + (it.an*0.16) + ' 0 m-' + (it.an*0.08) + ' -' +
+      (it.al*0.16) + ' l0 ' + (it.al*0.32) + '" stroke="' + T.azul + '" stroke-width="2.5" fill="none" />';
+    s += '<text x="' + (it.an/2) + '" y="' + (it.al - 8) + '" text-anchor="middle" font-family="IBM Plex Mono, monospace" ' +
+      'font-size="13" fill="' + T.azul + '" style="pointer-events:none">' + esc(it.texto) + '</text>';
+    return s;
+  },
+  refri: function(it, T){ return frio(it, T); },
+  freezer: function(it, T){ return frio(it, T); },
+  camara: function(it, T){
+    var s = '<rect width="' + it.an + '" height="' + it.al + '" fill="' + T.pieza + '" stroke="' + T.piezaLinea + '" stroke-width="4" />';
+    s += '<rect x="8" y="8" width="' + Math.max(0,it.an-16) + '" height="' + Math.max(0,it.al-16) +
+      '" fill="none" stroke="' + T.piezaLinea + '" stroke-width="1.5" opacity=".5" />';
+    return s;
+  },
+  wc: function(it, T){
+    return caja(it, T) +
+      '<ellipse cx="' + (it.an/2) + '" cy="' + (it.al*0.6) + '" rx="' + (it.an*0.34) + '" ry="' + (it.al*0.28) +
+      '" fill="none" stroke="' + T.azul + '" stroke-width="2.5" />' +
+      '<rect x="' + (it.an*0.16) + '" y="2" width="' + (it.an*0.68) + '" height="' + (it.al*0.18) +
+      '" fill="none" stroke="' + T.azul + '" stroke-width="2" />';
+  },
+  ducha: function(it, T){
+    return caja(it, T) +
+      '<circle cx="' + (it.an/2) + '" cy="' + (it.al/2) + '" r="' + (Math.min(it.an,it.al)*0.16) +
+      '" fill="none" stroke="' + T.azul + '" stroke-width="2.5" />' +
+      '<line x1="0" y1="0" x2="' + it.an + '" y2="' + it.al + '" stroke="' + T.piezaLinea + '" stroke-width="1" opacity=".35" />';
+  },
+  urinario: function(it, T){
+    return caja(it, T) + '<ellipse cx="' + (it.an/2) + '" cy="' + (it.al*0.5) + '" rx="' + (it.an*0.3) +
+      '" ry="' + (it.al*0.34) + '" fill="none" stroke="' + T.azul + '" stroke-width="2.5" />';
+  },
+  casillero: function(it, T){
+    var s = caja(it, T), n = Math.max(2, Math.round(it.an / 40));
+    for(var i = 1; i < n; i++) s += '<line x1="' + (it.an*i/n) + '" y1="0" x2="' + (it.an*i/n) + '" y2="' + it.al +
+      '" stroke="' + T.piezaLinea + '" stroke-width="1.2" opacity=".6" />';
+    return s;
+  },
+  mesa: function(it, T){
+    return '<rect width="' + it.an + '" height="' + it.al + '" rx="6" fill="' + T.pieza + '" stroke="' + T.piezaLinea +
+      '" stroke-width="2.5" />';
+  },
+  basurero: function(it, T){
+    return '<circle cx="' + (it.an/2) + '" cy="' + (it.al/2) + '" r="' + (Math.min(it.an,it.al)/2 - 2) +
+      '" fill="' + T.pieza + '" stroke="' + T.piezaLinea + '" stroke-width="2.5" />' +
+      '<line x1="' + (it.an*0.25) + '" y1="' + (it.al*0.32) + '" x2="' + (it.an*0.75) + '" y2="' + (it.al*0.32) +
+      '" stroke="' + T.piezaLinea + '" stroke-width="2" />';
+  },
+  extintor: function(it, T){
+    return '<circle cx="' + (it.an/2) + '" cy="' + (it.al/2) + '" r="' + (Math.min(it.an,it.al)/2 - 2) +
+      '" fill="none" stroke="' + T.rojo + '" stroke-width="3" />' +
+      '<text x="' + (it.an/2) + '" y="' + (it.al/2 + 1) + '" text-anchor="middle" dominant-baseline="middle" ' +
+      'font-family="IBM Plex Mono, monospace" font-weight="600" font-size="' + (it.al*0.5) + '" fill="' + T.rojo + '">E</text>';
+  },
+  texto: function(it, T){
+    return '<rect width="' + it.an + '" height="' + it.al + '" fill="none" />' +
+      '<text x="0" y="' + (it.al/2) + '" dominant-baseline="middle" font-family="Archivo, Helvetica, sans-serif" ' +
+      'font-size="' + Math.min(26, it.al*0.8) + '" fill="' + T.tinta + '">' + esc(it.texto) + '</text>';
+  }
+};
+function caja(it, T){
+  return '<rect width="' + it.an + '" height="' + it.al + '" fill="' + T.pieza + '" stroke="' + T.piezaLinea +
+    '" stroke-width="2.5" />';
+}
+function frio(it, T){
+  var s = caja(it, T);
+  s += '<line x1="' + (it.an*0.5) + '" y1="' + (it.al*0.2) + '" x2="' + (it.an*0.5) + '" y2="' + (it.al*0.8) +
+    '" stroke="' + T.azul + '" stroke-width="2.5" />';
+  s += '<line x1="' + (it.an*0.28) + '" y1="' + (it.al*0.32) + '" x2="' + (it.an*0.72) + '" y2="' + (it.al*0.68) +
+    '" stroke="' + T.azul + '" stroke-width="2.5" />';
+  s += '<line x1="' + (it.an*0.28) + '" y1="' + (it.al*0.68) + '" x2="' + (it.an*0.72) + '" y2="' + (it.al*0.32) +
+    '" stroke="' + T.azul + '" stroke-width="2.5" />';
+  return s;
+}
+
+/* ---------------- armado del SVG ---------------- */
+function limites(){
+  var x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
+  plano.items.forEach(function(it){
+    x1 = Math.min(x1, it.x); y1 = Math.min(y1, it.y);
+    x2 = Math.max(x2, it.x + it.an); y2 = Math.max(y2, it.y + it.al);
+  });
+  if(x1 > x2) return {x:0, y:0, an:1400, al:1000};
+  return {x:x1, y:y1, an:x2 - x1, al:y2 - y1};
+}
+
+function contenido(T, paraPapel){
+  var s = '';
+  /* cuadrícula: cada 10 cm fina, cada metro marcada */
+  if(verReja || paraPapel){
+    s += '<defs>' +
+      '<pattern id="reja10" width="10" height="10" patternUnits="userSpaceOnUse">' +
+        '<path d="M10 0 L0 0 0 10" fill="none" stroke="' + T.reja + '" stroke-width="0.8" />' +
+      '</pattern>' +
+      '<pattern id="reja100" width="100" height="100" patternUnits="userSpaceOnUse">' +
+        '<rect width="100" height="100" fill="url(#reja10)" />' +
+        '<path d="M100 0 L0 0 0 100" fill="none" stroke="' + T.rejaFuerte + '" stroke-width="1.6" />' +
+      '</pattern></defs>';
+    s += '<rect x="-4000" y="-4000" width="12000" height="12000" fill="url(#reja100)" />';
+  }
+
+  /* piezas: primero los recintos, encima el equipamiento */
+  var orden = plano.items.filter(function(it){ var z = zonaDe(it.zona); return !z || z.visible; });
+  orden = orden.slice().sort(function(a, b){
+    var pa = a.tipo === 'recinto' ? 0 : (a.tipo === 'campana' ? 1 : 2);
+    var pb = b.tipo === 'recinto' ? 0 : (b.tipo === 'campana' ? 1 : 2);
+    return pa - pb;
+  });
+  orden.forEach(function(it){
+    var f = DIBUJO[it.tipo] || DIBUJO.meson;
+    s += '<g data-id="' + it.id + '" transform="translate(' + it.x + ' ' + it.y + ')' + rot(it) + '" ' +
+      'style="cursor:move">' + f(it, T) + etiqueta(it, T) + '</g>';
+  });
+
+  /* observaciones de la SEREMI, numeradas sobre el plano */
+  plano.obs.forEach(function(o, i){
+    s += '<g data-obs="' + o.id + '" transform="translate(' + o.x + ' ' + o.y + ')" style="cursor:move">' +
+      '<circle r="17" fill="' + T.rojo + '" />' +
+      '<text text-anchor="middle" dominant-baseline="middle" font-family="IBM Plex Mono, monospace" ' +
+      'font-size="19" font-weight="600" fill="#fff">' + (i+1) + '</text></g>';
+  });
+
+  /* marco de selección con tiradores en las esquinas */
+  var it = sel && itemDe(sel);
+  if(it && !paraPapel){
+    var m = 3 / zoom;
+    s += '<g transform="translate(' + it.x + ' ' + it.y + ')' + rot(it) + '" style="pointer-events:none">' +
+      '<rect x="' + (-m) + '" y="' + (-m) + '" width="' + (it.an + 2*m) + '" height="' + (it.al + 2*m) +
+      '" fill="none" stroke="' + T.azul + '" stroke-width="' + (2/zoom) + '" stroke-dasharray="' + (7/zoom) + ' ' + (5/zoom) + '" /></g>';
+    var r = 6 / zoom;
+    [['nw',0,0],['ne',it.an,0],['sw',0,it.al],['se',it.an,it.al]].forEach(function(t){
+      s += '<g transform="translate(' + it.x + ' ' + it.y + ')' + rot(it) + '">' +
+        '<rect data-tirador="' + t[0] + '" x="' + (t[1]-r) + '" y="' + (t[2]-r) + '" width="' + (2*r) + '" height="' + (2*r) +
+        '" fill="' + T.papel + '" stroke="' + T.azul + '" stroke-width="' + (2/zoom) + '" style="cursor:nwse-resize" /></g>';
+    });
+  }
+  return s;
+}
+
+function pintar(){
+  var T = tema(false);
+  var caja = svg.getBoundingClientRect();
+  var an = caja.width / zoom, al = caja.height / zoom;
+  svg.setAttribute('viewBox', panX + ' ' + panY + ' ' + an + ' ' + al);
+  svg.innerHTML = '<rect x="' + panX + '" y="' + panY + '" width="' + an + '" height="' + al + '" fill="' + T.fondo + '" />' + contenido(T, false);
+  pintarPaneles();
+  pintarPie();
+}
+
+/* ---------------- paneles de la derecha ---------------- */
+function pintarPaneles(){
+  var p = document.getElementById('panelSel');
+  var it = sel && itemDe(sel);
+  if(!it){
+    p.innerHTML = '<h2>Elemento</h2><p class="vacio">Haz clic en cualquier cosa del plano para moverla, ' +
+      'cambiarle el nombre o corregirle las medidas. Con las flechas del teclado se mueve de a poco, ' +
+      'y con Suprimir se borra.</p>';
+  } else {
+    var op = plano.zonas.map(function(z){
+      return '<option value="' + z.id + '"' + (z.id === it.zona ? ' selected' : '') + '>' + esc(z.nombre) + '</option>';
+    }).join('');
+    p.innerHTML =
+      '<h2>' + esc((CAT[it.tipo] || {nom:'Elemento'}).nom) + '</h2>' +
+      '<div class="campo"><label for="fTexto">Nombre en el plano</label>' +
+        '<input id="fTexto" value="' + esc(it.texto) + '"></div>' +
+      '<div class="par">' +
+        '<div class="campo"><label for="fAn">Ancho (cm)</label><input id="fAn" class="numero" type="number" step="5" value="' + it.an + '"></div>' +
+        '<div class="campo"><label for="fAl">Alto (cm)</label><input id="fAl" class="numero" type="number" step="5" value="' + it.al + '"></div>' +
+      '</div>' +
+      '<div class="par">' +
+        '<div class="campo"><label for="fX">Posición X</label><input id="fX" class="numero" type="number" step="5" value="' + it.x + '"></div>' +
+        '<div class="campo"><label for="fY">Posición Y</label><input id="fY" class="numero" type="number" step="5" value="' + it.y + '"></div>' +
+      '</div>' +
+      '<div class="campo"><label for="fZona">Zona</label><select id="fZona">' + op + '</select></div>' +
+      (it.tipo === 'recinto'
+        ? '<p class="vacio numero">Superficie: ' + (it.an*it.al/10000).toFixed(2).replace('.', ',') + ' m²</p>' : '') +
+      '<div class="grupo" style="flex-wrap:wrap; margin-top:4px">' +
+        '<button class="btn" id="bGirar">Girar 90°</button>' +
+        '<button class="btn" id="bCopiar">Duplicar</button>' +
+        '<button class="btn peligro" id="bBorrar">Borrar</button>' +
+      '</div>';
+
+    var num = function(id, campo){
+      document.getElementById(id).addEventListener('change', function(){
+        var v = parseFloat(this.value);
+        if(isNaN(v)) return;
+        marcar(); it[campo] = Math.round(v); if(campo === 'an' || campo === 'al') it[campo] = Math.max(10, it[campo]);
+        guardar(); pintar();
+      });
+    };
+    document.getElementById('fTexto').addEventListener('change', function(){
+      marcar(); it.texto = this.value; guardar(); pintar();
+    });
+    num('fAn','an'); num('fAl','al'); num('fX','x'); num('fY','y');
+    document.getElementById('fZona').addEventListener('change', function(){
+      marcar(); it.zona = this.value; guardar(); pintar();
+    });
+    document.getElementById('bGirar').onclick = function(){
+      marcar(); it.rot = ((it.rot || 0) + 90) % 360; guardar(); pintar();
+    };
+    document.getElementById('bCopiar').onclick = function(){
+      marcar();
+      var c = copia(it); c.id = nuevoId(); c.x += 20; c.y += 20;
+      plano.items.push(c); sel = c.id; guardar(); pintar();
+    };
+    document.getElementById('bBorrar').onclick = borrarSeleccion;
+  }
+
+  /* zonas */
+  var lz = document.getElementById('listaZonas');
+  lz.innerHTML = plano.zonas.map(function(z){
+    var n = plano.items.filter(function(i){ return i.zona === z.id; }).length;
+    return '<div class="zona' + (z.visible ? '' : ' apagada') + '">' +
+      '<span class="punto" style="background:' + z.color + '"></span>' +
+      '<span class="nom" data-renombra="' + z.id + '" title="Cambiar el nombre">' + esc(z.nombre) + '</span>' +
+      '<span class="cuenta">' + n + '</span>' +
+      '<button data-ver="' + z.id + '" title="Mostrar u ocultar">' + (z.visible ? '👁' : '◌') + '</button>' +
+      '<button data-borrazona="' + z.id + '" title="Eliminar la zona completa">✕</button>' +
+      '</div>';
+  }).join('');
+  lz.querySelectorAll('[data-ver]').forEach(function(b){
+    b.onclick = function(){ var z = zonaDe(b.dataset.ver); z.visible = !z.visible; guardar(); pintar(); };
+  });
+  lz.querySelectorAll('[data-renombra]').forEach(function(b){
+    b.onclick = function(){
+      var z = zonaDe(b.dataset.renombra);
+      var n = prompt('Nombre de la zona', z.nombre);
+      if(n){ marcar(); z.nombre = n; guardar(); pintar(); }
+    };
+  });
+  lz.querySelectorAll('[data-borrazona]').forEach(function(b){
+    b.onclick = function(){
+      var z = zonaDe(b.dataset.borrazona);
+      var n = plano.items.filter(function(i){ return i.zona === z.id; }).length;
+      if(!confirm('Eliminar la zona «' + z.nombre + '» y sus ' + n + ' elementos del plano.\n\nEsto no se puede deshacer con el botón del navegador, pero sí con Deshacer.')) return;
+      marcar();
+      plano.items = plano.items.filter(function(i){ return i.zona !== z.id; });
+      plano.zonas = plano.zonas.filter(function(x){ return x.id !== z.id; });
+      sel = null; guardar(); pintar();
+      decir('Zona «' + z.nombre + '» eliminada con sus ' + n + ' elementos.');
+    };
+  });
+
+  /* observaciones */
+  var lo = document.getElementById('listaObs');
+  lo.innerHTML = plano.obs.length
+    ? plano.obs.map(function(o, i){
+        return '<div class="obs"><span class="n">' + (i+1) + '</span>' +
+          '<p data-editaobs="' + o.id + '" style="cursor:text">' + esc(o.texto) + '</p>' +
+          '<button class="quitar" data-borraobs="' + o.id + '" title="Quitar">✕</button></div>';
+      }).join('')
+    : '<p class="vacio">Sin observaciones anotadas. Aquí van los puntos que pidió corregir la SEREMI; cada uno queda numerado sobre el plano.</p>';
+  lo.querySelectorAll('[data-editaobs]').forEach(function(e){
+    e.onclick = function(){
+      var o = plano.obs.filter(function(x){ return x.id === e.dataset.editaobs; })[0];
+      var t = prompt('Observación', o.texto);
+      if(t !== null){ marcar(); o.texto = t; guardar(); pintar(); }
+    };
+  });
+  lo.querySelectorAll('[data-borraobs]').forEach(function(e){
+    e.onclick = function(){
+      marcar();
+      plano.obs = plano.obs.filter(function(x){ return x.id !== e.dataset.borraobs; });
+      guardar(); pintar();
+    };
+  });
+}
+
+function pintarPie(){
+  var rec = plano.items.filter(function(i){ return i.tipo === 'recinto'; });
+  var m2 = rec.reduce(function(a, i){ return a + i.an*i.al/10000; }, 0);
+  document.getElementById('pieRecintos').textContent = rec.length;
+  document.getElementById('pieArea').textContent = m2.toFixed(1).replace('.', ',') + ' m²';
+  document.getElementById('pieZoom').textContent = '×' + zoom.toFixed(2).replace('.', ',');
+  document.getElementById('pieAjuste').textContent = AJUSTE + ' cm';
+  document.getElementById('subtitulo').textContent = plano.nombre;
+}
+
+/* ---------------- catálogo en el panel izquierdo ---------------- */
+function miniatura(tipo){
+  var T = tema(false);
+  var f = DIBUJO[tipo] || DIBUJO.meson;
+  var cuerpo = f({tipo:tipo, an:34, al:26, rot:0, texto:'', zona:(plano && plano.zonas[0] ? plano.zonas[0].id : '')}, T);
+  cuerpo = cuerpo.replace(/<text[\s\S]*?<\/text>/g, '');   /* el icono va sin letras */
+  return '<svg viewBox="-3 -3 40 32" aria-hidden="true">' + cuerpo + '</svg>';
+}
+function pintarCatalogo(){
+  var grupos = {
+    catRecintos:['recinto','muro'],
+    catCocina:['lavamanos','lavaplatos','lavafondos','meson','cocinaeq','horno','campana','refri','freezer','camara','estante'],
+    catBanos:['wc','ducha','urinario','casillero'],
+    catVarios:['mesa','basurero','extintor','puerta','ventana','texto']
+  };
+  Object.keys(grupos).forEach(function(cont){
+    document.getElementById(cont).innerHTML = grupos[cont].map(function(t){
+      return '<button class="pieza" data-pieza="' + t + '">' + miniatura(t) +
+        '<span>' + esc(CAT[t].nom) + '</span></button>';
+    }).join('');
+  });
+  document.querySelectorAll('[data-pieza]').forEach(function(b){
+    b.onclick = function(){ agregar(b.dataset.pieza); };
+  });
+}
+
+function agregar(tipo){
+  var d = CAT[tipo];
+  marcar();
+  var caja = svg.getBoundingClientRect();
+  var it = {
+    id:nuevoId(), tipo:tipo,
+    zona:(sel && itemDe(sel) ? itemDe(sel).zona : plano.zonas[0].id),
+    x:Math.round((panX + caja.width/zoom/2 - d.an/2)/AJUSTE)*AJUSTE,
+    y:Math.round((panY + caja.height/zoom/2 - d.al/2)/AJUSTE)*AJUSTE,
+    an:d.an, al:d.al, rot:0, texto:d.texto
+  };
+  plano.items.push(it); sel = it.id; guardar(); pintar();
+  decir(d.nom + ' agregado. Arrástralo a su lugar y ajusta las medidas en el panel de la derecha.');
+}
+
+function borrarSeleccion(){
+  var it = sel && itemDe(sel);
+  if(!it) return;
+  marcar();
+  plano.items = plano.items.filter(function(i){ return i.id !== sel; });
+  sel = null; guardar(); pintar();
+}
+
+/* ---------------- ratón y dedo sobre el plano ---------------- */
+function punto(ev){
+  var m = svg.getScreenCTM().inverse();
+  var p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY;
+  p = p.matrixTransform(m);
+  return {x:p.x, y:p.y};
+}
+function ajusta(v){ return Math.round(v/AJUSTE)*AJUSTE; }
+
+var arrastre = null;
+
+svg.addEventListener('pointerdown', function(ev){
+  var p = punto(ev);
+  var tirador = ev.target.dataset && ev.target.dataset.tirador;
+  var g = ev.target.closest ? ev.target.closest('[data-id],[data-obs]') : null;
+
+  if(tirador && sel){
+    var it = itemDe(sel);
+    arrastre = {modo:'medir', tirador:tirador, p0:p, base:copia(it), marcado:false};
+  } else if(g && g.dataset.id){
+    sel = g.dataset.id;
+    var it2 = itemDe(sel);
+    arrastre = {modo:'mover', p0:p, x0:it2.x, y0:it2.y, marcado:false};
+    pintar();
+  } else if(g && g.dataset.obs){
+    var o = plano.obs.filter(function(x){ return x.id === g.dataset.obs; })[0];
+    arrastre = {modo:'obs', obs:o, p0:p, x0:o.x, y0:o.y, marcado:false};
+  } else {
+    sel = null;
+    arrastre = {modo:'pan', cx:ev.clientX, cy:ev.clientY, px:panX, py:panY};
+    svg.classList.add('moviendo');
+    pintar();
+  }
+  svg.setPointerCapture(ev.pointerId);
+});
+
+svg.addEventListener('pointermove', function(ev){
+  var p = punto(ev);
+  document.getElementById('pieXY').textContent =
+    (p.x/100).toFixed(2).replace('.', ',') + ' ; ' + (p.y/100).toFixed(2).replace('.', ',') + ' m';
+  if(!arrastre) return;
+
+  if(arrastre.modo !== 'pan' && !arrastre.marcado){ arrastre.marcado = true; marcar(); }
+
+  if(arrastre.modo === 'pan'){
+    panX = arrastre.px - (ev.clientX - arrastre.cx)/zoom;
+    panY = arrastre.py - (ev.clientY - arrastre.cy)/zoom;
+    pintar();
+  } else if(arrastre.modo === 'mover'){
+    var it = itemDe(sel); if(!it) return;
+    it.x = ajusta(arrastre.x0 + (p.x - arrastre.p0.x));
+    it.y = ajusta(arrastre.y0 + (p.y - arrastre.p0.y));
+    pintar();
+  } else if(arrastre.modo === 'obs'){
+    arrastre.obs.x = ajusta(arrastre.x0 + (p.x - arrastre.p0.x));
+    arrastre.obs.y = ajusta(arrastre.y0 + (p.y - arrastre.p0.y));
+    pintar();
+  } else if(arrastre.modo === 'medir'){
+    var t = arrastre.tirador, b = arrastre.base, it3 = itemDe(sel);
+    var dx = p.x - arrastre.p0.x, dy = p.y - arrastre.p0.y;
+    var x = b.x, y = b.y, an = b.an, al = b.al;
+    if(t.indexOf('e') >= 0) an = b.an + dx;
+    if(t.indexOf('s') >= 0) al = b.al + dy;
+    if(t.indexOf('w') >= 0){ x = b.x + dx; an = b.an - dx; }
+    if(t.indexOf('n') >= 0){ y = b.y + dy; al = b.al - dy; }
+    if(an < 10){ an = 10; x = b.x; }
+    if(al < 10){ al = 10; y = b.y; }
+    it3.x = ajusta(x); it3.y = ajusta(y);
+    it3.an = Math.max(10, ajusta(an)); it3.al = Math.max(10, ajusta(al));
+    pintar();
+  }
+});
+
+function soltar(ev){
+  if(arrastre && arrastre.modo !== 'pan') guardar();
+  arrastre = null;
+  svg.classList.remove('moviendo');
+  if(ev && ev.pointerId != null && svg.hasPointerCapture(ev.pointerId)) svg.releasePointerCapture(ev.pointerId);
+}
+svg.addEventListener('pointerup', soltar);
+svg.addEventListener('pointercancel', soltar);
+
+svg.addEventListener('wheel', function(ev){
+  ev.preventDefault();
+  var antes = punto(ev);
+  var f = ev.deltaY < 0 ? 1.12 : 1/1.12;
+  zoom = Math.max(0.08, Math.min(4, zoom*f));
+  var caja = svg.getBoundingClientRect();
+  svg.setAttribute('viewBox', panX + ' ' + panY + ' ' + (caja.width/zoom) + ' ' + (caja.height/zoom));
+  var despues = punto(ev);
+  panX += antes.x - despues.x; panY += antes.y - despues.y;
+  pintar();
+}, {passive:false});
+
+/* ---------------- teclado ---------------- */
+document.addEventListener('keydown', function(ev){
+  var t = ev.target.tagName;
+  if(t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT') return;
+  if((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z'){ ev.preventDefault(); ev.shiftKey ? rehacer() : deshacer(); return; }
+  if((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'y'){ ev.preventDefault(); rehacer(); return; }
+  if(!sel) return;
+  var it = itemDe(sel); if(!it) return;
+  var paso = ev.shiftKey ? 50 : AJUSTE;
+  var mapa = {ArrowLeft:[-paso,0], ArrowRight:[paso,0], ArrowUp:[0,-paso], ArrowDown:[0,paso]};
+  if(mapa[ev.key]){
+    ev.preventDefault(); marcar();
+    it.x += mapa[ev.key][0]; it.y += mapa[ev.key][1];
+    guardar(); pintar();
+  }
+  if(ev.key === 'Delete' || ev.key === 'Backspace'){ ev.preventDefault(); borrarSeleccion(); }
+});
+
+/* ---------------- vista ---------------- */
+function encajar(){
+  var L = limites(), caja = svg.getBoundingClientRect();
+  var m = 80;
+  zoom = Math.min((caja.width - m*2)/L.an, (caja.height - m*2)/L.al);
+  zoom = Math.max(0.05, Math.min(3, zoom));
+  panX = L.x + L.an/2 - caja.width/zoom/2;
+  panY = L.y + L.al/2 - caja.height/zoom/2;
+  pintar();
+}
+document.getElementById('bEncajar').onclick = encajar;
+document.getElementById('bMas').onclick = function(){ zoom = Math.min(4, zoom*1.25); pintar(); };
+document.getElementById('bMenos').onclick = function(){ zoom = Math.max(0.08, zoom/1.25); pintar(); };
+document.getElementById('bReja').onclick = function(){ verReja = !verReja; pintar(); };
+document.getElementById('bDeshacer').onclick = deshacer;
+document.getElementById('bRehacer').onclick = rehacer;
+
+/* ---------------- zonas y observaciones nuevas ---------------- */
+var COLORES = ['#1F45B0','#0F7B6C','#8A5A00','#A6231C','#5B3FA8','#0E6E8C'];
+document.getElementById('bZonaNueva').onclick = function(){
+  var n = prompt('Nombre de la zona nueva', 'Zona');
+  if(!n) return;
+  marcar();
+  plano.zonas.push({
+    id:'z' + Date.now(), nombre:n,
+    color:COLORES[plano.zonas.length % COLORES.length], visible:true
+  });
+  guardar(); pintar();
+};
+document.getElementById('bObsNueva').onclick = function(){
+  var t = prompt('¿Qué observación hay que dejar anotada?');
+  if(!t) return;
+  marcar();
+  var caja = svg.getBoundingClientRect();
+  plano.obs.push({
+    id:'o' + Date.now(), texto:t,
+    x:ajusta(panX + caja.width/zoom/2), y:ajusta(panY + caja.height/zoom/2)
+  });
+  guardar(); pintar();
+  decir('Observación ' + plano.obs.length + ' agregada al centro de la vista. Arrastra el número al lugar que corresponde.');
+};
+
+/* ---------------- ventana modal ---------------- */
+var velo = document.getElementById('velo'), cajaModal = document.getElementById('caja');
+function abrirCaja(html){ cajaModal.innerHTML = html; velo.classList.add('ver'); }
+function cerrarCaja(){ velo.classList.remove('ver'); }
+velo.addEventListener('click', function(e){ if(e.target === velo) cerrarCaja(); });
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') cerrarCaja(); });
+
+/* Guardar copia: el plano completo como texto. Se copia y se pega en un
+   correo o en un archivo de bloc de notas; así queda respaldo aunque se
+   borre el navegador. */
+document.getElementById('bGuardar').onclick = function(){
+  abrirCaja(
+    '<h3>Guardar una copia</h3>' +
+    '<p>Este texto es el plano entero. Cópialo y pégalo en un correo o en un archivo de bloc de notas: ' +
+    'con eso puedes recuperarlo en cualquier computador con «Abrir copia».</p>' +
+    '<textarea id="txtCopia" readonly></textarea>' +
+    '<div class="pie-caja"><button class="btn" id="bCerrar1">Cerrar</button>' +
+    '<button class="btn fuerte" id="bCopiarTxt">Copiar al portapapeles</button></div>'
+  );
+  document.getElementById('txtCopia').value = JSON.stringify(plano);
+  document.getElementById('bCerrar1').onclick = cerrarCaja;
+  document.getElementById('bCopiarTxt').onclick = function(){
+    var t = document.getElementById('txtCopia');
+    t.select();
+    try{ navigator.clipboard.writeText(t.value); }catch(e){ document.execCommand('copy'); }
+    decir('Copiado. Pégalo donde quieras guardarlo.');
+    cerrarCaja();
+  };
+};
+
+document.getElementById('bAbrir').onclick = function(){
+  abrirCaja(
+    '<h3>Abrir una copia</h3>' +
+    '<p>Pega aquí el texto que guardaste antes. Reemplaza el plano que está en pantalla, pero se puede volver atrás con Deshacer.</p>' +
+    '<textarea id="txtPega" placeholder="Pega aquí el texto del plano"></textarea>' +
+    '<div class="pie-caja"><button class="btn" id="bCerrar2">Cancelar</button>' +
+    '<button class="btn peligro" id="bDeCero">Empezar de nuevo</button>' +
+    '<button class="btn fuerte" id="bCargar">Abrir</button></div>'
+  );
+  document.getElementById('bCerrar2').onclick = cerrarCaja;
+  document.getElementById('bDeCero').onclick = function(){
+    if(!confirm('Volver al plano de partida y perder los cambios actuales.')) return;
+    marcar(); plano = planoInicial(); sel = null; guardar(); cerrarCaja(); encajar();
+  };
+  document.getElementById('bCargar').onclick = function(){
+    var t = document.getElementById('txtPega').value.trim();
+    if(!t) return;
+    try{
+      var p = JSON.parse(t);
+      if(!p.items || !p.zonas) throw new Error('formato');
+      marcar(); plano = p; if(!plano.obs) plano.obs = [];
+      if(!plano.siguiente) plano.siguiente = plano.items.length + 100;
+      sel = null; guardar(); cerrarCaja(); encajar();
+      decir('Plano abierto.');
+    }catch(e){
+      alert('Ese texto no es un plano guardado. Copia de nuevo el texto completo, desde la primera llave hasta la última.');
+    }
+  };
+};
+
+/* Imagen: se arma el PNG en el mismo navegador y se muestra. Descargarlo
+   directo no siempre está permitido en la ventana donde corre la página,
+   así que se guarda con el botón derecho sobre la imagen. */
+document.getElementById('bImagen').onclick = function(){
+  var T = tema(true), L = limites(), m = 60;
+  var an = L.an + m*2, al = L.al + m*2, escala = Math.min(3, 2400/an);
+  var cuerpo =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + Math.round(an*escala) + '" height="' + Math.round(al*escala) + '" ' +
+    'viewBox="' + (L.x - m) + ' ' + (L.y - m) + ' ' + an + ' ' + al + '">' +
+    '<rect x="' + (L.x - m) + '" y="' + (L.y - m) + '" width="' + an + '" height="' + al + '" fill="#fff" />' +
+    contenido(T, true) +
+    '<text x="' + (L.x - m + 20) + '" y="' + (L.y - m + 34) + '" font-family="Archivo, Helvetica, sans-serif" ' +
+    'font-size="26" font-weight="600" fill="#14181F">' + esc(plano.nombre) + '</text>' +
+    '</svg>';
+
+  abrirCaja('<h3>Imagen del plano</h3><p>Generando…</p>');
+  var img = new Image();
+  img.onload = function(){
+    var c = document.createElement('canvas');
+    c.width = Math.round(an*escala); c.height = Math.round(al*escala);
+    var g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(img, 0, 0);
+    var url = c.toDataURL('image/png');
+    abrirCaja(
+      '<h3>Imagen del plano</h3>' +
+      '<p>Guárdala con el botón derecho sobre la imagen → «Guardar imagen como…». En el teléfono, mantén el dedo apretado sobre ella.</p>' +
+      '<img src="' + url + '" alt="Plano de la Casona Peumayén">' +
+      '<div class="pie-caja"><button class="btn fuerte" id="bCerrar3">Cerrar</button></div>'
+    );
+    document.getElementById('bCerrar3').onclick = cerrarCaja;
+  };
+  img.onerror = function(){
+    abrirCaja('<h3>Imagen del plano</h3><p>No se pudo armar la imagen en este navegador. Usa «Imprimir / PDF», ' +
+      'que da el mismo resultado en un archivo.</p><div class="pie-caja"><button class="btn fuerte" id="bCerrar4">Cerrar</button></div>');
+    document.getElementById('bCerrar4').onclick = cerrarCaja;
+  };
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(cuerpo);
+};
+
+/* Imprimir: se cambia el SVG a la versión de papel, se imprime y se vuelve
+   a dejar como estaba. Eligiendo «Guardar como PDF» queda el archivo para
+   presentar. */
+document.getElementById('bImprimir').onclick = function(){
+  var T = tema(true), L = limites(), m = 60;
+  var guardadoSel = sel; sel = null;
+  svg.setAttribute('viewBox', (L.x - m) + ' ' + (L.y - m) + ' ' + (L.an + m*2) + ' ' + (L.al + m*2));
+  svg.innerHTML = '<rect x="' + (L.x - m) + '" y="' + (L.y - m) + '" width="' + (L.an + m*2) + '" height="' + (L.al + m*2) +
+    '" fill="#fff" />' + contenido(T, true) +
+    '<text x="' + (L.x - m + 20) + '" y="' + (L.y - m + 34) + '" font-family="Archivo, Helvetica, sans-serif" ' +
+    'font-size="26" font-weight="600" fill="#14181F">' + esc(plano.nombre) + '</text>';
+  window.print();
+  setTimeout(function(){ sel = guardadoSel; pintar(); }, 400);
+};
+
+/* ---------------- arranque ---------------- */
+plano = cargar();
+if(!plano.obs) plano.obs = [];
+pintarCatalogo();
+encajar();
+guardar();
+addEventListener('resize', pintar);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', pintar);
+</script>
