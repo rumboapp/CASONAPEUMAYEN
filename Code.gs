@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-03';
+var VERSION = '2026-09-04';
 
 function version() { return VERSION; }
 
@@ -3130,6 +3130,494 @@ function panelHoy_(dia) {
   };
 }
 
+
+
+/* ===================== ÓRDENES DESDE EL GRUPO =====================
+
+   Hasta acá la conversación era de una sola vía: la app le hablaba a Telegram.
+   Esto es la vuelta — escribir una orden en el grupo y que la app la ejecute.
+   Sirve para lo que de verdad pasa: estás al teléfono con alguien que quiere
+   una pieza para el fin de semana, y necesitas bloquearla AHORA, no cuando
+   llegues al computador.
+
+   CÓMO LLEGA. Telegram avisa por webhook: apenas alguien escribe en el grupo,
+   llama a la dirección de esta misma app web. Es instantáneo y no gasta la
+   cuota de tareas automáticas que ya usa Booking. Por eso hay un doPost.
+
+   CÓMO SE PROTEGE, que es lo delicado. La app web es pública —tiene que
+   serlo, si no Telegram no podría llamarla— así que hay tres cercos:
+
+     1. La dirección lleva una clave de 32 caracteres. Sin ella, ni se mira
+        el contenido.
+     2. Solo se atienden mensajes del grupo configurado. De cualquier otro
+        chat, nada.
+     3. Solo obedecen las órdenes de una lista de personas autorizadas. Este
+        es el cerco que de verdad importa: aunque alguien diera con la
+        dirección, sin estar en la lista no puede crear nada.
+
+   Apps Script no deja leer las cabeceras de una petición, así que el
+   'secret_token' que ofrece Telegram para esto no se puede usar: por eso la
+   clave va en la dirección. Es la misma protección del calendario de Booking,
+   con la lista de autorizados encima porque acá no se lee, se escribe.
+
+   RESPONDER SIEMPRE. Una orden sin respuesta es peor que una orden que falla:
+   quien la escribió no sabe si quedó o no, y termina yendo al computador a
+   revisar. Todo camino de acá abajo contesta algo. */
+
+function claveTelegramWeb_() {
+  var c = String(config_('telegramClaveWeb', '') || '');
+  if (!c) {
+    c = codigoCorto_(32);
+    guardarOCrear_('Config', 'clave', 'telegramClaveWeb', { clave: 'telegramClaveWeb', valor: c });
+    olvidarConfig_();
+  }
+  return c;
+}
+
+function telegramOrdenesActivas_() { return String(config_('telegramOrdenes', 'no')) === 'si'; }
+
+function telegramAutorizados_() {
+  try {
+    var l = JSON.parse(String(config_('telegramAutorizados', '') || '[]'));
+    return l.map(function (x) { return String(x.id); });
+  } catch (e) { return []; }
+}
+
+function telegramAutorizadosLista_() {
+  try { return JSON.parse(String(config_('telegramAutorizados', '') || '[]')); }
+  catch (e) { return []; }
+}
+
+function telegramAutorizado_(id) {
+  return telegramAutorizados_().indexOf(String(id)) > -1;
+}
+
+/* ---------- La puerta ---------- */
+function doPost(e) {
+  // Telegram solo necesita un 200. Todo lo demás se resuelve contestando en
+  // el grupo, así que acá no se devuelve nada útil ni se lanza nunca: un
+  // error sin atrapar haría que Telegram reintentara el mismo mensaje una y
+  // otra vez, y una orden de reservar se ejecutaría varias veces.
+  var vacio = ContentService.createTextOutput('');
+  try {
+    var p = (e && e.parameter) || {};
+    if (!p.tg || String(p.tg) !== claveTelegramWeb_()) return vacio;
+    if (!telegramOrdenesActivas_()) return vacio;
+    if (!e.postData || !e.postData.contents) return vacio;
+
+    var upd = JSON.parse(e.postData.contents);
+    // Solo mensajes nuevos. Un mensaje editado volvería a ejecutar la orden.
+    var msg = upd && upd.message;
+    if (!msg || !msg.text || !msg.chat) return vacio;
+    if (String(msg.chat.id) !== telegramChat_()) return vacio;
+
+    var texto = String(msg.text).trim();
+    if (texto.charAt(0) !== '/') return vacio;      // conversación normal
+
+    var quien = msg.from || {};
+    var nombre = String(quien.first_name || '') +
+                 (quien.last_name ? ' ' + quien.last_name : '');
+    nombre = nombre.trim() || String(quien.username || 'alguien');
+
+    if (!telegramAutorizado_(quien.id)) {
+      telegramResponder_(
+        '🔒 <b>No estás en la lista</b>\n\n' +
+        'Tu número de Telegram es <code>' + escTg_(String(quien.id)) + '</code>\n\n' +
+        'Pídele a administración que lo agregue en Configuración → Avisos al grupo ' +
+        '→ Órdenes desde el grupo.', msg.message_id);
+      return vacio;
+    }
+
+    telegramOrden_(texto, nombre, msg.message_id);
+    return vacio;
+  } catch (err) {
+    try {
+      telegramMandar_('⚠️ Algo se cayó procesando esa orden: ' +
+                      escTg_(String(err.message || err)));
+    } catch (e2) {}
+    return vacio;
+  }
+}
+
+/* Contesta en el grupo, colgado del mensaje que lo pidió. Va directo y no por
+   avisar_(): esto es la respuesta a una orden, no un aviso que se pueda
+   apagar desde Configuración. */
+function telegramResponder_(texto, responderA) {
+  if (!telegramActivo_()) return false;
+  try {
+    var carga = {
+      chat_id: telegramChat_(), text: texto,
+      parse_mode: 'HTML', disable_web_page_preview: 'true'
+    };
+    if (responderA) carga.reply_to_message_id = String(responderA);
+    var r = UrlFetchApp.fetch(
+      'https://api.telegram.org/bot' + telegramToken_() + '/sendMessage',
+      { method: 'post', muteHttpExceptions: true, payload: carga });
+    return r.getResponseCode() === 200;
+  } catch (e) { return false; }
+}
+
+/* ---------- Repartir la orden ---------- */
+function telegramOrden_(texto, quien, msgId) {
+  var m = texto.match(/^\/([a-zA-ZñÑáéíóú]+)(?:@\S+)?\s*([\s\S]*)$/);
+  if (!m) return telegramResponder_(TG_AYUDA_, msgId);
+  var orden = m[1].toLowerCase().replace(/[áàä]/g,'a').replace(/[éèë]/g,'e')
+                                .replace(/[íìï]/g,'i').replace(/[óòö]/g,'o')
+                                .replace(/[úùü]/g,'u').replace(/ñ/g,'n');
+  var resto = String(m[2] || '').trim();
+
+  if (orden === 'ayuda' || orden === 'start' || orden === 'help') {
+    return telegramResponder_(TG_AYUDA_, msgId);
+  }
+  if (orden === 'hoy') {
+    var parte = armarResumenDia_(hoy_());
+    return telegramResponder_(parte || '🌙 Hoy no hay nadie alojado ni llega o se va nadie.', msgId);
+  }
+  if (orden === 'libres') return tgLibres_(resto, msgId);
+  if (orden === 'buscar') return tgBuscar_(resto, msgId);
+  if (orden === 'reservar') return tgReservar_(resto, quien, msgId);
+
+  return telegramResponder_('No conozco la orden <code>/' + escTg_(orden) + '</code>.\n\n' +
+                            TG_AYUDA_, msgId);
+}
+
+var TG_AYUDA_ = [
+  '🏡 <b>Órdenes de Casona Peumayén</b>', '',
+  '<b>/reservar</b> pieza desde hasta nombre',
+  '   <code>/reservar hab3 12/09 14/09 Juan Pérez</code>',
+  '   Agrega <code>2p</code> para decir cuántas personas.', '',
+  '<b>/libres</b> desde hasta',
+  '   <code>/libres 12/09 14/09</code>', '',
+  '<b>/buscar</b> nombre',
+  '   <code>/buscar juan</code>', '',
+  '<b>/hoy</b> — el parte del día, cuando quieras', '',
+  'Las fechas valen como <code>12/09</code>, <code>12-09</code> o ' +
+  '<code>2026-09-12</code>. Sin año, se entiende la próxima vez que llegue ese día.'
+].join('\n');
+
+/* ---------- Leer una fecha escrita a la rápida ----------
+   Nadie va a escribir "2026-09-12" desde el teléfono con alguien esperando al
+   otro lado del fono. Se aceptan las formas que uno escribe de verdad, y sin
+   año se toma la próxima vez que llegue ese día: pedir una pieza para una
+   fecha ya pasada no tiene sentido. */
+function tgFecha_(txt, hoyYmd) {
+  var t = String(txt || '').trim().toLowerCase();
+  var hoy = hoyYmd || hoy_();
+  if (t === 'hoy') return hoy;
+  if (t === 'manana' || t === 'mañana') return sumarDias_(hoy, 1);
+
+  var m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return tgArmarFecha_(m[1], m[2], m[3]);
+
+  m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/);
+  if (!m) return '';
+  var dia = m[1], mes = m[2];
+
+  if (m[3]) return tgArmarFecha_(m[3].length === 2 ? '20' + m[3] : m[3], mes, dia);
+
+  // Sin año: este año, y si ya pasó, el que viene. Pedir una pieza para una
+  // fecha que ya pasó no tiene sentido; lo que se quiere es la próxima.
+  var esteAnio = Number(hoy.slice(0, 4));
+  var f = tgArmarFecha_(esteAnio, mes, dia);
+  if (f && f < hoy) f = tgArmarFecha_(esteAnio + 1, mes, dia);
+  return f;
+}
+
+/* Arma la fecha y comprueba que EXISTA. Un 31 de febrero pasa cualquier
+   validación de rangos —el mes está entre 1 y 12, el día entre 1 y 31— y
+   después se cuela hasta la reserva. Construyéndola y mirando si el
+   calendario la devolvió igual, el 31 de febrero se cae solo: Date lo
+   convierte en marzo y los números dejan de calzar. */
+function tgArmarFecha_(anio, mes, dia) {
+  var a = Number(anio), m = Number(mes), d = Number(dia);
+  if (!(a >= 1900 && a <= 2200) || !(m >= 1 && m <= 12) || !(d >= 1 && d <= 31)) return '';
+  var f = new Date(a, m - 1, d, 12, 0, 0);
+  if (f.getFullYear() !== a || f.getMonth() !== m - 1 || f.getDate() !== d) return '';
+  return a + '-' + ('0' + m).slice(-2) + '-' + ('0' + d).slice(-2);
+}
+
+/* Encontrar la pieza por como la nombra la gente: "hab3", "hab 3",
+   "habitacion 3", "carpa a", o el número solo. */
+function tgNormalizar_(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[áàä]/g,'a').replace(/[éèë]/g,'e').replace(/[íìï]/g,'i')
+    .replace(/[óòö]/g,'o').replace(/[úùü]/g,'u').replace(/ñ/g,'n')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+function tgRecurso_(txt) {
+  var busca = tgNormalizar_(txt);
+  if (!busca) return null;
+  var recs = recursos_();
+
+  // Primero el nombre completo, después la unidad sola, y al final el número
+  // suelto. El orden importa: "7" tiene que dar la Habitación 7 y no la
+  // primera pieza que contenga un 7 en cualquier parte.
+  var exacto = recs.filter(function (r) {
+    return tgNormalizar_(r.unidad + (r.nombre || '')) === busca ||
+           tgNormalizar_(r.unidad) === busca;
+  });
+  if (exacto.length === 1) return exacto[0];
+
+  var soloNumero = busca.match(/^(?:hab|habitacion|pieza)?(\d{1,2})$/);
+  if (soloNumero) {
+    var n = soloNumero[1];
+    var porNumero = recs.filter(function (r) {
+      var mm = String(r.unidad).match(/(\d{1,2})/);
+      return mm && mm[1] === n;
+    });
+    if (porNumero.length === 1) return porNumero[0];
+    if (porNumero.length > 1) return { ambiguo: porNumero };
+  }
+
+  var parcial = recs.filter(function (r) {
+    return tgNormalizar_(r.unidad + (r.nombre || '')).indexOf(busca) > -1;
+  });
+  if (parcial.length === 1) return parcial[0];
+  if (parcial.length > 1) return { ambiguo: parcial };
+  return null;
+}
+
+/* Las dos fechas de una orden, vengan donde vengan. Devuelve también qué
+   quedó antes y después, que es de donde salen la pieza y el nombre. */
+function tgPartir_(resto) {
+  var trozos = String(resto || '').split(/\s+/).filter(String);
+  var fechas = [], donde = [];
+  trozos.forEach(function (t, i) {
+    if (fechas.length >= 2) return;
+    var f = tgFecha_(t);
+    if (f) { fechas.push(f); donde.push(i); }
+  });
+  if (fechas.length < 2) return null;
+  return {
+    desde: fechas[0], hasta: fechas[1],
+    antes: trozos.slice(0, donde[0]).join(' '),
+    despues: trozos.slice(donde[1] + 1).join(' ')
+  };
+}
+
+/* ---------- /libres ---------- */
+function tgLibres_(resto, msgId) {
+  var p = tgPartir_(resto);
+  if (!p) {
+    return telegramResponder_('Me faltan las fechas.\n' +
+      '<code>/libres 12/09 14/09</code>', msgId);
+  }
+  if (p.hasta <= p.desde) {
+    return telegramResponder_('La salida tiene que ser después de la llegada.', msgId);
+  }
+
+  var ocupadas = {};
+  leer_('Reservas').forEach(function (r) {
+    if (r.estado === 'cancelada' || r.estado === 'no_show') return;
+    if (!chocan_(ymd_(r.checkIn), ymd_(r.checkOut), p.desde, p.hasta)) return;
+    var choca = conflictosDe_(r.recurso);
+    Object.keys(choca).forEach(function (id) { ocupadas[id] = true; });
+  });
+
+  var libres = recursos_().filter(function (r) { return !ocupadas[r.id]; });
+  var n = noches_(p.desde, p.hasta);
+  if (!libres.length) {
+    return telegramResponder_('🔴 <b>Completo</b>\n' + fechaTg_(p.desde) + ' → ' +
+      fechaTg_(p.hasta) + '  ·  ' + plural_(n, 'noche', 'noches'), msgId);
+  }
+
+  var lineas = ['🟢 <b>Libres</b> · ' + fechaTg_(p.desde) + ' → ' + fechaTg_(p.hasta) +
+                '  ·  ' + plural_(n, 'noche', 'noches'), ''];
+  var grupo = '';
+  libres.forEach(function (r) {
+    if (r.grupo !== grupo) { grupo = r.grupo; lineas.push('<b>' + escTg_(grupo) + '</b>'); }
+    lineas.push('   ' + escTg_(r.unidad + (r.nombre ? ' — ' + r.nombre : '')) +
+                '  ·  ' + plataTxt_(tarifaDe_(r.id, p.desde, '')) + ' la noche');
+  });
+  return telegramResponder_(lineas.join('\n'), msgId);
+}
+
+/* ---------- /buscar ---------- */
+function tgBuscar_(resto, msgId) {
+  var q = tgNormalizar_(resto);
+  if (!q) return telegramResponder_('¿A quién busco?\n<code>/buscar juan</code>', msgId);
+
+  var hoy = hoy_();
+  var halladas = leer_('Reservas').filter(function (r) {
+    return tgNormalizar_(r.huesped).indexOf(q) > -1 && ymd_(r.checkOut) >= hoy;
+  }).sort(function (a, b) { return ymd_(a.checkIn) < ymd_(b.checkIn) ? -1 : 1; });
+
+  if (!halladas.length) {
+    return telegramResponder_('No encontré a nadie con ese nombre de hoy en adelante.', msgId);
+  }
+  var r8 = recorteTg_(halladas, 8);
+  var lineas = ['🔎 <b>' + plural_(halladas.length, 'reserva', 'reservas') + '</b>', ''];
+  r8.muestra.forEach(function (r) {
+    lineas.push('👤 <b>' + escTg_(r.huesped) + '</b>');
+    lineas.push('   ' + escTg_(nombreRecurso_(r.recurso)) + '  ·  ' +
+      fechaTg_(r.checkIn) + ' → ' + fechaTg_(r.checkOut) +
+      '  ·  ' + escTg_(String(r.estado || '').replace('_', ' ')));
+  });
+  if (r8.resto) lineas.push('…y ' + r8.resto + ' más');
+  return telegramResponder_(lineas.join('\n'), msgId);
+}
+
+/* ---------- /reservar ---------- */
+function tgReservar_(resto, quien, msgId) {
+  var p = tgPartir_(resto);
+  if (!p) {
+    return telegramResponder_('No entendí. Va así:\n' +
+      '<code>/reservar hab3 12/09 14/09 Juan Pérez</code>', msgId);
+  }
+  if (p.hasta <= p.desde) {
+    return telegramResponder_('La salida tiene que ser después de la llegada.', msgId);
+  }
+  if (!p.antes) {
+    return telegramResponder_('Me falta la pieza, antes de las fechas:\n' +
+      '<code>/reservar hab3 12/09 14/09 Juan Pérez</code>', msgId);
+  }
+
+  var rec = tgRecurso_(p.antes);
+  if (!rec) {
+    return telegramResponder_('No sé cuál es "' + escTg_(p.antes) + '".\n' +
+      'Prueba con <code>hab3</code>, <code>habitación 3</code> o <code>carpa a</code>.', msgId);
+  }
+  if (rec.ambiguo) {
+    return telegramResponder_('"' + escTg_(p.antes) + '" puede ser varias:\n' +
+      rec.ambiguo.map(function (x) {
+        return '   • ' + escTg_(x.unidad + (x.nombre ? ' — ' + x.nombre : ''));
+      }).join('\n') + '\nDime cuál.', msgId);
+  }
+
+  // Las personas son opcionales y van como "2p" en cualquier parte del resto.
+  var pax = 1, nombre = p.despues;
+  var mp = nombre.match(/(?:^|\s)(\d{1,2})\s*p(?:ax|ers?o?n?a?s?)?(?=\s|$)/i);
+  if (mp) { pax = Number(mp[1]) || 1; nombre = nombre.replace(mp[0], ' ').trim(); }
+  nombre = nombre.replace(/\s+/g, ' ').trim();
+  if (!nombre) {
+    return telegramResponder_('Me falta el nombre del huésped, al final:\n' +
+      '<code>/reservar hab3 12/09 14/09 Juan Pérez</code>', msgId);
+  }
+  var tope = Number(rec.capacidad) || 1;
+  pax = Math.min(Math.max(pax, 1), tope);
+
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) {
+    return telegramResponder_('El sistema estaba ocupado. Manda la orden de nuevo.', msgId);
+  }
+  try {
+    try {
+      verificarLibre_(rec.id, p.desde, p.hasta, '');
+    } catch (e) {
+      return telegramResponder_('🔴 <b>No se pudo</b>\n' + escTg_(e.message), msgId);
+    }
+
+    var id = uid_('R');
+    var plan = armarNoches_(id, rec.id, p.desde, p.hasta, null, '');
+    insertar_('Reservas', {
+      id: id, recurso: rec.id, idUnidad: rec.idUnidad,
+      huesped: nombre, telefono: '', email: '', canal: 'whatsapp',
+      checkIn: p.desde, checkOut: p.hasta, estado: 'confirmada',
+      total: plan.total, anticipo: 0, pax: pax, ninos: 0,
+      notas: 'Creada desde Telegram por ' + quien + '. Falta completar: teléfono, ' +
+             'precio acordado y cuántas personas si no son ' + pax + '.',
+      creado: ahora_(), creadoPor: quien, tokenFicha: ''
+    });
+    insertarVarias_('Noches', plan.noches);
+    logCambio_(quien, 'reserva_telegram', id + ' ' + rec.id + ' ' + p.desde + '→' + p.hasta);
+
+    var n = noches_(p.desde, p.hasta);
+    return telegramResponder_([
+      '✅ <b>Reservado</b>', '',
+      '👤 <b>' + escTg_(nombre) + '</b>',
+      '🛏 ' + escTg_(rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '')),
+      '📅 ' + fechaTg_(p.desde) + ' → ' + fechaTg_(p.hasta) + '  ·  ' +
+        plural_(n, 'noche', 'noches'),
+      '👥 ' + plural_(pax, 'persona', 'personas'),
+      '💵 ' + plataTxt_(plan.total) + '  ·  a la tarifa de la casa',
+      '',
+      '⚠️ Falta completarla en la app: teléfono, precio acordado y abono.',
+      '✏️ La creó ' + escTg_(quien)
+    ].join('\n'), msgId);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ---------- Lo que usa la pantalla de Configuración ---------- */
+
+function telegramOrdenesEstado(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  return {
+    activas: telegramOrdenesActivas_(),
+    conBot: telegramActivo_(),
+    autorizados: telegramAutorizadosLista_(),
+    url: ScriptApp.getService().getUrl() + '?tg=' + claveTelegramWeb_()
+  };
+}
+
+/* Enciende las órdenes Y le dice a Telegram dónde avisar. Las dos cosas van
+   juntas a propósito: encender el interruptor sin registrar el webhook
+   dejaría un sistema que parece andando y no contesta nada. */
+function telegramOrdenesEncender(token, encender) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  if (encender && !telegramActivo_()) {
+    throw new Error('Primero hay que conectar el bot y el grupo, más arriba.');
+  }
+  var api = 'https://api.telegram.org/bot' + telegramToken_() + '/';
+  var r;
+  try {
+    if (encender) {
+      r = UrlFetchApp.fetch(api + 'setWebhook', {
+        method: 'post', muteHttpExceptions: true,
+        payload: {
+          url: ScriptApp.getService().getUrl() + '?tg=' + claveTelegramWeb_(),
+          allowed_updates: JSON.stringify(['message']),
+          drop_pending_updates: 'true'
+        }
+      });
+    } else {
+      r = UrlFetchApp.fetch(api + 'deleteWebhook',
+        { method: 'post', muteHttpExceptions: true, payload: { drop_pending_updates: 'true' } });
+    }
+  } catch (e) {
+    throw new Error('No se pudo hablar con Telegram: ' + (e.message || e));
+  }
+  var res = {};
+  try { res = JSON.parse(r.getContentText()); } catch (e) {}
+  if (!res.ok) {
+    throw new Error('Telegram no aceptó el cambio: ' +
+      (res.description || r.getResponseCode()));
+  }
+  actualizarConfig_('telegramOrdenes', encender ? 'si' : 'no');
+  logCambio_(u.nombre, 'telegram_ordenes', encender ? 'encendidas' : 'apagadas');
+  return { activas: !!encender };
+}
+
+function telegramAutorizar(token, id, nombre) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var num = String(id || '').trim();
+  if (!/^\d{5,}$/.test(num)) {
+    throw new Error('Ese no parece un número de Telegram. Son solo dígitos, y los ' +
+      'da el propio bot cuando alguien le escribe sin estar autorizado.');
+  }
+  var l = telegramAutorizadosLista_();
+  if (l.some(function (x) { return String(x.id) === num; })) return { autorizados: l };
+  l.push({ id: num, nombre: String(nombre || '').trim() || num });
+  actualizarConfig_('telegramAutorizados', JSON.stringify(l));
+  logCambio_(u.nombre, 'telegram_autorizado', num);
+  return { autorizados: l };
+}
+
+function telegramDesautorizar(token, id) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var l = telegramAutorizadosLista_().filter(function (x) {
+    return String(x.id) !== String(id);
+  });
+  actualizarConfig_('telegramAutorizados', JSON.stringify(l));
+  logCambio_(u.nombre, 'telegram_desautorizado', String(id));
+  return { autorizados: l };
+}
 
 /* ===================== EL PARTE DE LA MAÑANA =====================
 

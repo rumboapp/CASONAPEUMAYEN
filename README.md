@@ -945,6 +945,64 @@ Y si el correo falla —sin permiso, sin red, cuota agotada— el calendario sig
 andando igual: la lectura del correo va envuelta y su error se anota, no se
 propaga.
 
+## Órdenes desde el grupo de Telegram
+
+Hasta acá la conversación era de una sola vía: la app le hablaba al grupo.
+Encendiendo *Configuración → Avisos al grupo → Órdenes desde el grupo*, el bot
+también **obedece**. Sirve para lo que de verdad pasa: estás al teléfono con
+alguien que quiere una pieza para el fin de semana y necesitas bloquearla
+ahora, no cuando llegues al computador.
+
+```
+/reservar hab3 12/09 14/09 Juan Pérez     ← 2p para decir cuántas personas
+/libres 12/09 14/09
+/buscar juan
+/hoy
+/ayuda
+```
+
+La reserva entra **confirmada**, con sus noches armadas, la tarifa de la casa y
+una nota de que falta completarla — el mismo patrón que las de Booking, así que
+no hay una forma nueva de trabajar que aprender. Queda anotado quién la creó,
+con su nombre de Telegram.
+
+**Escrito como se escribe de verdad.** Nadie va a teclear `2026-09-12` desde el
+teléfono con alguien esperando al otro lado. Las fechas valen como `12/09`,
+`12-09`, `12/09/26` o `2026-09-12`, y sin año se entiende la **próxima** vez que
+llegue ese día. La pieza se reconoce como la nombra la gente: `hab3`, `hab 3`,
+`habitación 3`, `carpa a` o el número solo. Si algo queda ambiguo, el bot
+pregunta en vez de adivinar.
+
+### Cómo llega, y por qué está protegido así
+
+Telegram avisa por **webhook**: apenas alguien escribe, llama a la dirección de
+esta misma app web. Es instantáneo y no gasta la cuota de tareas automáticas que
+ya usa Booking. Por eso existe un `doPost`.
+
+La app web es pública —tiene que serlo, si no Telegram no podría llamarla— así
+que hay tres cercos, y hay que entender por qué son tres:
+
+1. **La dirección lleva una clave de 32 caracteres.** Sin ella ni se mira el
+   contenido de la petición.
+2. **Solo se atienden mensajes del grupo configurado.** De cualquier otro chat,
+   nada.
+3. **Solo obedecen las órdenes de una lista de autorizados.** Este es el que de
+   verdad importa: aunque alguien diera con la dirección, sin estar en la lista
+   no puede crear nada. Los que no están siguen recibiendo los avisos.
+
+Apps Script **no deja leer las cabeceras** de una petición, así que el
+`secret_token` que Telegram ofrece justamente para esto no se puede usar: de ahí
+que la clave viaje en la dirección. Es la misma protección del calendario de
+Booking, con la lista de autorizados encima porque acá no se lee, se escribe.
+
+Para autorizar a alguien se le pide que escriba `/ayuda` en el grupo: el bot le
+contesta con su número de Telegram, y ese número se pega en Configuración. No
+hay forma de que alguien se autorice a sí mismo.
+
+Un detalle que importa: `doPost` **nunca lanza**. Un error sin atrapar haría que
+Telegram reintentara el mismo mensaje una y otra vez, y una orden de reservar se
+ejecutaría varias veces.
+
 ## El parte de la mañana
 
 Un mensaje al grupo de Telegram temprano con lo del día. Se enciende en

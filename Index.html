@@ -981,6 +981,55 @@
         </div>
         <div class="muted" id="cfgTgEstado" style="font-size:12.5px;margin-top:10px"></div>
         <div class="err hide" id="cfgTgErr" style="margin-top:10px"></div>
+
+        <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
+
+        <div class="ctaTit">Órdenes desde el grupo</div>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">
+          Además de recibir avisos, el bot puede <b>obedecer órdenes</b> escritas en el
+          grupo. Sirve para lo que de verdad pasa: estás al teléfono con alguien que
+          quiere una pieza para el fin de semana y necesitas bloquearla ahora, no cuando
+          llegues al computador.
+        </p>
+        <div class="ctaCaja" style="margin-top:10px">
+          <div class="ctaTit">Lo que entiende</div>
+          <div class="muted" style="font-size:12.5px;line-height:1.7">
+            <code>/reservar hab3 12/09 14/09 Juan Pérez</code><br>
+            <code>/libres 12/09 14/09</code><br>
+            <code>/buscar juan</code><br>
+            <code>/hoy</code> · el parte del día cuando quieras<br>
+            <code>/ayuda</code>
+          </div>
+        </div>
+
+        <div class="docFila" style="margin-top:12px;gap:10px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="tgOrdenes" style="width:auto;flex:0 0 auto;margin:0">
+            <span style="font-size:13px">Aceptar órdenes desde el grupo</span>
+          </label>
+        </div>
+        <div id="tgOrdEstado" class="muted" style="font-size:12px;margin-top:8px"></div>
+
+        <div class="ctaTit" style="margin-top:16px">Quiénes pueden dar órdenes</div>
+        <p class="muted" style="font-size:12.5px;margin:6px 0 0">
+          Este es el cerco que de verdad importa. La dirección del bot es pública —tiene
+          que serlo para que Telegram pueda llamarla— así que aunque alguien diera con
+          ella, sin estar en esta lista <b>no puede crear nada</b>. Los que no están
+          igual reciben los avisos: solo no pueden dar órdenes.
+        </p>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">
+          Para agregar a alguien, pídele que escriba <code>/ayuda</code> en el grupo. El
+          bot le va a contestar con su número; pégalo acá.
+        </p>
+        <div id="tgAutLista" style="margin-top:12px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;align-items:center">
+          <input type="text" id="tgAutId" placeholder="Número de Telegram"
+                 style="width:auto;flex:0 0 auto;font-size:13px;max-width:170px">
+          <input type="text" id="tgAutNom" placeholder="Nombre"
+                 style="width:auto;flex:1;font-size:13px;min-width:120px">
+          <button class="btn gh sm" id="tgAutAgregar">Autorizar</button>
+        </div>
+        <div class="err hide" id="tgOrdErr" style="margin-top:10px"></div>
       </div>
 
       <!-- ---------- El parte de la mañana ----------
@@ -1729,7 +1778,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-03';
+var VERSION_ESPERADA = '2026-09-04';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -4655,6 +4704,7 @@ function cargarConfiguracion(){
   cargarIcal();
   cargarBookingEntrada();
   cargarResumen();
+  cargarOrdenesTg();
   plegarConfiguracion();
   srv('configuracion')().then(function(d){
     CFG=d; pintarConfiguracion(); plegarConfiguracion();
@@ -4970,6 +5020,67 @@ $('impAhora').onclick=function(){
                         : 'Revisado, sin novedad');
       // Si algo cambió, el calendario de atrás ya no está al día.
       if(u.creadas||u.adoptadas||u.movidas||u.canceladas) recargarCal();
+    }).catch(fallo);
+};
+
+/* ---------- Órdenes desde el grupo de Telegram ---------- */
+function cargarOrdenesTg(){
+  srv('telegramOrdenesEstado')().then(pintarOrdenesTg).catch(function(e){
+    $('tgOrdErr').textContent=e.message||String(e);
+    $('tgOrdErr').classList.remove('hide');
+  });
+}
+
+function pintarOrdenesTg(d){
+  $('tgOrdenes').checked=!!d.activas;
+  $('tgOrdEstado').textContent = !d.conBot
+    ? 'Falta conectar el bot y el grupo, más arriba.'
+    : d.activas ? 'Encendidas. Escribe /ayuda en el grupo para probar.'
+                : 'Apagadas. El bot avisa, pero no obedece nada.';
+
+  var c=$('tgAutLista'); c.innerHTML='';
+  if(!(d.autorizados||[]).length){
+    var v=document.createElement('div');
+    v.className='muted'; v.style.fontSize='12.5px';
+    v.textContent='Todavía no hay nadie autorizado.';
+    c.appendChild(v);
+    return;
+  }
+  d.autorizados.forEach(function(a){
+    var f=document.createElement('div');
+    f.className='docFila';
+    var n=document.createElement('b');
+    n.style.fontSize='12.5px'; n.textContent=a.nombre||a.id;
+    var i=document.createElement('span');
+    i.className='quien'; i.style.marginLeft='8px'; i.textContent=a.id;
+    var b=document.createElement('button');
+    b.className='btn gh sm'; b.style.marginLeft='auto'; b.textContent='Quitar';
+    b.onclick=function(){
+      srv('telegramDesautorizar')(a.id)
+        .then(function(){ cargarOrdenesTg(); toast('Ya no puede dar órdenes'); })
+        .catch(fallo);
+    };
+    f.appendChild(n); f.appendChild(i); f.appendChild(b);
+    c.appendChild(f);
+  });
+}
+
+$('tgOrdenes').onchange=function(){
+  var enc=$('tgOrdenes').checked;
+  srv('telegramOrdenesEncender')(enc)
+    .then(function(){ cargarOrdenesTg();
+      toast(enc ? 'El bot ya obedece órdenes del grupo'
+                : 'Órdenes apagadas'); })
+    .catch(function(e){ $('tgOrdenes').checked=!enc; fallo(e); });
+};
+
+$('tgAutAgregar').onclick=function(){
+  var id=$('tgAutId').value.trim(), nom=$('tgAutNom').value.trim();
+  if(!id){ toast('Falta el número de Telegram', true); return; }
+  ocupado('tgAutAgregar', srv('telegramAutorizar')(id, nom))
+    .then(function(){
+      $('tgAutId').value=''; $('tgAutNom').value='';
+      cargarOrdenesTg(); toast('Autorizado');
     }).catch(fallo);
 };
 
