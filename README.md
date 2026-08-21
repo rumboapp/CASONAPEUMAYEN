@@ -670,6 +670,14 @@ Los archivos se guardan en Drive, en `AAAA / MM mes / Documentos de huéspedes`,
 y en la planilla queda solo la referencia. Borrar uno lo manda a la papelera de
 Drive, no lo destruye.
 
+**En el calendario se ve quién los tiene a medias.** La barra de un huésped
+extranjero al que le falta el pasaporte o la tarjeta PDI lleva un 🛂. Antes eso
+solo se veía abriendo la reserva una por una, que es justo lo que nadie hace a
+tiempo: la foto se pide mientras el huésped está en el mostrador, no cuando ya
+se fue. La marca desaparece sola al escanear los dos — si quedara siempre
+puesta dejaría de significar algo— y a un huésped chileno **no se le pone
+nunca**, porque su cédula es opcional y no se le exige nada.
+
 ## Avisos al grupo de Telegram
 
 Un bot que escribe en el grupo del equipo cada vez que pasa algo con una
@@ -956,6 +964,14 @@ Un mensaje al grupo de Telegram temprano con lo del día. Se enciende en
    ⚠️ quedan $100.000 por cobrar
 🧹 Después habrá que limpiar: Habitación 2, Habitación 3
 
+🧹 Aseo
+⏰ Primero estas 2 piezas, que reciben hoy:
+   • Habitación 1 · Matrimonial  ·  llega Familia Rojas
+   • Carpa A  ·  llega Pareja Torres
+Después: Habitación 6 · Single
+🚧 Fuera de servicio: Habitación 7 · Litera superior
+✨ 8 piezas listas
+
 🏠 Se quedan 1  ·  Habitación 4 · Matrimonial
 ```
 
@@ -975,6 +991,13 @@ Las decisiones que lo hacen útil:
   grupo que recibe "sin novedades" todos los días termina silenciando al bot, y
   ahí se pierden también los avisos que sí importan. Con gente alojada sí sale,
   aunque no haya movimiento.
+- **El aseo va como orden del día, no como inventario.** Lo que hace falta a
+  las ocho no es la lista completa de piezas sino en qué orden limpiarlas, y
+  ese orden lo decide una sola cosa: si esa pieza **recibe a alguien hoy**. Una
+  sucia sin nadie por llegar se limpia cuando se pueda; una sucia con un
+  huésped llegando a las tres es lo primero de la mañana. Por eso van en dos
+  grupos separados, con el nombre de quien llega. Las limpias no se nombran una
+  por una: alcanza con cuántas hay.
 - **La hora es aproximada.** Google corre las tareas programadas dentro de la
   hora pedida, así que "a las 8" son entre las 8:00 y las 9:00.
 
@@ -1039,6 +1062,30 @@ noches" sin que se mezcle con "en agosto entraron Y pesos a la caja".
 Para dejarlo automático, en el editor de Apps Script: **Activadores → Añadir
 activador → función `cierreAutomatico`, temporizador diario, entre 3 y 4 de la
 mañana**. Cierra solo la noche que acaba de terminar.
+
+## Lo que llega al grupo de Telegram
+
+Además de las reservas, hay tres cosas más:
+
+**El estado de las piezas, apenas cambia.** Cuando alguien marca una habitación
+como limpia, sucia o fuera de servicio —desde la pantalla de aseo o desde la
+app— el grupo se entera con una línea corta: la pieza, en qué quedó, la nota si
+la dejó, y quién la marcó. Si esa pieza **recibe a alguien hoy**, el aviso lo
+dice: es la diferencia entre "hay que limpiarla" y "hay que limpiarla ahora".
+Es un mensaje corto a propósito, porque la persona de aseo marca varias
+seguidas. Tiene su propio interruptor, para poder apagarlo sin apagar los
+avisos de reservas.
+
+**El cierre de la noche, con su PDF.** El botón *Mandar al grupo* de la pestaña
+Cierre manda el mismo PDF que va al dueño por correo, y en el mensaje los
+números en texto: alojamiento, consumos, cobrado, reparto lodge/restaurante y
+cuántos puntos quedaron por revisar. Los números van en el texto porque nadie
+abre un PDF en el teléfono para enterarse de cuánto se hizo — el archivo es
+para guardarlo, el texto para leerlo ahora. Si el PDF no se pudo generar,
+**el mensaje se manda igual**: enterarse de los números sin el adjunto es
+infinitamente mejor que no enterarse de nada.
+
+**El parte de la mañana**, que tiene su propia sección más arriba.
 
 ## Aseo
 

@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-02';
+var VERSION = '2026-09-03';
 
 function version() { return VERSION; }
 
@@ -3024,6 +3024,61 @@ function enviarCierre_(dia, para) {
            tipo: doc.tipo, aviso: doc.aviso };
 }
 
+/* ---------- El cierre, al grupo de Telegram ----------
+
+   El mismo PDF que se le manda al dueño por correo, pero al grupo. Va con un
+   resumen de una mirada en el mensaje, porque nadie abre un PDF en el
+   teléfono para enterarse de cuánto se hizo: el archivo es para guardarlo y
+   revisarlo después, el texto es para leerlo ahora.
+
+   Si el PDF no se pudo generar —Drive caído, la conversión de Google
+   fallando— igual se manda el texto. Enterarse de los números sin el adjunto
+   es infinitamente mejor que no enterarse de nada. */
+function cierreATelegram_(dia) {
+  var d = resumenDia_(dia);
+  var lineas = [
+    '📕 <b>Cierre de la noche del ' + escTg_(fechaTg_(dia)) + '</b>', '',
+    '🏠 Alojamiento: ' + plataTxt_(d.alojamiento),
+    '🍽 Consumos: ' + plataTxt_(d.consumos),
+    '💵 Cobrado en el día: ' + plataTxt_(d.pagos)
+  ];
+  var centros = d.porCentro || {};
+  if (centros.lodge || centros.restaurante) {
+    lineas.push('   lodge ' + plataTxt_(centros.lodge || 0) +
+                '  ·  restaurante ' + plataTxt_(centros.restaurante || 0));
+  }
+  lineas.push((d.avisos || []).length
+    ? '⚠️ ' + plural_(d.avisos.length, 'punto', 'puntos') + ' por revisar'
+    : '✅ Sin puntos por revisar');
+
+  var texto = lineas.join('\n');
+  var doc = null;
+  try { doc = pdfCierre_(dia); } catch (e) { /* sin PDF se manda el texto igual */ }
+
+  if (doc && doc.tipo === 'pdf') {
+    try {
+      var blob = DriveApp.getFileById(doc.id).getBlob();
+      if (telegramDocumento_(blob, texto)) return { mandado: true, conPdf: true };
+    } catch (e) { /* si el archivo no se puede leer, queda el texto */ }
+  }
+  var ok = avisar_('cierre', texto + (doc ? '' :
+    '\n\n(No se pudo generar el PDF; el detalle está en la app.)'));
+  return { mandado: ok, conPdf: false };
+}
+
+function cierreATelegram(token, fecha) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  if (!telegramActivo_()) {
+    throw new Error('El bot de Telegram todavía no está conectado. Se configura ' +
+      'en Configuración → Avisos al grupo de Telegram.');
+  }
+  var dia = ymd_(fecha) || hoy_();
+  var r = cierreATelegram_(dia);
+  logCambio_(u.nombre, 'cierre_telegram', dia + (r.conPdf ? ' con PDF' : ' solo texto'));
+  return r;
+}
+
 /* ===================== DÍA DE HOY ===================== */
 
 function panelHoy(token, fecha) {
@@ -3163,6 +3218,52 @@ function armarResumenDia_(dia) {
     lineas.push('🧹 Después habrá que limpiar: ' +
       escTg_(sal.muestra.map(function (r) { return r.recurso; }).join(', ')) +
       (sal.resto ? ' y ' + sal.resto + ' más' : ''));
+  }
+
+  /* El estado de las piezas. Lo que se necesita a las ocho de la mañana no es
+     el inventario completo sino el ORDEN DEL DÍA del aseo, y ese orden lo
+     decide una sola cosa: si esa pieza recibe a alguien hoy. Una habitación
+     sucia sin nadie por llegar se limpia cuando se pueda; una sucia con un
+     huésped llegando a las tres de la tarde es lo primero de la mañana.
+
+     Por eso van en dos grupos y no en una lista sola. Y las limpias no se
+     nombran una por una: alcanza con cuántas hay. */
+  var aseo = situacionAseo_();
+  var sucias = aseo.filter(function (a) { return a.estado === 'sucia'; });
+  var bloqueadas = aseo.filter(function (a) { return a.estado === 'bloqueada'; });
+  var limpias = aseo.filter(function (a) { return a.estado === 'limpia'; });
+
+  if (sucias.length || bloqueadas.length) {
+    lineas.push('');
+    lineas.push('🧹 <b>Aseo</b>');
+    var urgentes = sucias.filter(function (a) { return a.llegaHoy && !a.yaLlego; });
+    var resto = sucias.filter(function (a) { return !(a.llegaHoy && !a.yaLlego); });
+
+    if (urgentes.length) {
+      lineas.push('⏰ <b>Primero estas ' + plural_(urgentes.length, 'pieza', 'piezas') +
+                  ', que reciben hoy:</b>');
+      recorteTg_(urgentes, 8).muestra.forEach(function (a) {
+        lineas.push('   • ' + escTg_(a.nombre) +
+          (a.huespedLlega ? '  ·  llega ' + escTg_(a.huespedLlega) : ''));
+      });
+    }
+    if (resto.length) {
+      var r8 = recorteTg_(resto, 8);
+      lineas.push((urgentes.length ? 'Después: ' : 'Por limpiar: ') +
+        escTg_(r8.muestra.map(function (a) { return a.nombre; }).join(', ')) +
+        (r8.resto ? ' y ' + r8.resto + ' más' : ''));
+    }
+    if (bloqueadas.length) {
+      lineas.push('🚧 Fuera de servicio: ' +
+        escTg_(bloqueadas.map(function (a) { return a.nombre; }).join(', ')));
+    }
+    if (limpias.length) {
+      lineas.push('✨ ' + plural_(limpias.length, 'pieza lista', 'piezas listas'));
+    }
+  } else if (limpias.length) {
+    lineas.push('');
+    lineas.push('✨ <b>Aseo</b> · todo limpio, ' +
+                plural_(limpias.length, 'pieza lista', 'piezas listas'));
   }
 
   // Los que siguen alojados: una sola línea. Saber que están alcanza, y una
@@ -3337,6 +3438,43 @@ function marcarAseo_(idUnidad, estado, quien, notas) {
     notas: notas || '', actualizado: ahora_()
   });
   logCambio_(quien, 'aseo', idUnidad + ' -> ' + estado);
+  avisarAseo_(idUnidad, estado, quien, notas);
+}
+
+/* El grupo se entera de cada pieza que cambia de estado. Es un mensaje corto a
+   propósito: la persona de aseo marca varias seguidas y un párrafo por cada
+   una llenaría el grupo. Y va con su propio interruptor, para poder apagarlo
+   sin apagar los avisos de reservas. */
+var ICONO_ASEO_ = { limpia: '✨', sucia: '🧹', bloqueada: '🚧' };
+var TEXTO_ASEO_ = { limpia: 'lista', sucia: 'por limpiar', bloqueada: 'fuera de servicio' };
+
+function avisarAseo_(idUnidad, estado, quien, notas) {
+  try {
+    var linea = (ICONO_ASEO_[estado] || '•') + ' <b>' + escTg_(nombreRecurso_(idUnidad)) +
+      '</b> · ' + (TEXTO_ASEO_[estado] || estado);
+    // Si esa pieza recibe a alguien hoy, se dice: es la diferencia entre "hay
+    // que limpiarla en algún momento" y "hay que limpiarla ahora".
+    if (estado === 'sucia') {
+      var llega = llegaHoyA_(idUnidad);
+      if (llega) linea += '  ·  ⏰ <b>llega ' + escTg_(llega) + ' hoy</b>';
+    }
+    if (notas) linea += '\n   ' + escTg_(String(notas).slice(0, 120));
+    linea += '\n   ' + escTg_(quien);
+    return avisar_('aseo', linea);
+  } catch (e) {
+    return false;
+  }
+}
+
+/* Quién llega hoy a esa pieza, si es que llega alguien. */
+function llegaHoyA_(idRecurso) {
+  var dia = hoy_();
+  var r = leer_('Reservas').filter(function (x) {
+    return String(x.recurso) === String(idRecurso) &&
+      x.estado !== 'cancelada' && x.estado !== 'no_show' && x.estado !== 'checkout' &&
+      ymd_(x.checkIn) === dia;
+  })[0];
+  return r ? r.huesped : '';
 }
 
 /* ===================== PANTALLA DE ASEO COMPARTIDA =====================
@@ -3837,6 +3975,29 @@ function telegramMandar_(texto) {
   }
 }
 
+/* Manda un archivo al grupo. Es otra dirección de la API —sendDocument y no
+   sendMessage— y va como formulario: el blob se pone tal cual en el campo y
+   UrlFetchApp arma el multipart solo. Devuelve true o false, nunca lanza. */
+function telegramDocumento_(blob, pie) {
+  if (!telegramActivo_()) return false;
+  try {
+    var r = UrlFetchApp.fetch(
+      'https://api.telegram.org/bot' + telegramToken_() + '/sendDocument', {
+        method: 'post',
+        muteHttpExceptions: true,
+        payload: {
+          chat_id: telegramChat_(),
+          document: blob,
+          caption: String(pie || '').slice(0, 1000),
+          parse_mode: 'HTML'
+        }
+      });
+    return r.getResponseCode() === 200;
+  } catch (e) {
+    return false;
+  }
+}
+
 /* El punto por el que pasan TODOS los avisos. Mira si ese tipo de aviso está
    encendido y, si lo está, arma el texto y lo manda. Se llama siempre al
    final de la operación, con los datos ya guardados. */
@@ -4085,6 +4246,7 @@ var CONFIG_EDITABLE = [
   { clave: 'telegramAvisa_cambio', rotulo: 'Avisar cancelaciones y cambios de fecha o pieza', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_check', rotulo: 'Avisar los check-in y check-out', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_booking', rotulo: 'Avisar lo que Booking mete solo', tipo: 'si_no', grupo: 'telegram' },
+  { clave: 'telegramAvisa_aseo', rotulo: 'Avisar cuando una habitación cambia de estado de aseo', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'reglasEs', rotulo: 'Normas de convivencia', tipo: 'texto_largo', grupo: 'normas' },
   { clave: 'reglasEn', rotulo: 'House rules (las mismas, en inglés)', tipo: 'texto_largo', grupo: 'normas' },
   { clave: 'correoDueno', rotulo: 'Correo para el cierre de cada noche', tipo: 'texto', grupo: 'avanzado' },

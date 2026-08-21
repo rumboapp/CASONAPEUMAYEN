@@ -633,6 +633,8 @@
         <span style="font-weight:500;color:var(--tx2)">Ficha:</span>
         <span><i style="background:#6b7280;border-radius:50%;position:relative"></i>✓ firmada</span>
         <span><i style="background:repeating-linear-gradient(135deg,#9aa1ab 0 3px,#cfd4da 3px 6px)"></i>rayada = sin firmar</span>
+        <span>🛂 faltan pasaporte o PDI</span>
+        <span>🎁 con programa</span>
       </div>
       <div class="leg" style="margin-top:6px">
         <span style="font-weight:500;color:var(--tx2)">Aseo:</span>
@@ -735,6 +737,7 @@
           <span style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
             <button class="btn gh sm" id="ciePdf">Generar PDF</button>
             <button class="btn gh sm" id="cieMail">Enviar al dueño</button>
+            <button class="btn gh sm" id="cieTg">Mandar al grupo</button>
           </span>
         </div>
         <div class="muted hide" id="cieDoc" style="font-size:12.5px;margin-top:10px"></div>
@@ -1726,7 +1729,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-02';
+var VERSION_ESPERADA = '2026-09-03';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -2486,7 +2489,13 @@ function pintarCal(animar){
     // una por una y ver quién falta por registrar.
     b.innerHTML = (r.firmada ? '<span class="ok" title="Ficha firmada">✓</span>'
                              : '<span class="dot" title="Ficha sin firmar"></span>')
-                  + r.huesped + (r.programa ? ' 🎁' : '');
+                  + r.huesped + (r.programa ? ' 🎁' : '')
+                  // Al extranjero se le exigen pasaporte y tarjeta PDI para la
+                  // exención de IVA. Antes eso solo se veía abriendo la
+                  // reserva; acá se ve de una pasada quién tiene el trámite a
+                  // medias, que es cuando todavía se puede pedir la foto.
+                  + (r.docs && r.docs.exige && !r.docs.completo
+                     ? ' <span title="Faltan pasaporte o PDI por escanear">🛂</span>' : '');
     if(!r.firmada) b.classList.add('sinfirma');
     b.draggable=true;
     b.dataset.id=r.id;
@@ -4206,6 +4215,22 @@ $('cieMail').onclick=function(){
       'style="color:var(--ac);text-decoration:underline">ver el PDF</a>';
   }).catch(fallo);
 };
+/* El mismo PDF que va al dueño por correo, pero al grupo. En el mensaje van
+   además los números en texto: nadie abre un PDF en el teléfono para
+   enterarse de cuánto se hizo. */
+$('cieTg').onclick=function(){
+  ocupado('cieTg', srv('cierreATelegram')($('cieF').value)).then(function(d){
+    toast(d.mandado ? (d.conPdf ? 'Cierre mandado al grupo con el PDF'
+                                : 'Cierre mandado al grupo (sin PDF)')
+                    : 'No se pudo mandar', !d.mandado);
+    if(d.mandado && !d.conPdf){
+      var c=$('cieDoc'); c.classList.remove('hide');
+      c.textContent='Se mandaron los números al grupo, pero el PDF no se pudo '+
+        'generar. Revísalo con "Generar PDF".';
+    }
+  }).catch(fallo);
+};
+
 $('cieCerrar').onclick=function(){
   ocupado('cieCerrar', srv('cierreDia')($('cieF').value)).then(function(d){
     pintarCierre(d);
