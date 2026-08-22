@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-05';
+var VERSION = '2026-09-06';
 
 function version() { return VERSION; }
 
@@ -3194,11 +3194,19 @@ function telegramAutorizado_(id) {
 
 /* ---------- La puerta ---------- */
 function doPost(e) {
-  // Telegram solo necesita un 200. Todo lo demás se resuelve contestando en
-  // el grupo, así que acá no se devuelve nada útil ni se lanza nunca: un
-  // error sin atrapar haría que Telegram reintentara el mismo mensaje una y
-  // otra vez, y una orden de reservar se ejecutaría varias veces.
-  var vacio = ContentService.createTextOutput('');
+  /* Telegram solo necesita un 200. Todo lo demás se resuelve contestando en
+     el grupo, así que acá no se devuelve nada útil ni se lanza nunca: un
+     error sin atrapar haría que Telegram reintentara el mismo mensaje una y
+     otra vez, y una orden de reservar se ejecutaría varias veces.
+
+     Y se contesta con HtmlService y NO con ContentService, aunque no haya
+     nada de HTML que devolver. Con ContentService, Google contesta un 302
+     que redirige a otro servidor suyo. Un navegador lo sigue sin que se note,
+     pero Telegram NO sigue redirecciones en un webhook: lo toma como error,
+     no entrega el mensaje y lo deja en cola. Es exactamente lo que pasaba —
+     "Wrong response from the webhook: 302 Found"— y la única señal era que el
+     bot no contestaba nada. */
+  var vacio = HtmlService.createHtmlOutput('');
   try {
     var p = (e && e.parameter) || {};
     if (!p.tg || String(p.tg) !== claveTelegramWeb_()) return vacio;
@@ -3213,6 +3221,18 @@ function doPost(e) {
 
     var texto = String(msg.text).trim();
     if (texto.charAt(0) !== '/') return vacio;      // conversación normal
+
+    /* Una orden vieja NO se ejecuta. Cuando el webhook estuvo caído, Telegram
+       guarda los mensajes y los entrega todos juntos apenas vuelve. Sin esto,
+       arreglar la conexión haría que se ejecutaran de golpe todas las órdenes
+       de prueba de las últimas horas, creando reservas que nadie pidió. */
+    var edad = (new Date().getTime() / 1000) - Number(msg.date || 0);
+    if (msg.date && edad > 600) {
+      telegramResponder_('⌛ Esa orden es de hace ' + Math.round(edad / 60) +
+        ' minutos y no la ejecuté, por si acaso. Si la sigues necesitando, ' +
+        'vuelve a escribirla.', msg.message_id);
+      return vacio;
+    }
 
     var quien = msg.from || {};
     var nombre = String(quien.first_name || '') +
@@ -3686,16 +3706,26 @@ function telegramDiagnostico(token) {
                  chat: { id: 'diagnostico-sin-chat' },
                  from: { id: 0, first_name: 'Diagnóstico' } }
     });
+    /* SIN seguir la redirección, a propósito. Siguiéndola esto contestaba 200
+       y daba luz verde mientras Telegram se estrellaba contra un 302, que es
+       justamente lo que no seguir redirecciones significa. Hay que mirar lo
+       mismo que mira Telegram. */
     var p = UrlFetchApp.fetch(mia, {
       method: 'post', contentType: 'application/json',
-      payload: falso, muteHttpExceptions: true, followRedirects: true
+      payload: falso, muteHttpExceptions: true, followRedirects: false
     });
     var codigo = p.getResponseCode();
     var cuerpo = String(p.getContentText() || '');
-    if (codigo !== 200) {
+    if (codigo === 301 || codigo === 302 || codigo === 303 || codigo === 307) {
+      anotar('La app contesta el POST', false,
+        'Contestó ' + codigo + ' (una redirección). Telegram no sigue ' +
+        'redirecciones en un webhook: la toma como error y deja el mensaje en ' +
+        'cola. Se corrige contestando con HtmlService en vez de ContentService, ' +
+        'y hay que publicar una VERSIÓN NUEVA para que el cambio tome efecto.');
+    } else if (codigo !== 200) {
       anotar('La app contesta el POST', false,
         'Contestó ' + codigo + '. La versión publicada no está atendiendo a Telegram.');
-    } else if (/<html|Se ha producido un error|error occurred|Script function not found/i.test(cuerpo)) {
+    } else if (/Se ha producido un error|error occurred|Script function not found/i.test(cuerpo)) {
       anotar('La app contesta el POST', false,
         'Contestó una página de error en vez de nada. La versión publicada es ' +
         'anterior al código que atiende a Telegram: hay que publicar una ' +

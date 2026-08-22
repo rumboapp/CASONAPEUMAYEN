@@ -1023,7 +1023,28 @@ muestra lo que contesta cada una:
   propósito: recorre el mismo camino que un mensaje de verdad pero se detiene
   antes de hacer nada, así que no ensucia el grupo.
 
-Un detalle que importa: `doPost` **nunca lanza**. Un error sin atrapar haría que
+### Dos cosas que no son obvias y costaron caro
+
+**La respuesta a Telegram no puede ser una redirección.** Con
+`ContentService.createTextOutput()`, Google contesta un **302** que redirige a
+otro servidor suyo. Un navegador lo sigue sin que se note; **Telegram no sigue
+redirecciones en un webhook**: lo toma como error, no entrega el mensaje y lo
+deja en cola. El síntoma es que el bot queda completamente mudo, y la única
+pista está en `getWebhookInfo`: *"Wrong response from the webhook: 302 Found"*.
+Se contesta con `HtmlService.createHtmlOutput('')` aunque no haya nada de HTML
+que devolver.
+
+Lo mismo valía para el diagnóstico: su prueba del POST seguía la redirección,
+veía un 200 y daba luz verde mientras Telegram se estrellaba. Ahora la hace con
+`followRedirects: false`, que es mirar lo mismo que mira Telegram.
+
+**Una orden vieja no se ejecuta.** Cuando el webhook está caído, Telegram guarda
+los mensajes y los entrega todos juntos apenas vuelve. Sin una red, arreglar la
+conexión haría que se ejecutaran de golpe todas las órdenes de prueba de las
+últimas horas, creando reservas que nadie pidió. Una orden de más de diez
+minutos se contesta explicando por qué no se ejecutó.
+
+Y un detalle: `doPost` **nunca lanza**. Un error sin atrapar haría que
 Telegram reintentara el mismo mensaje una y otra vez, y una orden de reservar se
 ejecutaría varias veces.
 
