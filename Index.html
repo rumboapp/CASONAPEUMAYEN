@@ -1010,6 +1010,9 @@
         </div>
         <div id="tgOrdEstado" class="muted" style="font-size:12px;margin-top:8px"></div>
 
+        <button class="btn gh sm" id="tgDiag" style="margin-top:10px">¿Por qué no contesta?</button>
+        <div id="tgDiagCuerpo" style="margin-top:10px"></div>
+
         <div class="ctaTit" style="margin-top:16px">Quiénes pueden dar órdenes</div>
         <p class="muted" style="font-size:12.5px;margin:6px 0 0">
           Este es el cerco que de verdad importa. La dirección del bot es pública —tiene
@@ -1778,7 +1781,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-04';
+var VERSION_ESPERADA = '2026-09-05';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -5072,6 +5075,42 @@ $('tgOrdenes').onchange=function(){
       toast(enc ? 'El bot ya obedece órdenes del grupo'
                 : 'Órdenes apagadas'); })
     .catch(function(e){ $('tgOrdenes').checked=!enc; fallo(e); });
+};
+
+/* Cuando esto no anda, el silencio es total: Telegram no avisa y la app
+   tampoco. Esto pregunta por cada parte y muestra lo que contesta cada una. */
+$('tgDiag').onclick=function(){
+  var c=$('tgDiagCuerpo');
+  c.innerHTML='';
+  ocupado('tgDiag', srv('telegramDiagnostico')()).then(function(d){
+    (d.pasos||[]).forEach(function(p){
+      var f=document.createElement('div');
+      f.className='docFila';
+      f.style.alignItems='flex-start';
+      var i=document.createElement('span');
+      i.textContent = p.ok ? '✅' : '⚠️';
+      i.style.cssText='flex:0 0 auto;line-height:1.5';
+      var t=document.createElement('div');
+      t.style.cssText='flex:1;min-width:0';
+      var n=document.createElement('b');
+      n.style.fontSize='12.5px'; n.textContent=p.paso;
+      var det=document.createElement('div');
+      det.className='muted';
+      det.style.cssText='font-size:12px;white-space:pre-wrap;word-break:break-word';
+      det.textContent=p.detalle;
+      t.appendChild(n); t.appendChild(det);
+      f.appendChild(i); f.appendChild(t);
+      if(!p.ok) f.style.borderColor='var(--warn)';
+      c.appendChild(f);
+    });
+    if(d.url){
+      var u=document.createElement('div');
+      u.className='muted';
+      u.style.cssText='font-size:11.5px;margin-top:8px;word-break:break-all';
+      u.textContent='Dirección que debería tener Telegram: '+d.url;
+      c.appendChild(u);
+    }
+  }).catch(fallo);
 };
 
 $('tgAutAgregar').onclick=function(){

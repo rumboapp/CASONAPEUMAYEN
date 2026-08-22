@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-04';
+var VERSION = '2026-09-05';
 
 function version() { return VERSION; }
 
@@ -3590,6 +3590,134 @@ function telegramOrdenesEncender(token, encender) {
   actualizarConfig_('telegramOrdenes', encender ? 'si' : 'no');
   logCambio_(u.nombre, 'telegram_ordenes', encender ? 'encendidas' : 'apagadas');
   return { activas: !!encender };
+}
+
+/* ---------- Por qué el bot no contesta ----------
+
+   Cuando esto no funciona, el silencio es total: Telegram no avisa, la app
+   tampoco, y no hay dónde mirar. Esta función pregunta las tres cosas que
+   pueden estar mal y las contesta con lo que dice cada parte, no con lo que
+   suponemos:
+
+     1. ¿Telegram tiene registrada una dirección, y es la de AHORA? La causa
+        más común de todas: se publicó una implementación nueva, la dirección
+        cambió, y el webhook quedó apuntando a la vieja. Nadie se entera.
+     2. ¿Telegram se quejó de algo la última vez que llamó? getWebhookInfo
+        guarda el último error, y suele decir exactamente qué pasó.
+     3. ¿La app web contesta un POST? Se llama a sí misma imitando lo que
+        manda Telegram. Si la versión publicada es anterior al doPost, esto
+        lo destapa al tiro.
+
+   La prueba del punto 3 va con un chat que no existe a propósito: recorre el
+   mismo camino que un mensaje de verdad pero se detiene antes de hacer nada,
+   así que no ensucia el grupo con mensajes de prueba. */
+function telegramDiagnostico(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var pasos = [];
+  var anotar = function (paso, ok, detalle) {
+    pasos.push({ paso: paso, ok: !!ok, detalle: detalle || '' });
+  };
+
+  if (!telegramActivo_()) {
+    anotar('Bot conectado', false, 'Falta el token o el grupo. Se configura más arriba.');
+    return { pasos: pasos };
+  }
+  anotar('Bot conectado', true, 'Grupo ' + telegramChat_());
+
+  var mia = ScriptApp.getService().getUrl() + '?tg=' + claveTelegramWeb_();
+
+  /* 1 y 2 · lo que Telegram tiene registrado */
+  var info = null;
+  try {
+    var r = UrlFetchApp.fetch(
+      'https://api.telegram.org/bot' + telegramToken_() + '/getWebhookInfo',
+      { muteHttpExceptions: true });
+    info = JSON.parse(r.getContentText());
+  } catch (e) {
+    anotar('Telegram responde', false, String(e.message || e));
+    return { pasos: pasos, url: mia };
+  }
+  if (!info || !info.ok) {
+    anotar('Telegram responde', false,
+           (info && info.description) || 'Respuesta rara de Telegram.');
+    return { pasos: pasos, url: mia };
+  }
+  anotar('Telegram responde', true, 'La API contesta bien.');
+
+  var reg = String((info.result && info.result.url) || '');
+  if (!reg) {
+    anotar('Webhook registrado', false,
+      'Telegram no tiene NINGUNA dirección registrada. Apaga y vuelve a ' +
+      'encender "Aceptar órdenes desde el grupo".');
+  } else if (reg !== mia) {
+    anotar('Webhook registrado', false,
+      'Telegram está llamando a OTRA dirección, no a la de ahora. Casi siempre ' +
+      'es porque se publicó una implementación nueva en vez de actualizar la ' +
+      'que ya estaba. Apaga y vuelve a encender el interruptor para corregirlo.\n' +
+      'Registrada: ' + reg);
+  } else {
+    anotar('Webhook registrado', true, 'Apunta a la dirección correcta.');
+  }
+
+  var res = info.result || {};
+  if (res.last_error_message) {
+    anotar('Última llamada de Telegram', false,
+      'Telegram dice: "' + res.last_error_message + '"' +
+      (res.last_error_date
+        ? ' · ' + Utilities.formatDate(new Date(res.last_error_date * 1000), TZ,
+                                       'dd-MM-yyyy HH:mm')
+        : ''));
+  } else if (reg) {
+    anotar('Última llamada de Telegram', true, 'Sin errores.');
+  }
+
+  if (Number(res.pending_update_count) > 0) {
+    anotar('Mensajes en cola', false,
+      res.pending_update_count + ' mensaje(s) esperando ser entregados. Eso ' +
+      'significa que Telegram está intentando y la app no los toma.');
+  }
+
+  /* 3 · ¿la app web contesta un POST? */
+  try {
+    var falso = JSON.stringify({
+      update_id: 0,
+      message: { message_id: 0, text: '/ayuda',
+                 chat: { id: 'diagnostico-sin-chat' },
+                 from: { id: 0, first_name: 'Diagnóstico' } }
+    });
+    var p = UrlFetchApp.fetch(mia, {
+      method: 'post', contentType: 'application/json',
+      payload: falso, muteHttpExceptions: true, followRedirects: true
+    });
+    var codigo = p.getResponseCode();
+    var cuerpo = String(p.getContentText() || '');
+    if (codigo !== 200) {
+      anotar('La app contesta el POST', false,
+        'Contestó ' + codigo + '. La versión publicada no está atendiendo a Telegram.');
+    } else if (/<html|Se ha producido un error|error occurred|Script function not found/i.test(cuerpo)) {
+      anotar('La app contesta el POST', false,
+        'Contestó una página de error en vez de nada. La versión publicada es ' +
+        'anterior al código que atiende a Telegram: hay que publicar una ' +
+        'VERSIÓN NUEVA de la misma implementación.');
+    } else {
+      anotar('La app contesta el POST', true,
+        'La versión publicada atiende a Telegram correctamente.');
+    }
+  } catch (e) {
+    anotar('La app contesta el POST', false, String(e.message || e));
+  }
+
+  anotar('Autorizados', telegramAutorizados_().length > 0,
+    telegramAutorizados_().length
+      ? telegramAutorizados_().length + ' persona(s) pueden dar órdenes.'
+      : 'No hay nadie autorizado: el bot va a contestar "no estás en la lista" a todos.');
+
+  anotar('Órdenes encendidas', telegramOrdenesActivas_(),
+    telegramOrdenesActivas_() ? 'El interruptor está encendido.'
+                              : 'El interruptor está apagado.');
+
+  return { pasos: pasos, url: mia };
 }
 
 function telegramAutorizar(token, id, nombre) {

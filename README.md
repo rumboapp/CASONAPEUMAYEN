@@ -999,6 +999,30 @@ Para autorizar a alguien se le pide que escriba `/ayuda` en el grupo: el bot le
 contesta con su número de Telegram, y ese número se pega en Configuración. No
 hay forma de que alguien se autorice a sí mismo.
 
+### Cuando el bot no contesta
+
+El silencio es total: Telegram no avisa, la app tampoco, y no hay dónde mirar.
+Para eso está el botón **¿Por qué no contesta?**, que pregunta por cada parte y
+muestra lo que contesta cada una:
+
+- **Qué dirección tiene Telegram registrada, y si es la de ahora.** Es la causa
+  más común de todas. La dirección de la app web cambia al publicar una
+  *implementación nueva* en vez de actualizar la que ya estaba — y también es
+  distinta si el interruptor se encendió desde la dirección de pruebas
+  (`/dev`), que Telegram no puede alcanzar porque pide identificarse con Google.
+  En los dos casos el webhook queda apuntando a un lugar muerto y nadie se
+  entera. Se arregla apagando y volviendo a encender el interruptor **desde la
+  app publicada**.
+- **Si Telegram se quejó la última vez que llamó.** `getWebhookInfo` guarda el
+  último error y suele decir exactamente qué pasó; se muestra textual.
+- **Si hay mensajes en cola.** Si los hay, Telegram está intentando y la app no
+  los toma.
+- **Si la app web contesta un POST.** Se llama a sí misma imitando lo que manda
+  Telegram; si la versión publicada es anterior al `doPost`, contesta una página
+  de error y queda a la vista. La prueba va con un chat que no existe a
+  propósito: recorre el mismo camino que un mensaje de verdad pero se detiene
+  antes de hacer nada, así que no ensucia el grupo.
+
 Un detalle que importa: `doPost` **nunca lanza**. Un error sin atrapar haría que
 Telegram reintentara el mismo mensaje una y otra vez, y una orden de reservar se
 ejecutaría varias veces.
