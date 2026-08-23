@@ -741,6 +741,39 @@
           </span>
         </div>
         <div class="muted hide" id="cieDoc" style="font-size:12.5px;margin-top:10px"></div>
+
+        <hr style="border:none;border-top:1px solid var(--line);margin:18px 0">
+
+        <div class="ctaTit">Que se cierre solo</div>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">
+          A las 00:00 la noche anterior ya terminó y no va a cambiar más: es el momento
+          exacto para cerrarla. Encendiendo esto, <b>se cierra la noche de ayer</b> sin
+          que nadie tenga que acordarse — y el día que nadie se acuerda es justo cuando
+          el cierre queda corrido y hay que revisar hacia atrás.
+        </p>
+
+        <div class="docFila" style="margin-top:12px;gap:10px;flex-wrap:wrap">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="cieAuto" style="width:auto;flex:0 0 auto;margin:0">
+            <span style="font-size:13px">Cerrar la noche solo, a las</span>
+          </label>
+          <select id="cieAutoHora" style="width:auto;flex:0 0 auto;font-size:13px"></select>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-left:14px">
+            <input type="checkbox" id="cieAutoTg" style="width:auto;flex:0 0 auto;margin:0">
+            <span style="font-size:13px">al grupo de Telegram</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="cieAutoMail" style="width:auto;flex:0 0 auto;margin:0">
+            <span style="font-size:13px">y por correo al dueño</span>
+          </label>
+        </div>
+        <div id="cieAutoEstado" class="muted" style="font-size:12px;margin-top:8px"></div>
+        <p class="muted" style="font-size:12px;margin-top:8px">
+          La hora es aproximada: Google corre estas tareas dentro de la hora que se le
+          pide. Cerrar dos veces la misma noche <b>no cobra dos veces</b>, así que si
+          además lo cierras a mano no pasa nada.
+        </p>
+        <div class="err hide" id="cieAutoErr" style="margin-top:10px"></div>
       </div>
       <div id="cieCuerpo"></div>
     </section>
@@ -1781,7 +1814,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-08';
+var VERSION_ESPERADA = '2026-09-09';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -4138,7 +4171,13 @@ function pintarHuespedes(){
       '<div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap">'+
         '<b style="font-size:15px">'+g.nombre+'</b>'+
         (g.repetido?'<span class="tag en_casa">'+g.estadias+' estadías</span>':'')+
-        (g.proxima?'<span class="tag confirmada">vuelve el '+corto(g.proxima)+'</span>':'')+
+        // "Vuelve" solo si de verdad ha estado antes. A alguien que reservó
+        // por primera vez decirle que "vuelve" es sencillamente falso, y en
+        // una lista donde importa distinguir al conocido del nuevo, borra
+        // justo la distinción que se quería hacer.
+        (g.proxima
+          ? '<span class="tag confirmada">'+(g.ultima?'vuelve el ':'llega el ')+
+            corto(g.proxima)+'</span>' : '')+
         (g.porCobrar>0?'<span class="tag tentativa">debe '+plata(g.porCobrar)+'</span>':'')+
         (g.conFicha?'':'<span class="tag no_show">sin ficha</span>')+
       '</div>'+
@@ -4250,6 +4289,7 @@ function pintarHuesped(g){
    Cierre de día
    ================================================================== */
 function prepararCierre(){
+  cargarCierreAuto();
   if(!$('cieF').value){
     // Por defecto la noche que acaba de terminar: es la que se cierra.
     $('cieF').value = mas(fmtHoy(), -1);
@@ -4284,6 +4324,48 @@ $('cieMail').onclick=function(){
 /* El mismo PDF que va al dueño por correo, pero al grupo. En el mensaje van
    además los números en texto: nadie abre un PDF en el teléfono para
    enterarse de cuánto se hizo. */
+/* ---------- El cierre que corre solo ---------- */
+function cargarCierreAuto(){
+  srv('cierreAutoEstado')().then(function(d){
+    var sel=$('cieAutoHora'); sel.innerHTML='';
+    for(var h=0;h<24;h++){
+      var o=document.createElement('option');
+      o.value=h; o.textContent=(h<10?'0':'')+h+':00';
+      if(h===d.hora) o.selected=true;
+      sel.appendChild(o);
+    }
+    $('cieAuto').checked=!!d.activo;
+    $('cieAutoTg').checked=!!d.aTelegram;
+    $('cieAutoMail').checked=!!d.aCorreo;
+    var destinos=[];
+    if(d.aTelegram) destinos.push(d.conBot ? 'al grupo'
+                                           : 'al grupo (falta conectar el bot)');
+    if(d.aCorreo)   destinos.push(d.correo ? 'a '+d.correo
+                                           : 'por correo (falta el correo del dueño)');
+    $('cieAutoEstado').textContent = d.activo
+      ? 'Encendido. Cierra la noche de ayer alrededor de las '+
+        ((d.hora<10?'0':'')+d.hora)+':00'+
+        (destinos.length ? ' y lo manda '+destinos.join(' y ')+'.' : '.')
+      : 'Apagado. La noche se cierra a mano.';
+  }).catch(function(e){
+    $('cieAutoErr').textContent=e.message||String(e);
+    $('cieAutoErr').classList.remove('hide');
+  });
+}
+
+function guardarCierreAuto(){
+  var enc=$('cieAuto').checked, hora=Number($('cieAutoHora').value)||0;
+  srv('cierreAutoEncender')(enc, hora, $('cieAutoTg').checked, $('cieAutoMail').checked)
+    .then(function(){ cargarCierreAuto();
+      toast(enc ? 'La noche se cierra sola a las '+((hora<10?'0':'')+hora)+':00'
+                : 'Cierre automático apagado'); })
+    .catch(function(e){ $('cieAuto').checked=!enc; fallo(e); });
+}
+$('cieAuto').onchange=guardarCierreAuto;
+$('cieAutoHora').onchange=guardarCierreAuto;
+$('cieAutoTg').onchange=guardarCierreAuto;
+$('cieAutoMail').onchange=guardarCierreAuto;
+
 $('cieTg').onclick=function(){
   ocupado('cieTg', srv('cierreATelegram')($('cieF').value)).then(function(d){
     toast(d.mandado ? (d.conPdf ? 'Cierre mandado al grupo con el PDF'

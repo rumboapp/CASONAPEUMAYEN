@@ -352,6 +352,12 @@ caben. Los **menores de 6 no cuentan para ese tope** — van en el campo de niñ
 de la reserva, no pagan ni ocupan cupo, pero igual aparecen como acompañantes
 marcados *menor de 6* para que el registro los nombre.
 
+**"Vuelve" solo si de verdad ha estado antes.** A alguien que reservó por
+primera vez decirle que "vuelve el 4" es sencillamente falso, y en una lista
+donde importa distinguir al conocido del nuevo borra justo la distinción que se
+quería hacer. Ahora dice *"llega el 4"* mientras no tenga ninguna estadía
+terminada.
+
 **Un nombre de relleno no identifica a nadie.** Las personas se agrupan por
 teléfono, correo, documento y, en último lugar, por nombre. Booking no publica
 el nombre del huésped, así que una reserva que entra sola se llama "Booking"
@@ -1189,6 +1195,29 @@ noches" sin que se mezcle con "en agosto entraron Y pesos a la caja".
 Para dejarlo automático, en el editor de Apps Script: **Activadores → Añadir
 activador → función `cierreAutomatico`, temporizador diario, entre 3 y 4 de la
 mañana**. Cierra solo la noche que acaba de terminar.
+
+### Que se cierre solo
+
+A las 00:00 la noche anterior ya terminó y no va a cambiar más: es el momento
+exacto para cerrarla. Hacerlo a mano significa acordarse todos los días, y el
+día que nadie se acuerda es justo cuando el cierre queda corrido y hay que
+revisar hacia atrás. Se enciende en la pestaña *Cierre*, con la hora a elección
+y dos casillas: mandarlo **al grupo de Telegram** con su PDF y **por correo al
+dueño**.
+
+- **Cierra la noche de AYER, no la de hoy.** A las 00:30 del 24, la noche que
+  acaba de terminar es la del 23. Esa es la que se anota en las cuentas.
+- **Cerrar dos veces no cobra dos veces.** Si el disparador se atrasa, se repite
+  o además alguien lo cierra a mano, la noche se anota una sola vez.
+- **Telegram o el correo caídos no dejan la noche sin cerrar.** Los dos envíos
+  van envueltos por separado: cerrar es el trabajo, avisar es el lujo.
+- **Si el cierre revienta, alguien se entera.** Un cierre que falla en silencio
+  deja las cuentas corridas hasta que alguien mira; se anota en el registro y se
+  avisa al grupo.
+- **Si alguien ya tenía el disparador puesto a mano** desde el editor —que era
+  la forma anterior de activarlo— se respeta mientras no toque el interruptor
+  nuevo. Apagarle el cierre nocturno a alguien sin avisarle sería peor que
+  cualquier inconsistencia.
 
 ## Lo que llega al grupo de Telegram
 

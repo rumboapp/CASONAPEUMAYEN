@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-08';
+var VERSION = '2026-09-09';
 
 function version() { return VERSION; }
 
@@ -2457,7 +2457,13 @@ function convertirAlojamiento_(idReserva, aNeto) {
    decide recepción a mano. El cierre solo avisa. */
 function cierreDia(token, fecha) {
   var u = sesion_(token);
-  var dia = ymd_(fecha) || hoy_();
+  return cierreDia_(ymd_(fecha) || hoy_(), u.nombre);
+}
+
+/* El mismo cierre, sin sesión: lo necesita el que corre solo a medianoche, que
+   no lo pide nadie desde una pantalla. */
+function cierreDia_(dia, quien) {
+  var u = { nombre: quien };
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -2494,6 +2500,110 @@ function cierreDia(token, fecha) {
   } finally {
     lock.releaseLock();
   }
+}
+
+/* ---------- El cierre que corre solo ----------
+
+   A las 00:00 la noche anterior ya terminó y no va a cambiar más: es el
+   momento exacto para cerrarla. Hacerlo a mano significa acordarse todos los
+   días, y el día que alguien no se acuerda el cierre queda corrido y hay que
+   revisar hacia atrás.
+
+   Cierra la noche de AYER, no la de hoy. A las 00:30 del día 24, la noche que
+   acaba de terminar es la del 23. Esa es la que se anota en las cuentas.
+
+   Cerrar dos veces la misma noche no cobra dos veces: postearNoche_ ya se
+   encarga. Así que si el disparador se atrasa, se repite o alguien además lo
+   cierra a mano, no pasa nada. */
+/* Antes esto se activaba pegando el disparador a mano desde el editor. Si
+   alguien lo dejó así y nunca tocó el interruptor nuevo, se respeta: apagarle
+   el cierre nocturno a alguien sin avisarle sería peor que cualquier
+   inconsistencia. */
+function cierreAutoActivo_() {
+  var c = String(config_('cierreAuto', '') || '');
+  if (c) return c === 'si';
+  try {
+    return ScriptApp.getProjectTriggers().some(function (t) {
+      return t.getHandlerFunction() === 'cierreAutomatico';
+    });
+  } catch (e) { return false; }
+}
+
+function cierreAutomatico() {
+  try {
+    if (!cierreAutoActivo_()) return false;
+    var dia = sumarDias_(hoy_(), -1);
+    var r = cierreDia_(dia, 'Cierre automático');
+
+    /* Los dos envíos van envueltos por separado. Que Telegram o el correo
+       fallen no puede dejar la noche sin cerrar: cerrar es el trabajo,
+       avisar es el lujo. */
+    if (String(config_('cierreAutoTg', 'si')) === 'si') {
+      try { cierreATelegram_(dia); } catch (e) {
+        logCambio_('sistema', 'cierre_auto_tg', String(e.message || e));
+      }
+    }
+    if (String(config_('cierreAutoMail', 'si')) === 'si') {
+      var para = String(config_('correoDueno', '') || '').trim();
+      if (para) {
+        try { enviarCierre_(dia, para); } catch (e) {
+          logCambio_('sistema', 'cierre_auto_correo', String(e.message || e));
+        }
+      }
+    }
+    return { fecha: dia, noches: r.nochesPosteadas };
+  } catch (e) {
+    // Un cierre que revienta en silencio deja las cuentas corridas y nadie se
+    // entera hasta que alguien mira. Se anota y se avisa.
+    try { logCambio_('sistema', 'cierre_auto_error', String(e.message || e)); } catch (e2) {}
+    try {
+      avisar_('cierre', '⚠️ <b>El cierre automático falló</b>\n' +
+        escTg_(String(e.message || e)) + '\n\nHay que cerrar la noche a mano.');
+    } catch (e3) {}
+    return false;
+  }
+}
+
+function cierreAutoEstado(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  return {
+    activo: cierreAutoActivo_(),
+    hora: Number(config_('cierreAutoHora', 0)) || 0,
+    aTelegram: String(config_('cierreAutoTg', 'si')) === 'si',
+    aCorreo: String(config_('cierreAutoMail', 'si')) === 'si',
+    correo: String(config_('correoDueno', '') || '').trim(),
+    conBot: telegramActivo_()
+  };
+}
+
+/* Enciende o apaga el cierre automático. Como con los demás disparadores, se
+   borran primero los que hubiera: si no, cambiar la hora dejaría dos
+   corriendo. */
+function cierreAutoEncender(token, encender, hora, aTelegram, aCorreo) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var h = (hora === undefined || hora === null || hora === '')
+    ? (Number(config_('cierreAutoHora', 0)) || 0) : Number(hora);
+  if (!(h >= 0 && h <= 23)) throw new Error('Esa hora no existe.');
+  h = Math.floor(h);
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'cierreAutomatico') ScriptApp.deleteTrigger(t);
+  });
+  if (encender) {
+    ScriptApp.newTrigger('cierreAutomatico').timeBased().atHour(h).everyDays(1).create();
+  }
+  actualizarConfig_('cierreAutoHora', h);
+  actualizarConfig_('cierreAuto', encender ? 'si' : 'no');
+  if (aTelegram !== undefined && aTelegram !== null) {
+    actualizarConfig_('cierreAutoTg', aTelegram ? 'si' : 'no');
+  }
+  if (aCorreo !== undefined && aCorreo !== null) {
+    actualizarConfig_('cierreAutoMail', aCorreo ? 'si' : 'no');
+  }
+  logCambio_(u.nombre, 'cierre_auto',
+             encender ? 'encendido a las ' + h + ':00' : 'apagado');
+  return { activo: !!encender, hora: h };
 }
 
 /* Lo que pasó ese día, mirado desde la cuenta: sirve para el cierre y para
@@ -2620,30 +2730,6 @@ function resumenDia_(dia, reservas) {
 function panelCierre(token, fecha) {
   sesion_(token);
   return resumenDia_(ymd_(fecha) || hoy_());
-}
-
-/* Para dejarlo automático: en el editor, Activadores → nuevo activador →
-   cierreAutomatico, temporizador diario, entre 3 y 4 de la mañana. */
-function cierreAutomatico() {
-  var dia = sumarDias_(hoy_(), -1);          // la noche que acaba de terminar
-  var reservas = leer_('Reservas').filter(function (r) {
-    return r.estado !== 'cancelada' && r.estado !== 'no_show';
-  });
-  var puestas = 0;
-  reservas.forEach(function (r) { if (postearNoche_(r, dia, 'cierre automático')) puestas++; });
-  var resumen = resumenDia_(dia, reservas);
-  guardarOCrear_('Cierres', 'fecha', dia, {
-    fecha: dia, ejecutado: ahora_(), por: 'automático',
-    noches: puestas, alojamiento: resumen.alojamiento, consumos: resumen.consumos,
-    pagos: resumen.pagos, avisos: resumen.avisos.length
-  });
-  // Y si hay un correo configurado, el resumen de la noche sale solo.
-  var para = String(config_('correoDueno', '') || '').trim();
-  if (para) {
-    try { enviarCierre_(dia, para); }
-    catch (e) { logCambio_('automático', 'cierre_envio_falló', String(e.message || e)); }
-  }
-  return puestas;
 }
 
 /* ===================== DOCUMENTOS EN PDF =====================
