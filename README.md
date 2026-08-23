@@ -352,6 +352,15 @@ caben. Los **menores de 6 no cuentan para ese tope** — van en el campo de niñ
 de la reserva, no pagan ni ocupan cupo, pero igual aparecen como acompañantes
 marcados *menor de 6* para que el registro los nombre.
 
+**Un nombre de relleno no identifica a nadie.** Las personas se agrupan por
+teléfono, correo, documento y, en último lugar, por nombre. Booking no publica
+el nombre del huésped, así que una reserva que entra sola se llama "Booking"
+hasta que alguien la mira — y agrupando por ahí, todas las de Booking se
+convertían en **una sola persona con seis estadías que además "volvía el 04"**.
+Ahora una reserva sin teléfono, sin correo, sin documento y con nombre de
+relleno es su propia entrada. Apenas alguien escribe de quién es, sus estadías
+se juntan como corresponde.
+
 ## Estados de una reserva
 
 Se ven en el calendario por color y se cambian con un toque desde la propia
@@ -372,6 +381,15 @@ hora real, que después alimenta los informes.
 **Al hacer el check-out, el alojamiento se marca solo como sucio**, así el
 equipo de aseo lo ve al instante en su pantalla sin que nadie tenga que
 avisarle.
+
+**Una cancelada se puede revivir.** Desaparece del calendario, así que si se
+canceló por error no había vuelta atrás desde la pantalla: aparecía en
+Huéspedes y ahí terminaba el camino. Ahora esa reserva ofrece **Reactivar** en
+vez de "Ver la reserva", que no llevaba a ninguna parte. Antes de revivirla se
+comprueba que la pieza siga libre —mientras estuvo cancelada esas fechas
+quedaron a la venta y pueden haberse vendido de nuevo— y vuelve al estado que
+le corresponde: si alcanzó a hacer el check-in sigue alojada, si ya se fue con
+su check-out hecho.
 
 ## El precio se arma noche a noche
 

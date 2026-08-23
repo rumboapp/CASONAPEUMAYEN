@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-07';
+var VERSION = '2026-09-08';
 
 function version() { return VERSION; }
 
@@ -1673,6 +1673,42 @@ function cambiarEstado(token, id, estado) {
   logCambio_(u.nombre, 'reserva_estado', id + ' -> ' + estado);
   avisarEstado_(r, estado, u.nombre);
   return true;
+}
+
+/* ---------- Revivir una reserva cancelada ----------
+
+   Una cancelada desaparece del calendario, así que si se canceló por error no
+   había forma de volver atrás desde la pantalla: aparecía en Huéspedes y ahí
+   terminaba el camino. Eso lo destapó una cancelación automática equivocada, y
+   la falta de vuelta atrás era la mitad del problema.
+
+   Se comprueba que la pieza siga libre antes de revivirla: mientras estuvo
+   cancelada esas fechas quedaron a la venta y pueden haberse vendido de nuevo.
+   Y vuelve al estado que le corresponde: si alcanzó a hacer el check-in, sigue
+   alojada; si ya se fue, con su check-out hecho. */
+function reactivarReserva(token, id) {
+  var u = sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === id; })[0];
+  if (!r) throw new Error('No se encontró la reserva.');
+  if (r.estado !== 'cancelada' && r.estado !== 'no_show') {
+    throw new Error('Esa reserva no está cancelada.');
+  }
+  var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
+  verificarLibre_(r.recurso, ci, co, id);
+
+  var estado = r.checkOutReal ? 'checkout' : (r.checkInReal ? 'en_casa' : 'confirmada');
+  actualizar_('Reservas', 'id', id, { estado: estado });
+  // El plan de noches se repone si se había quedado sin él: sin plan, la
+  // reserva revive sin precio y el cierre de la noche no tiene qué anotar.
+  asegurarPlan_(id);
+  logCambio_(u.nombre, 'reserva_reactivada', id + ' -> ' + estado);
+  avisarBookingCambio_('♻️ <b>Reserva reactivada</b>', [
+    '👤 <b>' + escTg_(r.huesped) + '</b>',
+    '🛏 ' + escTg_(nombreRecurso_(r.recurso)),
+    '📅 ' + fechaTg_(ci) + ' → ' + fechaTg_(co),
+    '✏️ ' + escTg_(u.nombre)
+  ]);
+  return { estado: estado };
 }
 
 function eliminarReserva(token, id) {
@@ -6420,6 +6456,15 @@ function normalizar_(s) {
 function soloDigitos_(s) { return String(s == null ? '' : s).replace(/[^\d]/g, ''); }
 
 /* La llave con la que dos reservas son "la misma persona". */
+/* Un nombre que no es de nadie. Booking no publica el nombre del huésped, así
+   que una reserva que entra sola se llama "Booking" o "Booking 6276704596"
+   hasta que alguien la mira y escribe de quién es. */
+function nombreProvisorio_(nombre) {
+  var n = String(nombre || '').trim();
+  if (!n) return true;
+  return /^(booking|airbnb|reserva)(\s*[·\-]?\s*n?°?\s*\d+)?$/i.test(n);
+}
+
 function llaveHuesped_(r, ficha) {
   var tel = soloDigitos_(r.telefono);
   if (tel.length >= 8) return 'tel:' + tel.slice(-8);
@@ -6427,6 +6472,13 @@ function llaveHuesped_(r, ficha) {
   if (mail.indexOf('@') > 0) return 'mail:' + mail;
   var doc = ficha ? normalizar_(ficha.documento).replace(/[.\-]/g, '') : '';
   if (doc) return 'doc:' + doc;
+
+  /* Sin teléfono, sin correo y sin documento, lo único que queda es el nombre
+     — y si ese nombre es de relleno, no identifica a nadie. Juntándolas por ahí,
+     todas las reservas que entraron solas desde Booking se convertían en UNA
+     persona llamada "Booking" con seis estadías, que además "volvía el 04".
+     Cada una es su propia reserva hasta que alguien escriba de quién es. */
+  if (nombreProvisorio_(r.huesped)) return 'res:' + String(r.id);
   return 'nom:' + normalizar_(r.huesped);
 }
 

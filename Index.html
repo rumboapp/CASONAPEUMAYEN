@@ -1781,7 +1781,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-07';
+var VERSION_ESPERADA = '2026-09-08';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -4213,7 +4213,11 @@ function pintarHuesped(g){
         : '<div class="muted" style="font-size:12.5px">Sin movimientos en la cuenta.</div>')+
       '<div style="display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;align-items:center">'+
         '<span class="muted" style="font-size:12.5px">Saldo '+plataDe(r, cta.saldoProyectado||0)+'</span>'+
-        '<button class="btn gh sm" data-ir="'+r.id+'" style="margin-left:auto">Ver la reserva</button>'+
+        // Una cancelada no está en el calendario, así que "Ver la reserva" no
+        // lleva a ninguna parte: lo que hace falta ahí es poder revivirla.
+        (r.estado==='cancelada'||r.estado==='no_show'
+          ? '<button class="btn sm" data-rev="'+r.id+'" style="margin-left:auto">Reactivar</button>'
+          : '<button class="btn gh sm" data-ir="'+r.id+'" style="margin-left:auto">Ver la reserva</button>')+
         (r.ficha && r.ficha.firmaUrl
           ? '<a class="btn gh sm" style="text-decoration:none" target="_blank" href="'+
             r.ficha.firmaUrl+'">Ver la firma</a>' : '')+
@@ -4222,6 +4226,16 @@ function pintarHuesped(g){
   });
 
   $('hueCuerpo').innerHTML=h;
+  Array.prototype.forEach.call($('hueCuerpo').querySelectorAll('[data-rev]'), function(b){
+    b.onclick=function(){
+      b.disabled=true;
+      srv('reactivarReserva')(b.dataset.rev).then(function(){
+        toast('Reserva reactivada');
+        recargarCal();
+        abrirHuesped(g.llave, g.nombre);   // se vuelve a pintar con el estado nuevo
+      }).catch(function(e){ b.disabled=false; fallo(e); });
+    };
+  });
   Array.prototype.forEach.call($('hueCuerpo').querySelectorAll('[data-ir]'), function(b){
     b.onclick=function(){
       var r=CAL.reservas.filter(function(x){ return x.id===b.dataset.ir; })[0];
