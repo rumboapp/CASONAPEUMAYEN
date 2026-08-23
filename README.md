@@ -1635,6 +1635,15 @@ pasa de la décima de segundo con tres años de historia.
 - **Las fechas se guardan como texto** `AAAA-MM-DD` para que Sheets no las
   convierta a fecha con hora y zona horaria (eso rompía la detección de choques
   en la versión anterior).
+- **Nunca hay dos columnas con el mismo nombre.** Guardar y leer van por el
+  nombre, así que un encabezado repetido rompe las dos mitades de forma
+  distinta: al leer una fila gana la de más a la derecha, y al escribir se usaba
+  la de más a la izquierda. El síntoma vuelve loco a cualquiera — se guarda un
+  cambio, la pantalla lo confirma, y el dato sigue como estaba por más veces que
+  se intente. Ahora se escribe en **todas** las columnas que se llamen igual, así
+  las dos mitades miran lo mismo pase lo que pase, y el botón *Revisar las
+  columnas* de Configuración → ajustes avanzados dice si hay alguna repetida y en
+  qué letra está.
 - **Las columnas nuevas siempre se agregan al final.** Si se insertan en medio,
   las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles. Por
   eso `setup()` se puede ejecutar sobre una planilla vieja sin miedo.

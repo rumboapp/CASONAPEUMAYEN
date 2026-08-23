@@ -1137,6 +1137,20 @@
             <button class="btn gh sm" id="docProbar">Probar la generación de documentos</button>
             <div id="docCuerpo" style="margin-top:12px"></div>
           </div>
+
+          <!-- Los datos se guardan y se leen por el NOMBRE de la columna. Dos
+               columnas con el mismo nombre hacen que un cambio se guarde en una
+               y se lea de la otra: se guarda, la pantalla lo confirma, y el dato
+               sigue igual por más veces que se intente. -->
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+            <div class="ctaTit">Si guardas un cambio y no queda</div>
+            <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+              Revisa los encabezados de la planilla. Dos columnas con el mismo nombre
+              hacen que el dato se guarde en una y se lea de la otra.
+            </p>
+            <button class="btn gh sm" id="colProbar">Revisar las columnas</button>
+            <div id="colCuerpo" style="margin-top:12px"></div>
+          </div>
         </div>
         <div class="err hide" id="cfgErr"></div>
       </div>
@@ -1814,7 +1828,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-10';
+var VERSION_ESPERADA = '2026-09-11';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -3688,6 +3702,39 @@ $('rBorrar').onclick=function(){
 $('rFicha').onclick=function(){ if(RES) abrirFicha(RES); };
 
 /* El menú "Más" del pie: se cierra al elegir algo o al tocar fuera. */
+$('colProbar').onclick=function(){
+  var c=$('colCuerpo'); c.innerHTML='';
+  ocupado('colProbar', srv('revisarColumnas')()).then(function(d){
+    if(!(d.hallazgos||[]).length){
+      var ok=document.createElement('div');
+      ok.className='docFila';
+      ok.textContent='✅ Las '+d.revisadas+' hojas están sanas: ninguna columna repetida.';
+      c.appendChild(ok);
+      return;
+    }
+    d.hallazgos.forEach(function(h){
+      var f=document.createElement('div');
+      f.className='docFila';
+      f.style.alignItems='flex-start';
+      if(h.tipo==='repetida') f.style.borderColor='var(--dan)';
+      var i=document.createElement('span');
+      i.textContent = h.tipo==='repetida' ? '⚠️' : 'ℹ️';
+      i.style.cssText='flex:0 0 auto';
+      var t=document.createElement('div');
+      t.style.cssText='flex:1;min-width:0';
+      var n=document.createElement('b');
+      n.style.fontSize='12.5px'; n.textContent=h.hoja;
+      var det=document.createElement('div');
+      det.className='muted';
+      det.style.cssText='font-size:12px;white-space:pre-wrap';
+      det.textContent=h.detalle;
+      t.appendChild(n); t.appendChild(det);
+      f.appendChild(i); f.appendChild(t);
+      c.appendChild(f);
+    });
+  }).catch(fallo);
+};
+
 $('rMasBtn').onclick=function(e){
   e.stopPropagation();
   $('rMasLista').classList.toggle('hide');

@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-10';
+var VERSION = '2026-09-11';
 
 function version() { return VERSION; }
 
@@ -326,8 +326,10 @@ function actualizarVarias_(nombre, decidir) {
     var cambios = decidir(obj);
     if (!cambios) continue;
     for (var k in cambios) {
-      var c = cab.indexOf(k);
-      if (c > -1) v[i][c] = cambios[k];
+      // Igual que en actualizar_: a todas las columnas con ese nombre.
+      for (var c = 0; c < cab.length; c++) {
+        if (cab[c] === k) v[i][c] = cambios[k];
+      }
     }
     tocadas++;
     if (min === -1) min = i;
@@ -358,8 +360,18 @@ function actualizar_(nombre, campoId, valorId, cambios) {
       var fila = v[i].slice();
       var cambio = false;
       Object.keys(cambios).forEach(function (k) {
-        var c = cab.indexOf(k);
-        if (c > -1) { fila[c] = cambios[k]; cambio = true; }
+        /* A TODAS las columnas que se llamen así, no solo a la primera.
+           Leer y escribir tienen que mirar lo mismo: al armar el objeto de una
+           fila gana la ÚLTIMA columna con ese nombre, y al escribir se usaba la
+           PRIMERA. Con un encabezado repetido —que puede aparecer editando la
+           planilla a mano— se guardaba en una columna y se leía de la otra, así
+           que el cambio parecía no ocurrir nunca por más veces que se apretara
+           Guardar. */
+        for (var c = 0; c < cab.length; c++) {
+          if (cab[c] !== k) continue;
+          fila[c] = cambios[k];
+          cambio = true;
+        }
       });
       if (cambio) sh.getRange(i + 1, 1, 1, fila.length).setValues([fila]);
       olvidar_(nombre);
@@ -586,6 +598,85 @@ function usd_(pesos, cambio) {
   var partes = Math.abs(v).toFixed(2).split('.');
   return (v < 0 ? '-' : '') + 'US$' +
     partes[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + partes[1];
+}
+
+/* ---------- ¿Está sana la planilla? ----------
+
+   Los datos se guardan y se leen por el NOMBRE de la columna, nunca por su
+   posición. Eso hace que agregar columnas sea inofensivo, pero tiene un punto
+   ciego: dos columnas con el mismo nombre. Al leer una fila gana la última; al
+   escribir se usaba la primera. El síntoma es de los que vuelven loco a
+   cualquiera — se guarda un cambio, la pantalla lo confirma, y el dato sigue
+   como estaba por más veces que se intente.
+
+   Escribir en todas las columnas repetidas ya lo deja inofensivo, pero un
+   encabezado repetido igual conviene arreglarlo, así que acá se dice cuál es. */
+function revisarColumnas(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var hallazgos = [];
+
+  Object.keys(HOJAS).forEach(function (nombre) {
+    var sh;
+    try { sh = ss_().getSheetByName(nombre); } catch (e) { sh = null; }
+    if (!sh) { hallazgos.push({ hoja: nombre, tipo: 'falta', detalle: 'No existe la hoja.' }); return; }
+
+    var ancho = Math.max(sh.getLastColumn(), 1);
+    var cab = sh.getRange(1, 1, 1, ancho).getValues()[0]
+      .map(function (c) { return String(c).trim(); });
+
+    var vistas = {};
+    cab.forEach(function (c, i) {
+      if (!c) return;
+      if (vistas[c] === undefined) { vistas[c] = i; return; }
+      hallazgos.push({
+        hoja: nombre, tipo: 'repetida', columna: c,
+        detalle: '"' + c + '" aparece en la columna ' + letraCol_(vistas[c] + 1) +
+          ' y otra vez en la ' + letraCol_(i + 1) + '. Al leer gana la de más a ' +
+          'la derecha. Revisa cuál tiene los datos buenos y borra la otra.'
+      });
+    });
+
+    HOJAS[nombre].filter(function (c) { return cab.indexOf(c) === -1; })
+      .forEach(function (c) {
+        hallazgos.push({ hoja: nombre, tipo: 'ausente', columna: c,
+          detalle: 'Falta la columna "' + c + '". Se crea sola la próxima vez que ' +
+                   'se escriba algo en esa hoja.' });
+      });
+  });
+
+  return { hallazgos: hallazgos, revisadas: Object.keys(HOJAS).length };
+}
+
+/* Número de columna a letra, como lo muestra Google: 1 → A, 27 → AA. */
+function letraCol_(n) {
+  var s = '';
+  while (n > 0) {
+    var r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+/* Lo que hay DE VERDAD en la fila de una reserva, columna por columna. Cuando
+   la pantalla dice una cosa y la planilla otra, esto zanja la discusión. */
+function verFilaReserva(token, idReserva) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var v = crudo_('Reservas'), cab = v[0] || [];
+  var ci = cab.indexOf('id');
+  for (var i = 1; i < v.length; i++) {
+    if (String(v[i][ci]) !== String(idReserva)) continue;
+    return {
+      fila: i + 1,
+      celdas: cab.map(function (c, j) {
+        return { columna: letraCol_(j + 1), nombre: c,
+                 valor: String(v[i][j] === undefined ? '' : v[i][j]) };
+      }).filter(function (x) { return x.nombre; })
+    };
+  }
+  throw new Error('No se encontró esa reserva en la planilla.');
 }
 
 /* ===================== SETUP ===================== */
