@@ -846,19 +846,21 @@
            duelen: que Booking venda lo que acá ya se vendió, y que lo que
            Booking vende haya que copiarlo a mano. -->
       <div class="card">
-        <h2>Booking</h2>
+        <h2>Booking, Airbnb y otros calendarios</h2>
         <p class="muted" style="font-size:13px;margin-bottom:12px">
           Son dos direcciones distintas y se conectan por separado. La de <b>ida</b>
-          evita que Booking venda una pieza que acá ya está tomada. La de <b>vuelta</b>
-          hace que lo que Booking venda aparezca solo en este calendario, sin que
-          nadie lo copie.
+          evita que vendan afuera una pieza que acá ya está tomada. La de <b>vuelta</b>
+          hace que lo que se venda afuera aparezca solo en este calendario, sin que
+          nadie lo copie. Funciona igual con Booking, con Airbnb o con cualquier
+          sitio que publique un calendario.
         </p>
 
         <div class="ctaTit" style="margin-top:4px">1 · Que Booking no venda lo que acá ya se vendió</div>
         <div class="ctaCaja" style="margin-top:8px">
           <ol class="muted" style="font-size:12.5px;padding-left:18px;margin:0">
-            <li style="margin-bottom:5px">En el extranet de Booking:
-              <b>Rates &amp; Availability → Sync calendars</b>.</li>
+            <li style="margin-bottom:5px">En Booking: <b>Rates &amp; Availability →
+              Sync calendars</b>. En Airbnb: <b>Calendario → Disponibilidad →
+              Sincronizar calendarios → Conectar otro sitio web</b>.</li>
             <li style="margin-bottom:5px">Elige la habitación y aprieta
               <b>Import calendar</b>.</li>
             <li>Pega ahí la dirección que corresponde de la lista de abajo y ponle
@@ -879,18 +881,34 @@
 
         <hr style="border:none;border-top:1px solid var(--line);margin:22px 0">
 
-        <div class="ctaTit">2 · Que lo que Booking venda entre solo acá</div>
+        <div class="ctaTit">2 · Que lo que se venda afuera entre solo acá</div>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">
+          Sirve para <b>Booking, Airbnb</b> y cualquier otro sitio que publique un
+          calendario. El canal se reconoce solo por la dirección: no hay que elegirlo
+          de una lista.
+        </p>
         <div class="ctaCaja" style="margin-top:8px">
+          <div class="ctaTit">En Booking</div>
+          <ol class="muted" style="font-size:12.5px;padding-left:18px;margin:0 0 10px">
+            <li style="margin-bottom:5px">La <b>misma</b> pantalla del extranet
+              (<b>Sync calendars</b>), pero del lado de <b>Export calendar</b>.</li>
+            <li>Copia la dirección de esa habitación y pégala abajo, en la fila
+              que le corresponde acá.</li>
+          </ol>
+          <div class="ctaTit">En Airbnb</div>
           <ol class="muted" style="font-size:12.5px;padding-left:18px;margin:0">
-            <li style="margin-bottom:5px">En la <b>misma</b> pantalla del extranet
-              (<b>Sync calendars</b>), pero del lado de
-              <b>Export calendar</b>.</li>
-            <li style="margin-bottom:5px">Copia la dirección de <b>esa</b> habitación
-              y pégala abajo, en la fila del alojamiento que le corresponde acá.</li>
-            <li>Enciende la revisión automática. Cada quince minutos se mira si
-              Booking vendió algo nuevo.</li>
+            <li style="margin-bottom:5px"><b>Calendario</b> → elige el anuncio →
+              <b>Disponibilidad</b> → <b>Sincronizar calendarios</b>.</li>
+            <li style="margin-bottom:5px">Copia el enlace de <b>Exportar calendario</b>
+              y pégalo abajo.</li>
+            <li>Y para la ida, en esa misma pantalla, <b>Conectar otro sitio web</b>
+              y pega ahí la dirección de la lista de arriba.</li>
           </ol>
         </div>
+        <p class="muted" style="font-size:12px;margin:10px 0 0">
+          Airbnb <b>no tiene</b> la restricción de Booking: no hace falta que cada
+          anuncio sea de una sola unidad.
+        </p>
 
         <p class="muted" style="font-size:12px;margin:12px 0 0">
           <b>Por qué por acá y no por el correo de Booking.</b> El correo que llega
@@ -904,7 +922,7 @@
         <div class="docFila" style="margin-top:12px;gap:10px;flex-wrap:wrap">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
             <input type="checkbox" id="impAuto" style="width:auto;flex:0 0 auto;margin:0">
-            <span style="font-size:13px">Revisar Booking sola, cada</span>
+            <span style="font-size:13px">Revisar los calendarios solo, cada</span>
           </label>
           <select id="impCada" style="width:auto;flex:0 0 auto;font-size:13px"></select>
           <button class="btn gh sm" id="impAhora" style="margin-left:auto">Revisar ahora</button>
@@ -916,10 +934,10 @@
           <b>Lo que el calendario no trae es el precio</b>, ninguno lo trae. La reserva
           entra con la pieza bloqueada y la tarifa de la casa puesta, y queda anotado
           en sus notas que hay que revisar el precio y cuántas personas vienen. Si
-          Booking vende algo que acá ya estaba tomado, <b>no</b> se pisa la reserva que
+          afuera venden algo que acá ya estaba tomado, <b>no</b> se pisa la reserva que
           ya existe: avisa una vez y se resuelve a mano. Y si esa reserva la habías
-          cargado tú a mano desde el correo de Booking, <b>la reconoce</b> en vez de
-          duplicarla: le queda la ficha y la cuenta como estaban.
+          cargado tú a mano, <b>la reconoce</b> en vez de duplicarla: le queda la ficha
+          y la cuenta como estaban.
         </p>
         <p class="muted" style="font-size:12px;margin-top:8px">
           Cinco minutos es lo que conviene. Se puede bajar a uno, pero Google le da a
@@ -1828,7 +1846,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-11';
+var VERSION_ESPERADA = '2026-09-12';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -5059,17 +5077,23 @@ function pintarBookingEntrada(d){
     et.textContent=r.nombre;
     var inp=document.createElement('input');
     inp.type='text'; inp.value=r.url||'';
-    inp.placeholder='Pega acá el "Export calendar" de esta habitación';
+    inp.placeholder='Pega acá el calendario de Booking o de Airbnb';
     inp.style.cssText='flex:1;min-width:180px;font-size:12px';
     // Se guarda al salir del campo y solo si cambió: pegar una dirección y
     // seguir a la siguiente no debería obligar a apretar nada.
     inp.onchange=function(){
       srv('bookingGuardarUrl')(r.id, inp.value)
-        .then(function(){ r.url=inp.value.trim();
-                          toast(r.url ? 'Guardada · '+r.nombre : 'Quitada · '+r.nombre); })
+        .then(function(){ cargarBookingEntrada();
+                          toast(inp.value.trim() ? 'Guardada · '+r.nombre
+                                                 : 'Quitada · '+r.nombre); })
         .catch(function(e){ inp.value=r.url||''; fallo(e); });
     };
-    f.appendChild(et); f.appendChild(inp);
+    // De qué canal es, deducido de la propia dirección.
+    var canal=document.createElement('span');
+    canal.className='quien';
+    canal.style.cssText='flex:0 0 auto;min-width:58px;text-align:right';
+    canal.textContent=r.canalNombre||'';
+    f.appendChild(et); f.appendChild(inp); f.appendChild(canal);
     c.appendChild(f);
   });
 
@@ -5122,7 +5146,7 @@ function pintarUltimaBooking(u){
 function guardarAutoBooking(){
   var enc=$('impAuto').checked, cada=Number($('impCada').value)||5;
   srv('bookingAutomatico')(enc, cada)
-    .then(function(){ toast(enc ? 'Booking se revisa sola cada '+cada+
+    .then(function(){ toast(enc ? 'Los calendarios se revisan solos cada '+cada+
                                   (cada===1?' minuto':' minutos')
                                 : 'Revisión automática apagada'); })
     .catch(function(e){ $('impAuto').checked=!enc; fallo(e); });
@@ -5161,7 +5185,7 @@ $('impAhora').onclick=function(){
   ocupado('impAhora', srv('bookingSincronizarAhora')())
     .then(function(u){
       pintarUltimaBooking(u);
-      toast(u.creadas ? 'Entraron '+u.creadas+' de Booking'
+      toast(u.creadas ? 'Entraron '+u.creadas+' de los calendarios'
           : u.adoptadas ? 'Se reconocieron '+u.adoptadas+' que ya tenías'
                         : 'Revisado, sin novedad');
       // Si algo cambió, el calendario de atrás ya no está al día.

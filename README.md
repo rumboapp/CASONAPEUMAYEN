@@ -779,7 +779,33 @@ está.
 > **consultas a servicios externos**. Es el mismo permiso que pediría el dólar
 > automático. Se acepta una vez.
 
-## Booking
+## Booking, Airbnb y otros calendarios
+
+Todo lo de esta sección lee y escribe **iCal**, que es un formato y no una
+empresa: el mismo código sirve para Booking, para Airbnb y para cualquier sitio
+que publique un `.ics`. Lo único que cambia entre un canal y otro es cómo se
+llama en los informes, qué nombre lleva la reserva mientras nadie escriba el del
+huésped, y a dónde apunta el enlace para ir a verla.
+
+**Y eso no se pregunta: se deduce de la propia dirección.** Una que dice
+`airbnb.com` no puede ser de Booking, y hacer elegir de una lista algo que está
+escrito en la dirección es pedirle a alguien que copie un dato que ya copió. En
+la pantalla, cada fila muestra el canal que se reconoció.
+
+Las diferencias que sí importan:
+
+| | Booking | Airbnb |
+|---|---|---|
+| Dónde está | Rates & Availability → Sync calendars | Calendario → Disponibilidad → Sincronizar calendarios |
+| Requisitos | Máx. 20 tipos, **una unidad por tipo**, sin channel manager | Ninguno |
+| Identificador | número de 9-10 dígitos | código tipo `HMABCD1234`, dentro del enlace de la descripción |
+| Nombre del huésped | nunca | nunca (`Reserved`) |
+| Enlace a la reserva | extranet, con el `hotel_id` | `airbnb.com/hosting/reservations/details/…` |
+
+El correo (sección 3, más abajo) es **solo de Booking**: es Booking quien manda
+ese correo, y una reserva de Airbnb que llegue el mismo día no tiene nada que
+ver con él.
+
 
 ### Por qué no hay una conexión "de verdad"
 

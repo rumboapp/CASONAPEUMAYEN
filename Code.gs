@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-11';
+var VERSION = '2026-09-12';
 
 function version() { return VERSION; }
 
@@ -1234,7 +1234,8 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
       // El enlace lo arma el servidor y no la pantalla: necesita el
       // identificador del establecimiento, que solo vive acá. Armándolo en el
       // navegador salía sin esa parte y Booking no sabía qué ficha abrir.
-      linkBooking: r.refExterna ? bookingLinkReserva_(String(r.refExterna)) : '',
+      linkBooking: r.refExterna
+        ? bookingLinkReserva_(String(r.refExterna), String(r.canal || '')) : '',
       notas: r.notas || '', grupo: String(r.grupo || ''),
       pax: Number(r.pax) || 1, ninos: Number(r.ninos) || 0,
       extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
@@ -5380,7 +5381,37 @@ function bookingUrlDe_(idRecurso) {
    es preferible una reserva que se llame "Booking 5459534227" a una que se
    llame "CLOSED - Not available". */
 var SIN_NOMBRE_ = ['closed', 'not available', 'unavailable', 'reserved',
-                   'blocked', 'busy', 'ocupado', 'no disponible', 'cerrado'];
+                   'blocked', 'busy', 'ocupado', 'no disponible', 'cerrado',
+                   'airbnb (not available)'];
+
+/* ---------- De qué canal es este calendario ----------
+   Todo lo de acá abajo lee iCal, que es un formato y no una empresa: el mismo
+   código sirve para Booking, para Airbnb y para cualquier otro sitio que
+   publique un .ics. Lo único que cambia entre uno y otro es cómo se llama el
+   canal en los informes, qué nombre lleva la reserva mientras nadie escriba el
+   del huésped, y a dónde apunta el enlace para ir a verla.
+
+   No se pregunta: se deduce de la propia dirección. Una que dice airbnb.com no
+   puede ser de Booking, y hacer elegir de una lista algo que está escrito en la
+   dirección es pedirle a alguien que copie un dato que ya copió. */
+function feedCanal_(url) {
+  var u = String(url || '').toLowerCase();
+  if (u.indexOf('airbnb.') > -1) return 'airbnb';
+  if (u.indexOf('booking.com') > -1) return 'booking';
+  if (u.indexOf('vrbo.') > -1 || u.indexOf('homeaway.') > -1) return 'vrbo';
+  if (u.indexOf('expedia.') > -1) return 'expedia';
+  return 'otro';
+}
+
+var CANAL_NOMBRE_ = { airbnb: 'Airbnb', booking: 'Booking', vrbo: 'Vrbo',
+                      expedia: 'Expedia', otro: 'el calendario externo' };
+
+function canalNombre_(canal) {
+  return CANAL_NOMBRE_[canal] || CANAL_NOMBRE_.otro;
+}
+
+/* El canal del calendario pegado a un alojamiento. */
+function feedCanalDe_(idRecurso) { return feedCanal_(bookingUrlDe_(idRecurso)); }
 
 function bookingNombre_(ev) {
   var s = String(ev.resumen || '').trim();
@@ -5392,11 +5423,21 @@ function bookingNombre_(ev) {
   return s.slice(0, 80);
 }
 
-/* El número de reserva de Booking: nueve o diez dígitos. Puede venir en el
-   resumen, en la descripción o dentro del propio UID. El mínimo son nueve a
-   propósito: ocho dígitos seguidos serían una fecha (20260820). */
-function bookingNumero_(ev) {
-  var m = [ev.resumen, ev.descripcion, ev.uid].join(' ').match(/\b(\d{9,10})\b/);
+/* El identificador de la reserva, que cada canal escribe a su manera.
+
+   Booking: nueve o diez dígitos. El mínimo son nueve a propósito, porque ocho
+   seguidos serían una fecha (20260820).
+
+   Airbnb: un código con letras —HMABCD1234— que viene dentro del enlace a la
+   reserva, en la descripción del evento. */
+function bookingNumero_(ev, canal) {
+  var todo = [ev.resumen, ev.descripcion, ev.uid].join(' ');
+  if (canal === 'airbnb') {
+    var a = todo.match(/reservations\/details\/([A-Z0-9]{6,20})/i) ||
+            todo.match(/\b(HM[A-Z0-9]{6,18})\b/i);
+    return a ? a[1].toUpperCase() : '';
+  }
+  var m = todo.match(/\b(\d{9,10})\b/);
   return m ? m[1] : '';
 }
 
@@ -5440,13 +5481,16 @@ function icalFecha_(v) {
 }
 
 /* ---------- El aviso al grupo ---------- */
-function avisarBookingNueva_(idReserva, numero, sinNombre) {
+function avisarBookingNueva_(idReserva, numero, sinNombre, deQuien) {
   var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
   if (!r) return false;
-  var lineas = ['🟦 <b>Reserva nueva desde Booking</b>', ''].concat(lineasReserva_(r));
+  var quien = deQuien || canalNombre_(String(r.canal || ''));
+  var icono = String(r.canal) === 'airbnb' ? '🟥' : '🟦';
+  var lineas = [icono + ' <b>Reserva nueva desde ' + escTg_(quien) + '</b>', '']
+    .concat(lineasReserva_(r));
   if (numero) lineas.push('🔖 N° ' + escTg_(numero));
   lineas.push('💵 ' + plataTg_(r, Number(r.total) || 0) + '  ·  a la tarifa de la casa');
-  lineas.push('⚠️ Hay que revisarla: Booking no manda el precio' +
+  lineas.push('⚠️ Hay que revisarla: ' + escTg_(quien) + ' no manda el precio' +
               (sinNombre ? ' ni el nombre' : '') + ' ni cuántas personas vienen.');
   return avisar_('booking', lineas.join('\n'));
 }
@@ -5553,7 +5597,9 @@ function bookingAdoptar_(ya, ev, rec, res, num) {
 /* ---------- Crear lo que Booking vendió ---------- */
 function bookingCrear_(ev, rec, res) {
   var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
-  var num = bookingNumero_(ev);
+  var canal = feedCanalDe_(rec.id);
+  var deQuien = canalNombre_(canal);
+  var num = bookingNumero_(ev, canal);
   var choques = bookingChoques_(rec, ev);
 
   if (choques.length) {
@@ -5563,7 +5609,7 @@ function bookingCrear_(ev, rec, res) {
     var c = (choques.length === 1) ? choques[0] : null;
     var suelta = c && String(c.recurso) === String(rec.id) && !String(c.uidExterno || '');
 
-    if (suelta && String(c.canal || '') === 'booking') {
+    if (suelta && String(c.canal || '') === canal) {
       return bookingAdoptar_(c, ev, rec, res, num);
     }
 
@@ -5590,23 +5636,23 @@ function bookingCrear_(ev, rec, res) {
 
   insertar_('Reservas', {
     id: id, recurso: rec.id, idUnidad: rec.idUnidad,
-    huesped: nombre || ('Booking' + (num ? ' ' + num : '')),
-    telefono: '', email: '', canal: 'booking',
+    huesped: nombre || (deQuien + (num ? ' ' + num : '')),
+    telefono: '', email: '', canal: canal,
     checkIn: ev.inicio, checkOut: ev.fin,
-    // Confirmada, porque en Booking ya lo está: la pieza está vendida y no hay
-    // nada que confirmar de este lado.
+    // Confirmada, porque allá ya lo está: la pieza está vendida y no hay nada
+    // que confirmar de este lado.
     estado: 'confirmada',
     total: plan.total, anticipo: 0, pax: 1, ninos: 0,
-    notas: 'Entró sola desde el calendario de Booking' + (num ? ' · N° ' + num : '') +
-      '. Falta revisar: el precio quedó a la tarifa de la casa y Booking descuenta ' +
-      'su comisión' + (nombre ? '' : ', Booking no mandó el nombre') +
+    notas: 'Entró sola desde el calendario de ' + deQuien + (num ? ' · N° ' + num : '') +
+      '. Falta revisar: el precio quedó a la tarifa de la casa y ' + deQuien +
+      ' descuenta su comisión' + (nombre ? '' : ', ' + deQuien + ' no mandó el nombre') +
       ', y las personas quedaron en 1 porque el calendario no lo dice.',
-    creado: ahora_(), creadoPor: 'Booking', tokenFicha: '',
+    creado: ahora_(), creadoPor: deQuien, tokenFicha: '',
     uidExterno: ev.uid, refExterna: num, feedExterno: rec.id
   });
   insertarVarias_('Noches', plan.noches);
   res.creadas++;
-  avisarBookingNueva_(id, num, !nombre);
+  avisarBookingNueva_(id, num, !nombre, deQuien);
 }
 
 /* ---------- La que ya estaba: ¿se movió, revivió, o no cambió nada? ----------
@@ -5880,7 +5926,9 @@ function bookingEstado(token) {
         id: r.id,
         nombre: r.unidad + (r.nombre ? ' — ' + r.nombre : ''),
         grupo: r.grupo,
-        url: bookingUrlDe_(r.id)
+        url: bookingUrlDe_(r.id),
+        canal: bookingUrlDe_(r.id) ? feedCanalDe_(r.id) : '',
+        canalNombre: bookingUrlDe_(r.id) ? canalNombre_(feedCanalDe_(r.id)) : ''
       };
     })
   };
@@ -6025,8 +6073,12 @@ function bookingHotelId_(cuerpo) {
   return '';
 }
 
-function bookingLinkReserva_(num) {
+function bookingLinkReserva_(num, canal) {
   if (!num) return '';
+  if (canal === 'airbnb' || /^HM[A-Z0-9]/i.test(num)) {
+    return 'https://www.airbnb.com/hosting/reservations/details/' + encodeURIComponent(num);
+  }
+  if (canal && canal !== 'booking') return '';   // no sabemos armar el suyo
   var h = String(config_('bookingHotelId', '') || '');
   return 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html' +
          '?res_id=' + encodeURIComponent(num) +
@@ -6154,6 +6206,8 @@ function bookingCruzarCorreo_(datos, edad, res) {
   if (datos.tipo === 'cancelada') return true;   // nunca llegó a estar acá
   if (!datos.fecha) return true;                 // sin fecha no hay con qué cruzar
 
+  // Solo las de Booking: el correo que se está leyendo es de Booking, y una
+  // reserva de Airbnb que llegue el mismo día no tiene nada que ver con él.
   var candidatas = todas.filter(function (x) {
     return String(x.canal || '') === 'booking' &&
       !String(x.refExterna || '') &&
@@ -6164,7 +6218,7 @@ function bookingCruzarCorreo_(datos, edad, res) {
   if (candidatas.length === 1) {
     actualizar_('Reservas', 'id', candidatas[0].id, { refExterna: datos.numero });
     res.numeradas++;
-    var link = bookingLinkReserva_(datos.numero);
+    var link = bookingLinkReserva_(datos.numero, 'booking');
     avisarBookingCambio_('🔖 <b>Reserva de Booking N° ' + escTg_(datos.numero) + '</b>', [
       '🛏 ' + escTg_(nombreRecurso_(candidatas[0].recurso)),
       '📅 ' + fechaTg_(candidatas[0].checkIn) + ' → ' + fechaTg_(candidatas[0].checkOut),
@@ -6198,7 +6252,7 @@ function bookingCruzarCorreo_(datos, edad, res) {
     '📅 llega el ' + fechaTg_(datos.fecha),
     '', 'No apareció sola en el calendario. Puede que esa pieza no tenga ' +
         'pegada su dirección de Booking.',
-    bookingLinkReserva_(datos.numero)
+    bookingLinkReserva_(datos.numero, 'booking')
   ]);
   return true;
 }
