@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-06';
+var VERSION = '2026-09-07';
 
 function version() { return VERSION; }
 
@@ -5536,13 +5536,45 @@ function bookingSincronizar_() {
        pasajero no alcanza; una cancelación de verdad sí, porque el archivo
        sigue vacío en la pasada siguiente. La cuenta se guarda por calendario
        y se borra apenas vuelve a llegar un evento. */
-    var vivas = [];
+    var vivas = [], enCurso = [];
     Object.keys(mias).forEach(function (u) {
       var x = mias[u];
       if (vistos[u]) return;
       if (x.estado === 'cancelada' || x.estado === 'no_show') return;
-      if (ymd_(x.checkOut) < hoy) return;
+
+      /* Este corte tiene que ser EXACTAMENTE el mismo que el de arriba, donde
+         se filtran los eventos con 'ev.fin > hoy'. Estaba en '<' contra un
+         '>', y esa diferencia de un signo abría un agujero de un día: el día
+         del check-out, el evento del huésped quedaba fuera de la lista leída
+         —porque su fin ya no es mayor que hoy— pero su reserva sí entraba al
+         barrido. Resultado: a las 00:00 del día en que se iba, la reserva de
+         alguien que estaba durmiendo en la casa aparecía cancelada, con
+         Booking publicándola igual que siempre. */
+      if (ymd_(x.checkOut) <= hoy) return;
+
+      /* Y la regla de fondo, que es la que de verdad protege: una estadía que
+         YA EMPEZÓ no se cancela sola nunca. Que Booking deje de publicarla
+         puede significar muchas cosas; ninguna justifica cancelarle la reserva
+         a alguien que está adentro. Se avisa y decide una persona. */
+      if (ymd_(x.checkIn) <= hoy || x.estado === 'en_casa' || x.checkInReal) {
+        enCurso.push(x);
+        return;
+      }
       vivas.push(x);
+    });
+
+    enCurso.forEach(function (x) {
+      res.avisos.push(nombreRecurso_(x.recurso) + ': Booking dejó de publicar la ' +
+        'reserva de ' + x.huesped + ', que está alojado. NO se canceló.');
+      if (bookingYaAvisado_('encurso@' + String(x.uidExterno))) return;
+      bookingAnotarAviso_('encurso@' + String(x.uidExterno));
+      avisarBookingCambio_('❓ <b>Booking dejó de publicar una reserva en curso</b>', [
+        '👤 <b>' + escTg_(x.huesped) + '</b>',
+        '🛏 ' + escTg_(nombreRecurso_(x.recurso)),
+        '📅 ' + fechaTg_(x.checkIn) + ' → ' + fechaTg_(x.checkOut),
+        '', 'El huésped está alojado, así que <b>no se canceló nada</b>.',
+        'Revísalo en el extranet cuando puedas.'
+      ]);
     });
     if (eventos.length) bookingVaciasBorrar_(rec.id);
     if (!vivas.length) return;
@@ -5843,6 +5875,23 @@ function bookingCruzarCorreo_(datos, edad, res) {
   if (conNumero) {
     if (datos.tipo === 'cancelada' &&
         conNumero.estado !== 'cancelada' && conNumero.estado !== 'no_show') {
+      /* Si el huésped ya está adentro, esto no se resuelve solo. Un correo de
+         cancelación de alguien que está durmiendo en la casa es algo que tiene
+         que ver una persona: puede ser que se vaya antes, puede ser un error
+         de Booking, y en cualquier caso cancelarle la reserva por debajo deja
+         la cuenta y el cierre de la noche mintiendo. */
+      if (conNumero.estado === 'en_casa' || conNumero.checkInReal) {
+        res.avisos.push('Llegó un correo de cancelación de ' + conNumero.huesped +
+          ', que está alojado. NO se canceló nada.');
+        avisarBookingCambio_('❓ <b>Booking canceló a un huésped que está alojado</b>', [
+          '👤 <b>' + escTg_(conNumero.huesped) + '</b>',
+          '🛏 ' + escTg_(nombreRecurso_(conNumero.recurso)),
+          '📅 ' + fechaTg_(conNumero.checkIn) + ' → ' + fechaTg_(conNumero.checkOut),
+          '🔖 N° ' + escTg_(datos.numero),
+          '', '<b>No se canceló nada acá.</b> Hay que hablarlo con el huésped.'
+        ]);
+        return true;
+      }
       // El correo de cancelación llega al instante; el calendario se demora en
       // vaciarse y encima necesita dos pasadas. Con el número en la mano no
       // hay ambigüedad ninguna, así que se cancela al tiro.

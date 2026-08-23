@@ -875,6 +875,12 @@ Lo que hay que saber:
 - **Nunca se pisa una reserva que ya existe.** Si Booking vende algo que acá ya
   estaba tomado, no entra: se cuenta como choque y avisa por Telegram para
   resolverlo a mano en el extranet.
+- **Una estadía que ya empezó no se cancela sola, nunca.** Que Booking deje de
+  publicarla puede significar muchas cosas; ninguna justifica cancelarle la
+  reserva a alguien que está durmiendo en la casa —dejaría su cuenta y el
+  cierre de esa noche mintiendo—. Se avisa al grupo una vez y decide una
+  persona. Lo mismo vale para un correo de cancelación de un huésped ya
+  alojado: se avisa, no se toca nada.
 - **Un calendario vacío cancela, pero recién a la segunda.** Un archivo sin
   eventos es ambiguo: puede ser que se cancelaron todas —lo más común, porque
   una pieza sola pasa medio año sin nada vendido— o Booking sirviendo mal el
