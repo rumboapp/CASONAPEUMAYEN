@@ -599,6 +599,20 @@ usando.
 En **Alojamiento**, cada precio se muestra también en dólares al cambio de hoy,
 para cotizarle a alguien de afuera sin sacar la calculadora.
 
+**Pesos y dólares no se pueden mezclar.** La pantalla manda `moneda: 'USD'`
+solo cuando la casilla de turista extranjero está marcada, así que si alguna
+vez llegan separadas es que algo se descuadró por el camino. El servidor lo
+rechaza en vez de seguir: el daño de continuar es enorme —$80.000 se
+multiplicarían por el cambio y quedarían en casi ochenta millones— y el de
+parar es volver a apretar Guardar. Al revés sí se permite: un extranjero sin
+un dólar cargado se sigue escribiendo en pesos, que es lo correcto.
+
+**Cada vez que esa casilla cambia queda escrito** en la hoja *Log*: de qué a
+qué, quién lo hizo y desde qué pantalla —el formulario de reserva o la cuenta
+del huésped—. Marcar a alguien como extranjero le cambia el precio, la moneda y
+el impuesto; si algún día aparece cambiada y nadie sabe por qué, esa línea es la
+única forma de averiguarlo.
+
 ### Documentos: pasaporte, tarjeta PDI y cédula
 
 **A cada huésped se le pide lo que le corresponde, y nada más:**

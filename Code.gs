@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-09';
+var VERSION = '2026-09-10';
 
 function version() { return VERSION; }
 
@@ -1356,6 +1356,20 @@ function guardarReserva(token, datos) {
     // US$49 al crearla y otra cosa distinta al volver a abrirla. Un precio
     // en dólares ya viene sin impuesto: es lo que el huésped paga y punto.
     var enUsd = String(datos.moneda || '') === 'USD';
+
+    /* Una reserva que NO es de un turista extranjero no puede traer cifras en
+       dólares: la pantalla solo manda 'USD' cuando la casilla está marcada, así
+       que si llegan separadas es que algo se descuadró por el camino. Y el daño
+       de seguir adelante es enorme —80.000 se multiplicarían por el cambio y
+       quedarían casi ochenta millones— mientras que el de parar es que hay que
+       volver a apretar Guardar. Al revés sí se permite: un extranjero sin
+       cambio cargado se sigue escribiendo en pesos, que es lo correcto. */
+    if (enUsd && !esExtranjero) {
+      throw new Error('Esta reserva no está marcada como turista extranjero, así que ' +
+        'sus cifras tienen que ir en pesos. Vuelve a abrirla y guárdala de nuevo; si ' +
+        'sigue pasando, avísale a administración.');
+    }
+
     var aPesos = function (n) {
       var v = Number(n) || 0;
       return enUsd ? Math.round(v * cambio) : Math.round(v);
@@ -1379,8 +1393,9 @@ function guardarReserva(token, datos) {
       // se hacía sobre el precio viejo y después se le descontaba el IVA a
       // una cifra que ya venía sin él.
       if (cambiaExento) {
-        marcarExentoIva(token, datos.id, !!datos.extranjero,
-                        antes ? String(antes.docTurismo || '') : '');
+        marcarExentoIva_(datos.id, !!datos.extranjero,
+                         antes ? String(antes.docTurismo || '') : '',
+                         u.nombre, 'el formulario de reserva');
         olvidar_('Noches');
       }
       /* Cambiar de programa —o quitarlo— es cambiar de tarifa, así que las
@@ -2380,6 +2395,15 @@ function postearNoche_(reserva, fecha, quien) {
    venden aparte y llevan IVA igual. */
 function marcarExentoIva(token, idReserva, exento, docTurismo) {
   var u = sesion_(token);
+  return marcarExentoIva_(idReserva, exento, docTurismo, u.nombre, 'la cuenta del huésped');
+}
+
+/* El mismo trabajo, sin sesión y sabiendo desde qué pantalla se pidió: el
+   formulario de reserva delega acá cuando alguien mueve la casilla, y el
+   registro tiene que decir de dónde vino el cambio y no dar siempre la misma
+   pantalla. */
+function marcarExentoIva_(idReserva, exento, docTurismo, quien, origen) {
+  var u = { nombre: quien };
   var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
   if (!r) throw new Error('No se encontró la reserva.');
   actualizar_('Reservas', 'id', idReserva, {
@@ -2406,6 +2430,13 @@ function marcarExentoIva(token, idReserva, exento, docTurismo) {
   var total = convertirAlojamiento_(idReserva, !!exento);
   logCambio_(u.nombre, 'iva_exento', idReserva + ' · ' + (exento ? 'sí' : 'no') +
     ' · alojamiento ' + (exento ? 'sin' : 'con') + ' IVA: ' + total);
+  // El mismo renglón que deja el formulario de reserva, para poder seguir el
+  // rastro de esa casilla sin importar desde qué pantalla se movió.
+  if (!!r.extranjero !== !!exento) {
+    logCambio_(u.nombre, 'extranjero', idReserva + ' · ' +
+      (r.extranjero ? 'sí' : 'no') + ' → ' + (exento ? 'sí' : 'no') +
+      ' · desde ' + String(origen || 'la cuenta del huésped'));
+  }
   return true;
 }
 
