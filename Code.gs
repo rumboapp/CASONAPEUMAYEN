@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-12';
+var VERSION = '2026-09-13';
 
 function version() { return VERSION; }
 
@@ -182,12 +182,25 @@ function crudo_(nombre) {
   return MEMO[k];
 }
 
+/* El encabezado de una hoja tal como está escrito, pero sin espacios de
+   sobra. cabecera_() los recortaba y leer_/actualizar_ no, y esa diferencia
+   sola bastaba para romper una columna: si alguien deja un espacio al final
+   del título —cosa facilísima editando la planilla a mano—, cabecera_ la da
+   por encontrada y escribe ahí, mientras que leer_ arma la clave CON el
+   espacio y después nadie encuentra ese dato. El cambio se guardaba de
+   verdad, en la celda correcta, y la pantalla seguía mostrando lo de antes.
+   Recortando en los dos lados, leer y escribir vuelven a hablar de la misma
+   columna. */
+function cabDe_(v) {
+  return (v && v[0] ? v[0] : []).map(function (c) { return String(c).trim(); });
+}
+
 function leer_(nombre) {
   if (MEMO[nombre]) return MEMO[nombre];
   var v = crudo_(nombre);
   var out = [];
   if (v.length >= 2) {
-    var cab = v[0];
+    var cab = cabDe_(v);
     for (var i = 1; i < v.length; i++) {
       if (String(v[i].join('')).trim() === '') continue;
       var o = {};
@@ -317,7 +330,7 @@ function insertarVarias_(nombre, objs) {
    null si no hay que tocarla. Sin esto, corregir el precio de cinco noches
    costaba cinco viajes a Google en vez de uno. */
 function actualizarVarias_(nombre, decidir) {
-  var sh = hoja_(nombre), v = crudo_(nombre), cab = v[0] || [];
+  var sh = hoja_(nombre), v = crudo_(nombre), cab = cabDe_(v);
   if (!cab.length) return 0;
   var min = -1, max = -1, tocadas = 0;
   for (var i = 1; i < v.length; i++) {
@@ -350,7 +363,7 @@ function actualizarVarias_(nombre, decidir) {
 }
 
 function actualizar_(nombre, campoId, valorId, cambios) {
-  var sh = hoja_(nombre), v = crudo_(nombre), cab = v[0] || [];
+  var sh = hoja_(nombre), v = crudo_(nombre), cab = cabDe_(v);
   var ci = cab.indexOf(campoId);
   if (ci === -1) return false;
   for (var i = 1; i < v.length; i++) {
@@ -386,7 +399,7 @@ function guardarOCrear_(nombre, campoId, valorId, obj) {
 }
 
 function borrar_(nombre, campoId, valorId) {
-  var sh = hoja_(nombre), v = crudo_(nombre), ci = (v[0] || []).indexOf(campoId);
+  var sh = hoja_(nombre), v = crudo_(nombre), ci = cabDe_(v).indexOf(campoId);
   if (ci === -1) return;
   for (var i = v.length - 1; i >= 1; i--) if (String(v[i][ci]) === String(valorId)) sh.deleteRow(i + 1);
   olvidar_(nombre);
@@ -664,14 +677,18 @@ function letraCol_(n) {
 function verFilaReserva(token, idReserva) {
   var u = sesion_(token);
   exigirAdmin_(u);
-  var v = crudo_('Reservas'), cab = v[0] || [];
+  var v = crudo_('Reservas'), cab = cabDe_(v);
   var ci = cab.indexOf('id');
   for (var i = 1; i < v.length; i++) {
     if (String(v[i][ci]) !== String(idReserva)) continue;
     return {
       fila: i + 1,
       celdas: cab.map(function (c, j) {
+        // El tipo va junto al valor porque son dos problemas distintos y se
+        // ven iguales: un FALSE de verdad y el texto "false" se muestran
+        // idénticos en la planilla, y el segundo es verdadero para el código.
         return { columna: letraCol_(j + 1), nombre: c,
+                 tipo: (v[i][j] instanceof Date) ? 'fecha' : typeof v[i][j],
                  valor: String(v[i][j] === undefined ? '' : v[i][j]) };
       }).filter(function (x) { return x.nombre; })
     };
@@ -1420,22 +1437,50 @@ function guardarReserva(token, datos) {
     // mismo que marcarla desde la cuenta, incluido arrastrar los cargos de
     // alojamiento ya anotados. Si no, la reserva diría una cosa y su cuenta
     // otra distinta.
-    // La casilla de turista extranjero no es solo una etiqueta: cambia el
-    // precio, porque las tarifas de la casa llevan IVA incluido y al exento
-    // le corresponde el neto. Quien hace ese trabajo es marcarExentoIva(),
-    // así que acá NO se escribe la marca: se anota que cambió y se le pasa
-    // el encargo. Si se escribiera antes, marcarExentoIva() vería la marca
-    // ya puesta, creería que no cambió nada y no convertiría el precio.
+    /* La casilla de turista extranjero no es solo una etiqueta: cambia el
+       precio, porque las tarifas de la casa llevan IVA incluido y al exento le
+       corresponde el neto. Ese trabajo lo hace marcarExentoIva_(), y acá se le
+       pasa el encargo cuando la casilla se movió.
+
+       La casilla vive en DOS columnas: 'extranjero' —la del formulario— y
+       'exentoIva' —la de la cuenta—. Son el mismo dato mirado desde dos
+       pantallas y tienen que moverse juntas.
+
+       LO QUE SE ARREGLA ACÁ: para saber si la casilla había cambiado se
+       comparaba 'exentoIva' de antes contra lo que mandaba el formulario. Pero
+       la que la persona vio y movió en pantalla es 'extranjero'. Mientras las
+       dos columnas dicen lo mismo da igual; si se separan, la comparación
+       decide mirando el dato equivocado, y de ahí sale un precio convertido
+       —o sin convertir— cuando no correspondía.
+
+       Dicho con honestidad, porque se probó: contra el código anterior esta
+       comparación SOLA no alcanzaba para dar vuelta la casilla; las dos ramas
+       terminaban escribiendo lo que se había pedido. Se corrige porque está
+       mal igual y porque el precio sí dependía de ella. Lo que sí podía darla
+       vuelta era leer y escribir en columnas distintas, y eso se arregla en
+       cabDe_().
+
+       Ahora se compara contra 'extranjero', que es lo que se vio, y las dos
+       columnas se escriben SIEMPRE. Escribirlas de más no molesta a
+       marcarExentoIva_(): la conversión de precio la decide 'sinIva', no
+       'exentoIva'. */
     var esExtranjero = (datos.extranjero !== undefined)
       ? !!datos.extranjero : !!(antes && antes.extranjero);
     var cambio = Number(antes && antes.dolar) || dolarHoy_().valor;
     var cambiaExento = false;
     if (datos.extranjero !== undefined) {
-      cambiaExento = !!antes && (!!antes.exentoIva !== !!datos.extranjero);
-      if (!cambiaExento) {
-        campos.extranjero = esExtranjero;
-        campos.exentoIva = esExtranjero;
+      var eraExtranjero = !!(antes && antes.extranjero);
+      var eraExento = !!(antes && antes.exentoIva);
+      // Que las dos columnas digan cosas distintas es un síntoma, no algo
+      // normal: queda escrito para poder seguirle el rastro si vuelve a pasar.
+      if (antes && eraExtranjero !== eraExento) {
+        logCambio_(u.nombre, 'extranjero_descuadre', datos.id + ' · la planilla decía ' +
+          'extranjero=' + eraExtranjero + ' y exentoIva=' + eraExento +
+          '. Se emparejan en ' + esExtranjero + '.');
       }
+      cambiaExento = !!antes && (eraExtranjero !== esExtranjero);
+      campos.extranjero = esExtranjero;
+      campos.exentoIva = esExtranjero;
       // El cambio se guarda en cuanto la reserva es de un extranjero y todavía
       // no tiene uno propio. Si no quedara escrito, cada vez que se abriera se
       // convertiría con el dólar de ESE día y el precio se movería solo.
@@ -1485,7 +1530,13 @@ function guardarReserva(token, datos) {
       // se hacía sobre el precio viejo y después se le descontaba el IVA a
       // una cifra que ya venía sin él.
       if (cambiaExento) {
-        marcarExentoIva_(datos.id, !!datos.extranjero,
+        // El renglón del cambio se deja acá y no en marcarExentoIva_: como las
+        // dos columnas ya se escribieron arriba, allá la comparación no vería
+        // nada distinto y no quedaría rastro de quién movió la casilla.
+        logCambio_(u.nombre, 'extranjero', datos.id + ' · ' +
+          (antes && antes.extranjero ? 'sí' : 'no') + ' → ' + (esExtranjero ? 'sí' : 'no') +
+          ' · desde el formulario de reserva');
+        marcarExentoIva_(datos.id, esExtranjero,
                          antes ? String(antes.docTurismo || '') : '',
                          u.nombre, 'el formulario de reserva');
         olvidar_('Noches');
@@ -1496,12 +1547,15 @@ function guardarReserva(token, datos) {
          par de líneas más abajo. */
       if (datos.programa !== undefined &&
           String(antes && antes.programa || '') !== String(campos.programa || '')) {
-        recotizarPorPrograma_(datos.id, campos.programa,
-                              !!(antes && antes.exentoIva), u.nombre);
+        // Con el estado de exención de AHORA, no con el que tenía antes de
+        // guardar: si en este mismo guardado se destildó la casilla, recotizar
+        // con el valor viejo le volvería a descontar un IVA que ya no va.
+        recotizarPorPrograma_(datos.id, campos.programa, esExtranjero, u.nombre);
         olvidar_('Noches');
       }
       var totalNuevo = ajustarPlan_(campos, pedido, u.nombre);
-      return { id: datos.id, total: totalNuevo,
+      var aviso = comprobarCasilla_(datos.id, esExtranjero, u.nombre);
+      return { id: datos.id, total: totalNuevo, aviso: aviso,
                moneda: esExtranjero ? 'USD' : 'CLP', usd: aUsd_(totalNuevo, cambio) };
     }
 
@@ -1938,7 +1992,7 @@ function sincronizarNoches_(reserva, quien) {
 
 /* Borra de una vez todas las noches que sobran, en lugar de una por una. */
 function borrarNoches_(idReserva, fechas) {
-  var sh = hoja_('Noches'), v = crudo_('Noches'), cab = v[0] || [];
+  var sh = hoja_('Noches'), v = crudo_('Noches'), cab = cabDe_(v);
   var ci = cab.indexOf('idReserva'), cf = cab.indexOf('fecha');
   if (ci === -1 || cf === -1) return;
   for (var i = v.length - 1; i >= 1; i--) {
@@ -2477,6 +2531,52 @@ function postearNoche_(reserva, fecha, quien) {
   return true;
 }
 
+/* ---------- Después de guardar, mirar ----------
+   Esta casilla se dio vuelta sola tres veces en producción sin que se pudiera
+   reproducir en las pruebas, y las tres veces la persona guardó, cerró, volvió
+   a abrir y se la encontró marcada otra vez. Un error así no se pelea a
+   ciegas: se comprueba.
+
+   Se vuelve a leer la fila desde la planilla —no desde lo que esta ejecución
+   cree haber escrito— y se compara con lo que se pidió. Si calza, no pasa
+   nada y no cuesta nada. Si no calza, se corrige a mano, celda por celda, y
+   queda escrito en el registro qué columna estaba diciendo qué. Y si ni así
+   se deja escribir, la pantalla lo dice en vez de mostrar una reserva que
+   miente: es preferible un aviso feo a un huésped cobrado en la moneda
+   equivocada. */
+function comprobarCasilla_(idReserva, deberia, quien) {
+  olvidar_('Reservas');
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) return '';
+  if (!!r.extranjero === !!deberia && !!r.exentoIva === !!deberia) return '';
+
+  var v = crudo_('Reservas'), cab = cabDe_(v), ci = cab.indexOf('id');
+  var detalle = [];
+  for (var i = 1; i < v.length && ci > -1; i++) {
+    if (String(v[i][ci]) !== String(idReserva)) continue;
+    ['extranjero', 'exentoIva'].forEach(function (nombre) {
+      for (var c = 0; c < cab.length; c++) {
+        if (cab[c] !== nombre) continue;
+        detalle.push(nombre + '=' + JSON.stringify(v[i][c]) +
+                     ' (' + typeof v[i][c] + ', columna ' + letraCol_(c + 1) + ')');
+      }
+    });
+    break;
+  }
+  logCambio_(quien || '', 'casilla_rebelde', idReserva + ' · se pidió ' + !!deberia +
+    ' y la planilla quedó con ' + detalle.join(', ') + '. Se reescribe.');
+
+  actualizar_('Reservas', 'id', idReserva,
+              { extranjero: !!deberia, exentoIva: !!deberia });
+  olvidar_('Reservas');
+  var otra = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (otra && !!otra.extranjero === !!deberia) return '';
+
+  return 'Ojo: la reserva se guardó, pero la casilla de turista extranjero no ' +
+    'se dejó cambiar en la planilla (' + detalle.join(', ') + '). Está anotado en el ' +
+    'registro. Avísale a administración antes de cobrarle.';
+}
+
 /* Marca de turista extranjero exento de IVA. Se acredita con el pasaporte y
    la tarjeta de turismo que entrega la PDI al entrar al país.
 
@@ -2529,6 +2629,10 @@ function marcarExentoIva_(idReserva, exento, docTurismo, quien, origen) {
       (r.extranjero ? 'sí' : 'no') + ' → ' + (exento ? 'sí' : 'no') +
       ' · desde ' + String(origen || 'la cuenta del huésped'));
   }
+  // Y se comprueba que la planilla haya quedado como se pidió, igual que al
+  // guardar desde el formulario: la casilla se marca desde dos pantallas y las
+  // dos tienen que poder confiar en lo que dejaron escrito.
+  comprobarCasilla_(idReserva, !!exento, u.nombre);
   return true;
 }
 

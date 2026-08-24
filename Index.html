@@ -1169,6 +1169,25 @@
             <button class="btn gh sm" id="colProbar">Revisar las columnas</button>
             <div id="colCuerpo" style="margin-top:12px"></div>
           </div>
+
+          <!-- La trampa clásica de Apps Script: pegar el código nuevo en el
+               editor y guardar NO cambia lo que sirve la dirección /exec. Esa
+               dirección sirve la IMPLEMENTACIÓN, y si no se crea una versión
+               nueva sigue corriendo el código viejo para siempre. Y como los
+               dos archivos se quedan viejos a la vez, el aviso de "versiones
+               que no calzan" tampoco salta: los dos dicen lo mismo, solo que lo
+               de antes. Por eso la fecha se muestra sin que nadie la pida: es
+               la única forma de darse cuenta. -->
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+            <div class="ctaTit">Qué código está corriendo</div>
+            <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+              Guardar en Apps Script no basta: la dirección de la app sirve la
+              <b>implementación</b>. Si esta fecha no es la del último cambio, la app
+              está corriendo código viejo — anda a <b>Implementar → Gestionar
+              implementaciones</b>, editá la que está activa y elegí <b>Versión nueva</b>.
+            </p>
+            <div id="verServidor" class="muted" style="font-size:12.5px">Comprobando…</div>
+          </div>
         </div>
         <div class="err hide" id="cfgErr"></div>
       </div>
@@ -1356,6 +1375,11 @@
             <button class="hide" id="rEnviar">Copiar enlace de la ficha</button>
             <button class="hide" id="rFicha">Firmar aquí</button>
             <button class="hide" id="rCancelar">Cancelar reserva</button>
+            <!-- Para cuando una reserva hace algo que no se entiende: muestra
+                 la fila tal cual está escrita en la planilla, columna por
+                 columna. Es la única forma de saber si la pantalla miente o si
+                 lo que está mal es el dato. Solo administración. -->
+            <button class="hide" id="rFila">Ver la fila de la planilla</button>
             <button class="hide peligro" id="rBorrar">Eliminar</button>
           </div>
         </div>
@@ -1717,7 +1741,7 @@
 <!-- ==================== MODAL VER FICHA ==================== -->
 <div class="ov hide" id="mVer">
   <div class="mo" style="max-width:480px">
-    <header><h3>Ficha firmada</h3><button class="x" data-cerrar="mVer">×</button></header>
+    <header><h3 id="verTit">Ficha firmada</h3><button class="x" data-cerrar="mVer">×</button></header>
     <div class="body" id="verCuerpo"></div>
     <footer><button class="btn gh" data-cerrar="mVer">Cerrar</button></footer>
   </div>
@@ -1846,7 +1870,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-12';
+var VERSION_ESPERADA = '2026-09-13';
 
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
@@ -1957,6 +1981,14 @@ function plata(n){ return '$'+(Number(n)||0).toLocaleString('es-CL'); }
 /* "1 noche" y "2 noches", no "1 noche(s)": son textos que lee gente, no
    plantillas de formulario. */
 function plural(n, uno, varios){ return n+' '+(Number(n)===1 ? uno : varios); }
+
+/* Texto que va a salir dentro de HTML sin que se lo tome como HTML. Hace falta
+   donde se muestra un dato crudo de la planilla: ahí puede haber cualquier
+   cosa escrita a mano, y un "<" suelto rompería el resto de la pantalla. */
+function esc(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                             .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 function plataSimple(n){ return (Number(n)||0).toLocaleString('es-CL'); }
 function dolares(n){ return 'US$'+(Number(n)||0).toLocaleString('en-US',
   { minimumFractionDigits:2, maximumFractionDigits:2 }); }
@@ -2384,12 +2416,24 @@ function revisarVersion(){
   var av=$('avisoVersion');
   var corte=function(msg){ av.textContent=msg; av.classList.remove('hide'); };
   var viejo = function(){
+    var e=$('verServidor');
+    if(e) e.innerHTML='⚠️ El servidor no tiene marca de versión: está corriendo '+
+      'código anterior a esta pantalla.';
     corte('El código publicado es anterior a esta pantalla: ni siquiera tiene la '+
       'marca de versión. Vuelve a copiar Code.gs completo en Apps Script y crea '+
       'una VERSIÓN NUEVA de la implementación.');
   };
+  var mostrar=function(v){
+    var e=$('verServidor'); if(!e) return;
+    var igual = (v === VERSION_ESPERADA);
+    e.innerHTML = igual
+      ? '✅ Servidor y pantalla van juntos: <b>'+esc(v)+'</b>.'
+      : '⚠️ El servidor está en <b>'+esc(v||'una versión sin marca')+'</b> y esta '+
+        'pantalla en <b>'+VERSION_ESPERADA+'</b>.';
+  };
   var runner=google.script.run
     .withSuccessHandler(function(v){
+      mostrar(v);
       if(v === VERSION_ESPERADA){ av.classList.add('hide'); return; }
       corte('El código publicado es de otra versión ('+(v||'desconocida')+
         ') que esta pantalla ('+VERSION_ESPERADA+'). Vuelve a copiar Code.gs e '+
@@ -3054,7 +3098,7 @@ function nuevaReserva(rec, entrada, salida){
   PROG_ELEGIDO='';
   $('rErr').classList.add('hide');
   $('rFicha').classList.add('hide'); $('rCancelar').classList.add('hide');
-  $('rBorrar').classList.add('hide');
+  $('rBorrar').classList.add('hide'); $('rFila').classList.add('hide');
   $('rEnviar').classList.add('hide'); $('rVerFicha').classList.add('hide');
   $('rCuenta').classList.add('hide'); $('rAcom').classList.add('hide');
   $('rDocs').classList.add('hide');
@@ -3139,6 +3183,7 @@ function abrirReserva(r){
   $('rErr').classList.add('hide');
   $('rCancelar').classList.remove('hide');
   $('rBorrar').classList.toggle('hide', S.rol!=='admin');
+  $('rFila').classList.toggle('hide', S.rol!=='admin');
   // El abonado es el espejo de los pagos de la cuenta: se edita allá.
   var conPagos = (Number(r.anticipo)||0) > 0;
   $('rAnt').readOnly = conPagos;
@@ -3653,6 +3698,7 @@ $('rVerFicha').onclick=function(){
                  'border-bottom:1px solid var(--line2);font-size:13px">'+
                  '<span class="muted">'+t+'</span><b style="text-align:right">'+v+'</b></div>' : '';
     };
+    $('verTit').textContent='Ficha firmada';
     $('verCuerpo').innerHTML =
       fila('Nombre', f.nombre) + fila('Documento', f.documento) +
       fila('Nacionalidad', f.nacionalidad) + fila('Nacimiento', f.nacimiento) +
@@ -3687,6 +3733,14 @@ $('rGuardar').onclick=function(){
     programa: PROG_ELEGIDO, notas:$('rNot').value
   };
   ocupado('rGuardar', srv('guardarReserva')(datos)).then(function(d){
+    // Si el servidor comprobó lo que quedó guardado y no calzaba, eso no puede
+    // pasar como un "listo" verde: se queda en pantalla hasta que alguien lo
+    // lea. Cobrar en la moneda equivocada sale más caro que un modal abierto.
+    if(d && d.aviso){
+      $('rErr').textContent=d.aviso; $('rErr').classList.remove('hide');
+      recargarCal();
+      return;
+    }
     cerrar('mRes');
     toast((RES?'Reserva actualizada':'Reserva creada') +
           (d && d.total ? ' · '+(d.moneda==='USD' ? dolares(d.usd) : plata(d.total)) : ''));
@@ -3718,6 +3772,32 @@ $('rBorrar').onclick=function(){
 };
 
 $('rFicha').onclick=function(){ if(RES) abrirFicha(RES); };
+
+/* La fila cruda de la planilla, columna por columna. No se inventa nada ni se
+   interpreta: se muestra el nombre del encabezado, la letra de la columna y lo
+   que hay escrito en la celda, con su tipo. Cuando una reserva dice algo raro,
+   esto separa las dos preguntas que se confunden siempre: ¿está mal el dato, o
+   está mal lo que la pantalla hace con él? */
+$('rFila').onclick=function(){
+  if(!RES) return;
+  ocupado('rFila', srv('verFilaReserva')(RES.id)).then(function(d){
+    $('verTit').textContent='Fila '+d.fila+' de la planilla';
+    $('verCuerpo').innerHTML=
+      '<div class="muted" style="font-size:11.5px;margin-bottom:10px">'+
+      'Tal cual está guardado. Si algo no calza con lo que muestra la reserva, '+
+      'esto es lo que manda.</div>'+
+      d.celdas.map(function(c){
+        var vacia = c.valor==='';
+        return '<div style="display:flex;justify-content:space-between;gap:14px;'+
+          'padding:6px 0;border-bottom:1px solid var(--line2);font-size:12.5px">'+
+          '<span class="muted">'+c.columna+' · '+esc(c.nombre)+'</span>'+
+          '<b style="text-align:right;'+(vacia?'opacity:.4':'')+'">'+
+          (vacia?'—':esc(c.valor))+
+          '<span class="muted" style="font-weight:400"> · '+c.tipo+'</span></b></div>';
+      }).join('');
+    abrir('mVer');
+  }).catch(fallo);
+};
 
 /* El menú "Más" del pie: se cierra al elegir algo o al tocar fuera. */
 $('colProbar').onclick=function(){
