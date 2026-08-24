@@ -1890,7 +1890,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-17';
+var VERSION_ESPERADA = '2026-09-18';
 
 /* Qué versión contestó el servidor la última vez que se le preguntó. Se guarda
    para poder ponerlo en la pista de la tarjeta, que se dibuja después. */
@@ -3180,8 +3180,14 @@ function pintarLinkBooking(r){
   var url=r && r.linkBooking ? String(r.linkBooking) : '';
   if(!url){ a.classList.add('hide'); a.removeAttribute('href'); return; }
   a.href=url;
-  a.textContent='Reserva de Booking N° '+String(r.refExterna||'')+
-                '  ·  abrir en el extranet para ver el nombre';
+  // El rótulo lleva el canal de ESTA reserva. Decía "Booking" siempre, así que
+  // en una de Airbnb el enlace mentía sobre a dónde llevaba.
+  var canal = String(r.canal||'') === 'airbnb' ? 'Airbnb'
+            : String(r.canal||'') === 'vrbo'   ? 'Vrbo'
+            : String(r.canal||'') === 'expedia'? 'Expedia' : 'Booking';
+  var donde = canal === 'Booking' ? 'el extranet' : canal;
+  a.textContent='Reserva de '+canal+' N° '+String(r.refExterna||'')+
+                '  ·  abrir en '+donde+' para ver el nombre';
   a.classList.remove('hide');
 }
 
