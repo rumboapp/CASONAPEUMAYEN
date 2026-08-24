@@ -804,6 +804,51 @@
 
     <!-- ---------- Configuración ---------- -->
     <section id="v-cfg" class="hide">
+      <!-- ---------- Estado del sistema ----------
+           Esto vivía dentro de "Normas de convivencia", detrás del enlace de
+           ajustes avanzados: tres niveles de profundidad para lo único que
+           sirve cuando algo anda raro. Nadie lo encontró nunca, y una
+           herramienta que no se encuentra es una herramienta que no existe.
+           Ahora va primero, y esta tarjeta se abre sola: el resto arranca
+           plegado, pero acá el dato importa antes de que alguien pregunte. -->
+      <div class="card" id="cardEstado">
+        <h2>Estado del sistema</h2>
+        <p class="muted" style="font-size:13px;margin-bottom:12px">
+          Para mirar cuando algo se comporta raro: si guardas un cambio y no queda,
+          si una reserva dice algo que no cuadra, o después de subir código nuevo.
+        </p>
+
+        <!-- La trampa clásica de Apps Script: pegar el código nuevo en el editor
+             y guardar NO cambia lo que sirve la dirección /exec. Esa dirección
+             sirve la IMPLEMENTACIÓN, y si no se crea una versión nueva sigue
+             corriendo el código viejo para siempre. Y como los dos archivos se
+             quedan viejos a la vez, el aviso de "versiones que no calzan"
+             tampoco salta: los dos dicen lo mismo, solo que lo de antes. Por eso
+             la fecha se muestra sin que nadie la pida. -->
+        <div class="ctaTit">Qué código está corriendo</div>
+        <div id="verServidor" class="muted" style="font-size:13px;margin:6px 0 8px">Comprobando…</div>
+        <p class="muted" style="font-size:12px;margin-bottom:4px">
+          Guardar en Apps Script no basta: la dirección de la app sirve la
+          <b>implementación</b>. Si la fecha no es la del último cambio, la app está
+          corriendo código viejo — anda a <b>Implementar → Gestionar implementaciones</b>,
+          editá la que está activa y elegí <b>Versión nueva</b>.
+        </p>
+
+        <!-- Los datos se guardan y se leen por el NOMBRE de la columna. Dos
+             columnas con el mismo nombre hacen que un cambio se guarde en una y
+             se lea de la otra: se guarda, la pantalla lo confirma, y el dato
+             sigue igual por más veces que se intente. -->
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+          <div class="ctaTit">Si guardas un cambio y no queda</div>
+          <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+            Revisa los encabezados de la planilla. Dos columnas con el mismo nombre
+            hacen que el dato se guarde en una y se lea de la otra.
+          </p>
+          <button class="btn gh sm" id="colProbar">Revisar las columnas</button>
+          <div id="colCuerpo" style="margin-top:12px"></div>
+        </div>
+      </div>
+
       <!-- El cambio lo fijan ellos, así que va primero y no escondido. -->
       <div class="card">
         <h2>Valor del dólar</h2>
@@ -1154,39 +1199,6 @@
             </p>
             <button class="btn gh sm" id="docProbar">Probar la generación de documentos</button>
             <div id="docCuerpo" style="margin-top:12px"></div>
-          </div>
-
-          <!-- Los datos se guardan y se leen por el NOMBRE de la columna. Dos
-               columnas con el mismo nombre hacen que un cambio se guarde en una
-               y se lea de la otra: se guarda, la pantalla lo confirma, y el dato
-               sigue igual por más veces que se intente. -->
-          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
-            <div class="ctaTit">Si guardas un cambio y no queda</div>
-            <p class="muted" style="font-size:12.5px;margin-bottom:10px">
-              Revisa los encabezados de la planilla. Dos columnas con el mismo nombre
-              hacen que el dato se guarde en una y se lea de la otra.
-            </p>
-            <button class="btn gh sm" id="colProbar">Revisar las columnas</button>
-            <div id="colCuerpo" style="margin-top:12px"></div>
-          </div>
-
-          <!-- La trampa clásica de Apps Script: pegar el código nuevo en el
-               editor y guardar NO cambia lo que sirve la dirección /exec. Esa
-               dirección sirve la IMPLEMENTACIÓN, y si no se crea una versión
-               nueva sigue corriendo el código viejo para siempre. Y como los
-               dos archivos se quedan viejos a la vez, el aviso de "versiones
-               que no calzan" tampoco salta: los dos dicen lo mismo, solo que lo
-               de antes. Por eso la fecha se muestra sin que nadie la pida: es
-               la única forma de darse cuenta. -->
-          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
-            <div class="ctaTit">Qué código está corriendo</div>
-            <p class="muted" style="font-size:12.5px;margin-bottom:10px">
-              Guardar en Apps Script no basta: la dirección de la app sirve la
-              <b>implementación</b>. Si esta fecha no es la del último cambio, la app
-              está corriendo código viejo — anda a <b>Implementar → Gestionar
-              implementaciones</b>, editá la que está activa y elegí <b>Versión nueva</b>.
-            </p>
-            <div id="verServidor" class="muted" style="font-size:12.5px">Comprobando…</div>
           </div>
         </div>
         <div class="err hide" id="cfgErr"></div>
@@ -1872,6 +1884,10 @@
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
 var VERSION_ESPERADA = '2026-09-13';
 
+/* Qué versión contestó el servidor la última vez que se le preguntó. Se guarda
+   para poder ponerlo en la pista de la tarjeta, que se dibuja después. */
+var VER_SERVIDOR = '';
+
 var S = { token:null, user:null, rol:null };
 var CAL = { inicio:null, dias:14, recursos:[], recursosVer:null, reservas:[], programas:[], hoy:null, cfg:{}, dolar:null };
 
@@ -2416,6 +2432,7 @@ function revisarVersion(){
   var av=$('avisoVersion');
   var corte=function(msg){ av.textContent=msg; av.classList.remove('hide'); };
   var viejo = function(){
+    VER_SERVIDOR='⚠️ código viejo';
     var e=$('verServidor');
     if(e) e.innerHTML='⚠️ El servidor no tiene marca de versión: está corriendo '+
       'código anterior a esta pantalla.';
@@ -2424,12 +2441,13 @@ function revisarVersion(){
       'una VERSIÓN NUEVA de la implementación.');
   };
   var mostrar=function(v){
-    var e=$('verServidor'); if(!e) return;
     var igual = (v === VERSION_ESPERADA);
+    VER_SERVIDOR = igual ? esc(v) : '⚠️ código viejo';
+    var e=$('verServidor'); if(!e) return;
     e.innerHTML = igual
       ? '✅ Servidor y pantalla van juntos: <b>'+esc(v)+'</b>.'
       : '⚠️ El servidor está en <b>'+esc(v||'una versión sin marca')+'</b> y esta '+
-        'pantalla en <b>'+VERSION_ESPERADA+'</b>.';
+        'pantalla en <b>'+VERSION_ESPERADA+'</b>. La app está corriendo código viejo.';
   };
   var runner=google.script.run
     .withSuccessHandler(function(v){
@@ -4993,6 +5011,9 @@ function pistaTarjeta(titulo){
     return CFG.telegram.activo ? 'conectado'
          : CFG.telegram.conToken ? 'falta el grupo' : 'apagado';
   }
+  // La pista dice de una si el código publicado es el que corresponde, sin
+  // tener que abrir la tarjeta.
+  if(titulo==='Estado del sistema') return VER_SERVIDOR || '';
   return '';
 }
 
@@ -5019,9 +5040,14 @@ function plegarConfiguracion(){
         CFG_ABIERTAS[titulo]=abre;
         recordarAbiertas();
       };
-      // Todo cerrado la primera vez: la gracia es ver el índice completo de
-      // una mirada. Después manda lo que dejó abierto la última vez.
-      card.classList.toggle('abierta', !!CFG_ABIERTAS[titulo]);
+      /* Todo cerrado la primera vez: la gracia es ver el índice completo de
+         una mirada. Después manda lo que dejó abierto la última vez.
+         La excepción es el estado del sistema: se mira justamente cuando algo
+         anda raro, y en ese momento nadie va a andar abriendo tarjetas a ver
+         cuál era. Igual se puede cerrar, y queda cerrada. */
+      var abrePorDefecto = (titulo === 'Estado del sistema');
+      card.classList.toggle('abierta', CFG_ABIERTAS[titulo] === undefined
+        ? abrePorDefecto : !!CFG_ABIERTAS[titulo]);
     }
     var p=h2.querySelector('.pista');
     if(p) p.textContent=pistaTarjeta(titulo);
