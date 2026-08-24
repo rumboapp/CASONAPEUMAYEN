@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-16';
+var VERSION = '2026-09-17';
 
 function version() { return VERSION; }
 
@@ -5728,6 +5728,39 @@ function canalNombre_(canal) {
    feedExterno, porque una pieza puede tener calendarios de varios canales. */
 function feedCanalDe_(idRecurso) { return feedCanal_(bookingUrlDe_(idRecurso)); }
 
+/* ---------- Un día bloqueado NO es una reserva ----------
+   Airbnb manda las dos cosas por el mismo calendario: las reservas y los días
+   que el anfitrión tiene cerrados. Y los cierra por muchos motivos —una carpa
+   fuera de temporada, un día que uno se guarda, o simplemente la regla de
+   antelación, que deja el día de hoy sin poder reservarse—.
+
+   Tomarlos por reservas hace un desastre callado: aparece un huésped llamado
+   "Airbnb" ocupando una pieza que está libre, sale un aviso al grupo por algo
+   que no pasó, y un alojamiento cerrado todo el año queda vendido para
+   siempre. Todo eso sin que exista ninguna reserva en Airbnb.
+
+   Se distinguen porque la reserva viaja con su enlace y su código —el
+   "Reservation URL" y el HM…— y el bloqueo no trae nada, solo el título
+   diciendo que no está disponible.
+
+   ESTO VALE PARA AIRBNB Y NO PARA BOOKING. Booking usa "CLOSED - Not
+   available" para las fechas que SÍ vendió; aplicarle la misma regla sería
+   perder reservas de verdad, que es mil veces peor que un fantasma.
+
+   Y ante la duda, es reserva: un fantasma se ve y se borra; una reserva que no
+   entró se descubre cuando llegan dos personas a la misma pieza. */
+var TITULO_BLOQUEO_ = /(not available|unavailable|blocked|no disponible|bloqueado)/i;
+
+function eventoEsBloqueo_(ev, canal) {
+  if (canal !== 'airbnb') return false;
+  var todo = String(ev.resumen || '') + ' ' + String(ev.descripcion || '');
+  // Marcas de que hay una reserva de verdad detrás.
+  if (/reservation\s*url/i.test(todo)) return false;
+  if (/\bHM[A-Z0-9]{6,18}\b/.test(todo)) return false;
+  if (/reservations\/details\//i.test(todo)) return false;
+  return TITULO_BLOQUEO_.test(String(ev.resumen || ''));
+}
+
 function bookingNombre_(ev) {
   var s = String(ev.resumen || '').trim();
   if (!s) return '';
@@ -6045,6 +6078,7 @@ function sincronizarBooking() {
   if (!lock.tryLock(30000)) {
     return { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
              chocadas: 0, ecos: 0, revisadas: 0, numeradas: 0, sinCargar: 0,
+             bloqueos: 0, fantasmas: 0,
              avisos: ['El sistema estaba ocupado; se reintenta solo.'] };
   }
   try {
@@ -6054,6 +6088,7 @@ function sincronizarBooking() {
     // dejarlo escrito y que la pantalla lo muestre.
     var mal = { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
                 chocadas: 0, ecos: 0, revisadas: 0, numeradas: 0, sinCargar: 0,
+                bloqueos: 0, fantasmas: 0,
                 avisos: ['Falló la sincronización: ' + (e.message || e)] };
     try {
       actualizarConfig_('bookingUltima', JSON.stringify(mal));
@@ -6066,7 +6101,8 @@ function sincronizarBooking() {
 
 function bookingSincronizar_() {
   var res = { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
-              chocadas: 0, ecos: 0, revisadas: 0, numeradas: 0, sinCargar: 0, avisos: [] };
+              chocadas: 0, ecos: 0, revisadas: 0, numeradas: 0, sinCargar: 0,
+              bloqueos: 0, fantasmas: 0, avisos: [] };
   /* Una pieza puede tener varios calendarios, así que la vuelta es por
      CALENDARIO y no por pieza: cada uno se lee, se compara y se barre por
      separado. */
@@ -6110,12 +6146,23 @@ function bookingSincronizar_() {
       return;
     }
 
-    var eventos = icalLeer_(texto).filter(function (ev) {
+    var todos = icalLeer_(texto).filter(function (ev) {
       // Lo que ya terminó no se toca: Booking lo va sacando de su archivo y no
       // hay nada que hacer con una reserva del mes pasado.
       return ev.uid && ev.inicio && ev.fin && ev.fin > ev.inicio && ev.fin > hoy;
     });
+    /* Los días bloqueados se apartan acá: no son reservas y no tienen que
+       crear nada. Se guardan igual porque hay que hacer dos cosas con ellos:
+       contarlos como señal de vida del calendario —un archivo lleno de
+       bloqueos NO es un archivo vacío— y limpiar las reservas fantasma que
+       este mismo error dejó creadas antes. */
+    var eventos = [], bloqueos = [];
+    todos.forEach(function (ev) {
+      if (eventoEsBloqueo_(ev, feed.canal)) bloqueos.push(ev);
+      else eventos.push(ev);
+    });
     res.revisadas += eventos.length;
+    res.bloqueos = (res.bloqueos || 0) + bloqueos.length;
 
     /* Dos índices, y la diferencia importa.
 
@@ -6145,6 +6192,38 @@ function bookingSincronizar_() {
       var suyo = String(x.feedExterno || x.recurso);
       if (suyo === feed.clave) mias[u] = x;
       else if (tarea.solo && suyo === String(rec.id)) mias[u] = x;   // de las de antes
+    });
+
+    /* Las fantasmas que dejó el error de antes: reservas creadas a partir de un
+       bloqueo. Se van solas, sin que nadie tenga que salir a buscarlas.
+
+       Se BORRAN y no se cancelan porque nunca fueron una reserva: dejarlas
+       canceladas llenaría el historial de huéspedes de gente que no existió.
+       Pero solo si nadie las tocó —sin pagos, sin ficha firmada, sin
+       documentos—; si alguien trabajó encima, ahí hay algo que no entendemos y
+       se avisa en vez de borrar. */
+    bloqueos.forEach(function (ev) {
+      var fantasma = conocidas[ev.uid];
+      if (!fantasma) return;
+      var tocada = movimientosDe_(fantasma.id).length > 0 ||
+                   !!fantasma.checkInReal || !!fantasma.tokenFicha ||
+                   documentosDe_(fantasma.id).length > 0;
+      if (tocada) {
+        res.avisos.push(nombreRecurso_(fantasma.recurso) + ': la reserva de ' +
+          fantasma.huesped + ' salió de un día bloqueado en ' + feed.nombre +
+          ', pero ya tiene movimientos. NO se borró: revísala.');
+        return;
+      }
+      borrar_('Reservas', 'id', fantasma.id);
+      borrar_('Cuenta', 'idReserva', fantasma.id);
+      borrar_('Noches', 'idReserva', fantasma.id);
+      borrar_('Acompanantes', 'idReserva', fantasma.id);
+      delete conocidas[ev.uid];
+      delete mias[ev.uid];
+      res.fantasmas = (res.fantasmas || 0) + 1;
+      logCambio_(feed.nombre, 'bloqueo_limpiado', fantasma.id + ' · ' +
+        ymd_(fantasma.checkIn) + '→' + ymd_(fantasma.checkOut) +
+        ' · era un día bloqueado, no una reserva');
     });
 
     var vistos = {};
@@ -6218,9 +6297,12 @@ function bookingSincronizar_() {
         'Revísalo en el extranet cuando puedas.'
       ]);
     });
-    if (eventos.length) bookingVaciasBorrar_(feed.clave);
+    // Señal de vida: sirve cualquier evento, también un bloqueo. Un calendario
+    // con solo bloqueos está sano; el que hay que mirar con desconfianza es el
+    // que no trae absolutamente nada.
+    if (todos.length) bookingVaciasBorrar_(feed.clave);
     if (!vivas.length) return;
-    if (!eventos.length && bookingVaciasSumar_(feed.clave) < 2) {
+    if (!todos.length && bookingVaciasSumar_(feed.clave) < 2) {
       res.avisos.push(pieza + ': el calendario vino vacío. Si sigue así en la ' +
         'próxima revisión se cancela' + (vivas.length === 1 ? ' la reserva que hay'
                                                             : 'n las ' + vivas.length + ' que hay') +

@@ -1890,7 +1890,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-16';
+var VERSION_ESPERADA = '2026-09-17';
 
 /* Qué versión contestó el servidor la última vez que se le preguntó. Se guarda
    para poder ponerlo en la pista de la tarjeta, que se dibuja después. */
@@ -5286,6 +5286,13 @@ function pintarUltimaBooking(u){
   // parezca que la revisión no hizo nada, pero no es novedad de nadie.
   if(u.ecos)       partes.push(u.ecos+(u.ecos===1?' bloqueo nuestro de vuelta'
                                                  :' bloqueos nuestros de vuelta'));
+  // Los días bloqueados NO son reservas: se cuentan para que se vea que el
+  // calendario trajo algo, pero no ocupan ninguna pieza.
+  if(u.bloqueos)   partes.push(u.bloqueos+(u.bloqueos===1?' día bloqueado (no es reserva)'
+                                                         :' días bloqueados (no son reservas)'));
+  if(u.fantasmas)  partes.push(u.fantasmas+(u.fantasmas===1
+                                 ?' reserva falsa borrada, que salía de un bloqueo'
+                                 :' reservas falsas borradas, que salían de bloqueos'));
   if(u.numeradas)  partes.push(u.numeradas+' con su número de Booking');
   if(u.sinCargar)  partes.push(u.sinCargar+' que llegó por correo y no está acá');
   // Todo por textContent y no por innerHTML: acá adentro viajan mensajes de
