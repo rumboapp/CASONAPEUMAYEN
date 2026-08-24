@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-19';
+var VERSION = '2026-09-20';
 
 function version() { return VERSION; }
 
@@ -24,7 +24,7 @@ var HOJAS = {
   // 'modo' dice cómo se vende cada pieza: entera, por camas, o las dos cosas.
   // Se agrega al final y convive con el 'porCama' antiguo, que sigue sirviendo
   // de respaldo para las instalaciones que vienen de antes.
-  Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa', 'categoria', 'modo'],
+  Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa', 'categoria', 'modo', 'tipo', 'dormitorios'],
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
   // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
   // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
@@ -1247,13 +1247,39 @@ function recursos_() {
   return lista;
 }
 
+/* ---------- Qué clase de alojamiento es ----------
+   Una habitación, una carpa y una cabaña se reservan igual —una fila del
+   calendario, una reserva— pero no se describen igual. A una cabaña no se le
+   pregunta si el baño es compartido ni se le vende una cama suelta: lo que
+   importa es cuántos dormitorios tiene.
+
+   Las unidades cargadas antes no traen esta columna, así que se deduce del
+   sector, que es como estaban repartidas hasta ahora. Nada que migrar. */
+function tipoDe_(u) {
+  var t = String(u.tipo || '').trim();
+  if (t === 'habitacion' || t === 'carpa' || t === 'cabana') return t;
+  return String(u.grupo) === 'Glamping' ? 'carpa' : 'habitacion';
+}
+
+var TIPO_NOMBRE_ = { habitacion: 'Habitación', carpa: 'Carpa', cabana: 'Cabaña' };
+
 /* Si nadie escribió una categoría, se arma una razonable con lo que ya se
    sabe de la unidad, para que la búsqueda nunca quede vacía. */
 function categoriaPorDefecto_(u) {
-  if (String(u.grupo) === 'Glamping') return 'Carpa glamping';
+  var tipo = tipoDe_(u);
+  var cap = Number(u.capacidad) || 2;
+
+  if (tipo === 'cabana') {
+    // De una cabaña lo que se busca es cuánta gente entra y en cuántas
+    // piezas: si el baño es propio ya se da por sabido.
+    var d = Number(u.dormitorios) || 0;
+    return 'Cabaña' + (d ? ' de ' + plural_(d, 'dormitorio', 'dormitorios') : '') +
+           ' · hasta ' + cap;
+  }
+  if (tipo === 'carpa') return 'Carpa glamping';
+
   var bano = (u.bano || 'privado') === 'privado' ? 'con baño privado' : 'con baño compartido';
   if (u.porCama) return 'Compartida ' + bano;
-  var cap = Number(u.capacidad) || 2;
   return (cap >= 3 ? 'Familiar ' : cap === 1 ? 'Individual ' : 'Doble ') + bano;
 }
 
@@ -1288,6 +1314,7 @@ function recursosDesdePlanilla_() {
         id: u.id, idUnidad: u.id, grupo: u.grupo, unidad: u.nombre, nombre: '',
         precioBase: Number(u.precioBase) || 0, precioAlta: Number(u.precioAlta) || 0,
         capacidad: Number(u.capacidad) || 2, bano: u.bano || 'privado',
+        tipo: tipoDe_(u), dormitorios: Number(u.dormitorios) || 0,
         categoria: cat, modo: modo, esUnidad: true,
         // Vender la pieza completa deja sin cupo a todas sus camas.
         bloquea: modo === 'ambas' ? mias.map(function (c) { return c.id; }) : []
@@ -1299,6 +1326,7 @@ function recursosDesdePlanilla_() {
           id: c.id, idUnidad: u.id, grupo: u.grupo, unidad: u.nombre, nombre: c.nombre,
           precioBase: Number(c.precioBase) || 0, precioAlta: Number(c.precioAlta) || 0,
           capacidad: 1, bano: u.bano || 'compartido',
+          tipo: tipoDe_(u), dormitorios: 0,
           categoria: cat, modo: modo, esUnidad: false,
           // Vender una cama deja sin cupo a la pieza completa.
           bloquea: modo === 'ambas' ? [u.id] : []
@@ -6908,6 +6936,7 @@ function inventarioAdmin(token) {
       return {
         id: x.id, nombre: x.nombre, grupo: x.grupo, capacidad: Number(x.capacidad) || 0,
         bano: x.bano, porCama: !!x.porCama, modo: modoDe_(x),
+        tipo: tipoDe_(x), dormitorios: Number(x.dormitorios) || 0,
         categoria: String(x.categoria || '') || categoriaPorDefecto_(x),
         precioBase: Number(x.precioBase) || 0, precioAlta: Number(x.precioAlta) || 0,
         // El precio en dólares va SIN IVA: es lo que se le cotiza a un
@@ -6938,13 +6967,24 @@ function exigirAdmin_(u) {
 function guardarUnidad(token, d) {
   var u = sesion_(token);
   exigirAdmin_(u);
-  if (!String(d.nombre || '').trim()) throw new Error('Falta el nombre de la habitación o carpa.');
+  if (!String(d.nombre || '').trim()) throw new Error('Falta el nombre del alojamiento.');
 
+  var tipo = ['habitacion', 'carpa', 'cabana'].indexOf(String(d.tipo || '')) > -1
+    ? String(d.tipo) : 'habitacion';
   var modo = ['entera', 'camas', 'ambas'].indexOf(String(d.modo || '')) > -1
     ? String(d.modo) : (d.porCama ? 'camas' : 'entera');
+  /* Una cabaña y una carpa se venden enteras y con lo suyo propio. Se fuerza
+     acá y no solo en la pantalla: lo que llega del formulario puede venir de
+     cualquier lado, y una cabaña vendida "por cama" dejaría filas de camas
+     sueltas en el calendario sin nada detrás. */
+  if (tipo !== 'habitacion') modo = 'entera';
+
   var campos = {
     nombre: d.nombre, grupo: d.grupo || 'Lodge', capacidad: Number(d.capacidad) || 1,
-    bano: d.bano || 'privado',
+    bano: tipo === 'habitacion' ? (d.bano || 'privado') : 'privado',
+    tipo: tipo,
+    // Solo la cabaña se describe por dormitorios; en lo demás no significa nada.
+    dormitorios: tipo === 'cabana' ? Math.max(1, Number(d.dormitorios) || 1) : 0,
     modo: modo,
     // Se mantiene al día para no romper nada que todavía lo mire.
     porCama: modo === 'camas',
@@ -6952,7 +6992,9 @@ function guardarUnidad(token, d) {
     activa: d.activa === false ? false : true
   };
   if (modo !== 'camas' && !campos.precioBase) {
-    throw new Error('Para vender la habitación completa hay que ponerle precio.');
+    throw new Error('Para vender ' + (tipo === 'cabana' ? 'la cabaña'
+                                    : tipo === 'carpa' ? 'la carpa'
+                                    : 'la habitación completa') + ' hay que ponerle precio.');
   }
   campos.categoria = String(d.categoria || '').trim() || categoriaPorDefecto_(campos);
 

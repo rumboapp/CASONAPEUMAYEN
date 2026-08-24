@@ -1786,16 +1786,34 @@
   <div class="mo" style="max-width:460px">
     <header><h3 id="uniTit">Nuevo alojamiento</h3><button class="x" data-cerrar="mUni">×</button></header>
     <div class="body">
-      <div class="fld"><label>Nombre</label><input id="uNom" placeholder="Habitación 9 · Matrimonial, Carpa D…"></div>
+      <div class="fld"><label>Nombre</label><input id="uNom" placeholder="Habitación 9 · Matrimonial, Carpa D, Casa Peumayén…"></div>
+      <!-- Una habitación, una carpa y una cabaña se reservan igual, pero no se
+           describen igual: a una cabaña no se le pregunta si el baño es
+           compartido, se le pregunta cuántos dormitorios tiene. El tipo va
+           primero porque decide qué se pregunta después. -->
       <div class="g2">
+        <div class="fld"><label>Tipo</label>
+          <select id="uTipo">
+            <option value="habitacion">Habitación</option>
+            <option value="carpa">Carpa de glamping</option>
+            <option value="cabana">Cabaña o casa</option>
+          </select>
+        </div>
         <div class="fld"><label>Sector</label>
           <select id="uGrupo"><option>Lodge</option><option>Glamping</option></select>
         </div>
-        <div class="fld"><label>Baño</label>
+      </div>
+      <div class="g2">
+        <div class="fld" id="uBanoBox"><label>Baño</label>
           <select id="uBano"><option value="privado">Privado</option><option value="compartido">Compartido</option></select>
         </div>
+        <div class="fld hide" id="uDormBox"><label>Dormitorios</label>
+          <input id="uDorm" type="number" min="1" value="2">
+        </div>
+        <div class="fld"><label id="uCapRot">Capacidad (personas)</label>
+          <input id="uCap" type="number" min="1" value="2">
+        </div>
       </div>
-      <div class="fld"><label>Capacidad (personas)</label><input id="uCap" type="number" min="1" value="2"></div>
       <div class="fld">
         <label>Categoría</label>
         <input id="uCat" placeholder="Matrimonial con baño privado" list="listaCategorias">
@@ -1807,7 +1825,7 @@
           arma solo con la capacidad y el baño.
         </div>
       </div>
-      <div class="fld">
+      <div class="fld" id="uModoBox">
         <label>Cómo se vende</label>
         <select id="uModo">
           <option value="entera">Solo la habitación completa</option>
@@ -1904,7 +1922,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-19';
+var VERSION_ESPERADA = '2026-09-20';
 
 /* Qué reserva abrir apenas se entra, si se llegó desde el enlace de un aviso
    del grupo. Lo pone el servidor en la plantilla: dentro del marco de Apps
@@ -2664,7 +2682,12 @@ function pintarCal(animar){
     // Un punto de color dice si está limpia, sucia o bloqueada: sirve para
     // decidir al vuelo dónde meter a alguien que llega sin reserva.
     var aseo = (CAL.aseo && CAL.aseo[f.r.id]) || 'limpia';
-    var bano = f.r.bano==='privado'
+    // De una cabaña la marca útil no es el baño sino cuántos dormitorios
+    // tiene: es lo que decide si el grupo que llama entra o no.
+    var bano = f.r.tipo==='cabana'
+      ? '<span class="bano priv" title="Cabaña entera">'+
+        ((Number(f.r.dormitorios)||0) ? (f.r.dormitorios+' dorm') : 'casa')+'</span>'
+      : f.r.bano==='privado'
       ? '<span class="bano priv" title="Baño privado">priv</span>'
       : '<span class="bano comp" title="Baño compartido">comp</span>';
     // En el teléfono el nombre se apila en dos líneas: en una sola quedaba
@@ -2973,8 +2996,15 @@ function pintarFechas(){
   $('rFn').textContent = n ? (n===1?'1 noche':n+' noches') : '';
 }
 
+/* Cómo se describe un alojamiento en una línea. De una habitación lo que
+   importa es el baño; de una cabaña, cuántos dormitorios tiene. */
 function etiquetaBano(r){
-  return r.bano==='privado' ? 'baño privado' : 'baño compartido';
+  if(r && r.tipo==='cabana'){
+    var d=Number(r.dormitorios)||0;
+    return d ? plural(d,'dormitorio','dormitorios') : 'cabaña entera';
+  }
+  if(r && r.tipo==='carpa') return 'carpa';
+  return r && r.bano==='privado' ? 'baño privado' : 'baño compartido';
 }
 
 /* El máximo de personas lo pone la capacidad del alojamiento elegido. */
@@ -4883,7 +4913,15 @@ function cargarInventario(){
       d.innerHTML='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
         '<b style="font-size:13.5px">'+u.nombre+'</b>'+
         '<span class="tag '+(u.activa?'confirmada':'no_show')+'">'+(u.activa?u.grupo:'archivada')+'</span>'+
-        '<span class="muted" style="font-size:12px">'+u.capacidad+' pax · baño '+u.bano+' · '+precio+'</span>'+
+        // De una cabaña se dicen los dormitorios y no el baño: el baño es suyo
+        // y no hay nada que aclarar.
+        '<span class="muted" style="font-size:12px">'+u.capacidad+' pax · '+
+          (u.tipo==='cabana'
+             ? (Number(u.dormitorios)||0 ? plural(u.dormitorios,'dormitorio','dormitorios')
+                                         : 'cabaña entera')
+             : u.tipo==='carpa' ? 'carpa'
+             : 'baño '+u.bano)+
+          ' · '+precio+'</span>'+
         '<span style="margin-left:auto;display:flex;gap:6px" class="acc"></span></div>';
 
       // Las camas solo se muestran si la pieza se vende por cama. Si no,
@@ -4977,7 +5015,7 @@ function cambiarModo(u, modo){
                      'Sus camas quedan archivadas, no se borran. ¿Seguir?')) return;
 
   srv('guardarUnidad')({ id:u.id, nombre:u.nombre, grupo:u.grupo, capacidad:u.capacidad,
-      bano:u.bano, modo:modo, categoria:u.categoria,
+      bano:u.bano, tipo:u.tipo, dormitorios:u.dormitorios, modo:modo, categoria:u.categoria,
       precioBase:u.precioBase, precioAlta:u.precioAlta })
     .then(function(){
       // Al volver a vender por cama, las camas archivadas se reactivan: si
@@ -4998,14 +5036,18 @@ function abrirUnidad(u){
   UNI=u;
   $('uniTit').textContent = u ? 'Editar '+u.nombre : 'Nuevo alojamiento';
   $('uNom').value=u?u.nombre:'';
+  // Las unidades cargadas antes no traen tipo: se deduce del sector, que es
+  // como estaban repartidas hasta ahora.
+  $('uTipo').value=u?(u.tipo||(u.grupo==='Glamping'?'carpa':'habitacion')):'habitacion';
   $('uGrupo').value=u?u.grupo:'Lodge';
   $('uBano').value=u?u.bano:'privado';
   $('uCap').value=u?u.capacidad:2;
+  $('uDorm').value=u&&Number(u.dormitorios)?u.dormitorios:2;
   $('uModo').value=u?(u.modo||(u.porCama?'camas':'entera')):'entera';
   $('uCat').value=u?(u.categoria||''):'';
   $('uPb').value=u?u.precioBase:'';
   $('uPa').value=u?u.precioAlta:'';
-  $('uPrecios').classList.toggle('hide', $('uModo').value==='camas');
+  segunTipoUnidad();
   // Sugerir las categorías que ya existen, para no inventar una nueva por descuido.
   var dl=$('listaCategorias'); dl.innerHTML='';
   categoriasDelInventario().forEach(function(c){
@@ -5014,6 +5056,32 @@ function abrirUnidad(u){
   $('uErr').classList.add('hide');
   abrir('mUni');
 }
+
+/* El formulario se acomoda a lo que se está cargando.
+
+   A una cabaña no se le pregunta si el baño es compartido —tiene el suyo— ni
+   cómo se vende —entera y punto—: se le pregunta cuántos dormitorios tiene,
+   que es lo que la gente busca. A una carpa tampoco le corresponde venderse
+   por cama. Preguntar de más no es neutro: cada campo que sobra es uno que
+   alguien puede dejar mal puesto. */
+function segunTipoUnidad(){
+  var t = $('uTipo').value;
+  var cabana = (t === 'cabana'), pieza = (t === 'habitacion');
+
+  $('uDormBox').classList.toggle('hide', !cabana);
+  $('uBanoBox').classList.toggle('hide', !pieza);
+  $('uModoBox').classList.toggle('hide', !pieza);
+  $('uCapRot').textContent = cabana ? 'Capacidad total (personas)' : 'Capacidad (personas)';
+  $('uCat').placeholder = cabana ? 'Cabaña de 2 dormitorios · hasta 4'
+                        : t === 'carpa' ? 'Carpa glamping'
+                        : 'Matrimonial con baño privado';
+  // Una carpa o una cabaña van al sector Glamping por defecto, pero se puede
+  // cambiar: mañana puede haber una cabaña al lado del lodge.
+  if(!UNI && !pieza && $('uGrupo').value === 'Lodge') $('uGrupo').value = 'Glamping';
+  if(!pieza) $('uModo').value = 'entera';
+  $('uPrecios').classList.toggle('hide', $('uModo').value === 'camas');
+}
+$('uTipo').onchange = segunTipoUnidad;
 
 /* ==================================================================
    Configuración
@@ -5781,6 +5849,7 @@ $('uGuardar').onclick=function(){
   $('uErr').classList.add('hide');
   ocupado('uGuardar', srv('guardarUnidad')({
     id: UNI?UNI.id:'', nombre:$('uNom').value.trim(), grupo:$('uGrupo').value,
+    tipo:$('uTipo').value, dormitorios:+$('uDorm').value||0,
     bano:$('uBano').value, capacidad:+$('uCap').value||1, modo:$('uModo').value,
     categoria:$('uCat').value.trim(),
     precioBase:+$('uPb').value||0, precioAlta:+$('uPa').value||0
