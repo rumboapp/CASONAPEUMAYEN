@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-14';
+var VERSION = '2026-09-15';
 
 function version() { return VERSION; }
 
@@ -94,6 +94,46 @@ var COLS_TEXTO = {
   Log: ['fecha'],
   Config: ['valor']
 };
+
+/* ---------- Las columnas que son SÍ o NO ----------
+   Y por qué hace falta decirlo.
+
+   Una celda de la planilla no siempre devuelve lo que uno cree. Si la columna
+   tiene formato de texto —cosa que pasa sola al pegar datos, al escribir a
+   mano, o porque alguna vez se le puso ese formato—, Google no devuelve el
+   valor falso: devuelve la PALABRA "FALSE". Y en JavaScript cualquier texto
+   que no esté vacío vale por verdadero: !!'FALSE' es true.
+
+   El resultado es un error con una forma muy reconocible: marcar la casilla
+   funciona y desmarcarla no. Se escribe false, la planilla guarda "FALSE", y
+   al volver a leer sale que sí. Por más veces que se apriete Guardar, la
+   casilla vuelve a aparecer marcada, sin ningún error a la vista.
+
+   Por eso estas columnas se declaran, se normalizan al leer y se escriben
+   siempre como booleanos de verdad: 'sí' y 'no' no pueden depender de cómo
+   quedó formateada una celda. */
+var COLS_BOOL = {
+  Reservas: ['exentoIva', 'extranjero', 'sinIva'],
+  Unidades: ['porCama', 'activa'],
+  Camas: ['activa'],
+  Noches: ['ajustada'],
+  Cuenta: ['exento', 'anulado'],
+  Programas: ['activo']
+};
+
+/* Qué cuenta como sí. Va por lista blanca a propósito: en una columna de sí o
+   no, cualquier cosa que no sea afirmativa es un no. Al revés —descartar los
+   valores que suenan a "no"— siempre queda alguno afuera, y ese se cuela como
+   un sí. */
+var VALORES_SI_ = { 'true': 1, 'verdadero': 1, 'si': 1, 'sí': 1, 's': 1,
+                    '1': 1, 'yes': 1, 'y': 1, 'x': 1 };
+
+function esSi_(v) {
+  if (v === true) return true;
+  if (v === false || v === null || v === undefined || v === '') return false;
+  if (typeof v === 'number') return v !== 0;
+  return !!VALORES_SI_[String(v).trim().toLowerCase()];
+}
 
 /* El logo va incrustado en el propio código: así las tres pantallas lo
    muestran sin depender de ningún archivo externo ni de permisos de Drive. */
@@ -201,10 +241,18 @@ function leer_(nombre) {
   var out = [];
   if (v.length >= 2) {
     var cab = cabDe_(v);
+    // Las columnas de sí o no se normalizan acá, en la puerta de entrada, y no
+    // en cada lugar que las mira: son decenas, y basta con que a UNO se le
+    // olvide para que vuelva el error. Desde acá para adentro, una casilla es
+    // un booleano de verdad y !!campo vuelve a significar lo que parece.
+    var bools = COLS_BOOL[nombre] || null;
     for (var i = 1; i < v.length; i++) {
       if (String(v[i].join('')).trim() === '') continue;
       var o = {};
       for (var j = 0; j < cab.length; j++) o[cab[j]] = v[i][j];
+      if (bools) for (var b = 0; b < bools.length; b++) {
+        if (o[bools[b]] !== undefined) o[bools[b]] = esSi_(o[bools[b]]);
+      }
       out.push(o);
     }
   }
@@ -297,10 +345,21 @@ function cabecera_(nombre) {
   return MEMO['__cab_' + nombre];
 }
 
+/* El valor tal como tiene que quedar escrito en la celda. Para una columna de
+   sí o no siempre un booleano de verdad, nunca la palabra: si entra como texto
+   —"FALSE"—, al leerlo de vuelta cualquier texto vale por verdadero y el no se
+   convierte en sí. */
+function valorCelda_(nombre, columna, v) {
+  if (v === undefined || v === null) v = '';
+  var bools = COLS_BOOL[nombre];
+  if (bools && bools.indexOf(columna) > -1) return esSi_(v);
+  return v;
+}
+
 function insertar_(nombre, obj) {
   var cab = cabecera_(nombre);
   hoja_(nombre).appendRow(cab.map(function (c) {
-    return obj[c] === undefined || obj[c] === null ? '' : obj[c];
+    return valorCelda_(nombre, c, obj[c]);
   }));
   olvidar_(nombre);
 }
@@ -312,9 +371,7 @@ function insertarVarias_(nombre, objs) {
   if (objs.length === 1) return insertar_(nombre, objs[0]);
   var cab = cabecera_(nombre), sh = hoja_(nombre);
   var filas = objs.map(function (obj) {
-    return cab.map(function (c) {
-      return obj[c] === undefined || obj[c] === null ? '' : obj[c];
-    });
+    return cab.map(function (c) { return valorCelda_(nombre, c, obj[c]); });
   });
   var inicio = sh.getLastRow() + 1;
   if (inicio + filas.length - 1 <= sh.getMaxRows()) {
@@ -343,7 +400,7 @@ function actualizarVarias_(nombre, decidir) {
       // Igual que en actualizar_: a todas las columnas con ese nombre.
       for (var c = 0; c < cab.length; c++) {
         if (cab[c] !== k) continue;
-        v[i][c] = cambios[k];
+        v[i][c] = valorCelda_(nombre, k, cambios[k]);
         cols[c] = true;
       }
     }
@@ -413,7 +470,7 @@ function actualizar_(nombre, campoId, valorId, cambios) {
            planilla a mano— se guardaba en una columna y se leía de la otra. */
         for (var c = 0; c < cab.length; c++) {
           if (cab[c] !== k) continue;
-          fila[c] = cambios[k];
+          fila[c] = valorCelda_(nombre, k, cambios[k]);
           tocadas[c] = true;
         }
       });
@@ -689,7 +746,22 @@ function revisarColumnas(token) {
       });
   });
 
-  return { hallazgos: hallazgos, revisadas: Object.keys(HOJAS).length };
+  /* Y de paso se enderezan las casillas que quedaron guardadas como texto.
+     Va acá y no solo en setup() porque este botón es justamente el que se
+     aprieta cuando algo "se guarda y no queda", que es como se ve este error
+     desde afuera: la casilla se destilda, se guarda, y vuelve marcada. */
+  var casillas = enderezarCasillas_();
+  if (casillas) {
+    hallazgos.push({
+      hoja: 'Varias', tipo: 'casillas', columna: 'sí / no',
+      detalle: plural_(casillas, 'casilla estaba guardada', 'casillas estaban guardadas') +
+        ' como texto ("FALSE" en vez de falso). Así un NO se leía como un SÍ, que es ' +
+        'por qué destildar una casilla no quedaba. Ya está corregido.'
+    });
+  }
+
+  return { hallazgos: hallazgos, revisadas: Object.keys(HOJAS).length,
+           casillas: casillas };
 }
 
 /* Número de columna a letra, como lo muestra Google: 1 → A, 27 → AA. */
@@ -830,6 +902,12 @@ function setup() {
   var netas = descontarIvaPendiente_();
   if (netas) Logger.log('A ' + plural_(netas, 'reserva', 'reservas') +
     ' de turistas extranjeros se les descontó el IVA que tenían pendiente.');
+
+  // Las casillas que quedaron guardadas como texto —"FALSE" en vez de falso—
+  // se enderezan de una vez: mientras estén así, un no se lee como un sí.
+  var casillas = enderezarCasillas_();
+  if (casillas) Logger.log('Se enderezaron ' + plural_(casillas, 'casilla', 'casillas') +
+    ' que estaban guardadas como texto.');
 
   // El programa fijo de tinaja + sushi pasó a ser un programa más, de los que
   // se crean desde Configuración. Las reservas que lo tenían marcado se pasan
@@ -2083,6 +2161,50 @@ function asegurarPlan_(idReserva) {
   if (!plan.length) return 0;
   insertarVarias_('Noches', plan);
   return plan.length;
+}
+
+/* Endereza las casillas que quedaron guardadas como texto.
+
+   Recorre las columnas de sí o no de cada hoja y, donde encuentra la palabra
+   en vez del valor —"FALSE", "TRUE", "sí"—, escribe el booleano que
+   corresponde. De paso le saca a esas columnas el formato de texto, que es lo
+   que hacía que Google guardara la palabra en primer lugar: sin eso, el
+   arreglo dura hasta la próxima escritura.
+
+   Se llama desde setup(), así que corre una vez y deja los datos sanos. Lo que
+   ya está bien no se toca. */
+function enderezarCasillas_() {
+  var arregladas = 0;
+  Object.keys(COLS_BOOL).forEach(function (nombre) {
+    var sh = ss_().getSheetByName(nombre);
+    if (!sh) return;
+    var cab = cabecera_(nombre);
+    // Primero el formato: si la columna sigue siendo texto, el booleano que se
+    // escriba un renglón más abajo vuelve a guardarse como palabra.
+    COLS_BOOL[nombre].forEach(function (col) {
+      var c = cab.indexOf(col) + 1;
+      if (c > 0) {
+        try { sh.getRange(1, c, sh.getMaxRows(), 1).setNumberFormat('0.###############'); } catch (e) {}
+      }
+    });
+    var v = crudo_(nombre), real = cabDe_(v);
+    var idx = COLS_BOOL[nombre].map(function (col) { return real.indexOf(col); })
+                               .filter(function (c) { return c > -1; });
+    if (!idx.length || v.length < 2) return;
+    for (var i = 1; i < v.length; i++) {
+      var fila = v[i].slice(), tocadas = {};
+      idx.forEach(function (c) {
+        var actual = v[i][c];
+        if (actual === true || actual === false || actual === '') return;
+        fila[c] = esSi_(actual);
+        tocadas[c] = true;
+        arregladas++;
+      });
+      escribirCeldas_(sh, i + 1, fila, tocadas);
+    }
+    olvidar_(nombre);
+  });
+  return arregladas;
 }
 
 /* Les descuenta el IVA a las reservas de turistas extranjeros que todavía lo
