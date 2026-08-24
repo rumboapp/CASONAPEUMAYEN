@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-13';
+var VERSION = '2026-09-14';
 
 function version() { return VERSION; }
 
@@ -332,34 +332,69 @@ function insertarVarias_(nombre, objs) {
 function actualizarVarias_(nombre, decidir) {
   var sh = hoja_(nombre), v = crudo_(nombre), cab = cabDe_(v);
   if (!cab.length) return 0;
-  var min = -1, max = -1, tocadas = 0;
+  var filas = [], tocadas = 0;
   for (var i = 1; i < v.length; i++) {
     var obj = {};
     for (var j = 0; j < cab.length; j++) obj[cab[j]] = v[i][j];
     var cambios = decidir(obj);
     if (!cambios) continue;
+    var cols = {};
     for (var k in cambios) {
       // Igual que en actualizar_: a todas las columnas con ese nombre.
       for (var c = 0; c < cab.length; c++) {
-        if (cab[c] === k) v[i][c] = cambios[k];
+        if (cab[c] !== k) continue;
+        v[i][c] = cambios[k];
+        cols[c] = true;
       }
     }
+    filas.push({ n: i + 1, fila: v[i], cols: cols });
     tocadas++;
-    if (min === -1) min = i;
-    max = i;
   }
   if (!tocadas) return 0;
-  // Se escribe el bloque completo entre la primera y la última fila tocada:
-  // las de en medio se reescriben con su mismo contenido, que no cuesta nada.
-  var bloque = [];
-  for (var r = min; r <= max; r++) {
-    var fila = (v[r] || []).slice(0, cab.length);
-    while (fila.length < cab.length) fila.push('');
-    bloque.push(fila);
-  }
-  sh.getRange(min + 1, 1, bloque.length, cab.length).setValues(bloque);
+  /* Fila por fila y solo en sus columnas, por lo mismo que actualizar_: antes
+     se escribía el bloque entero entre la primera y la última fila tocada
+     —"las de en medio se reescriben con su mismo contenido, que no cuesta
+     nada"—, y sí costaba: ese "mismo contenido" salía de la foto leída al
+     empezar, así que devolvía atrás cualquier cambio que otra ejecución
+     hubiera hecho en esas filas mientras tanto. */
+  filas.forEach(function (f) { escribirCeldas_(sh, f.n, f.fila, f.cols); });
   olvidar_(nombre);
   return tocadas;
+}
+
+/* Escribe en una fila SOLO las columnas que cambiaron.
+
+   Antes se escribía la fila entera de una vez —"una llamada a Sheets en lugar
+   de una por campo"—, y ahí estaba el problema: la fila que se mandaba era la
+   FOTO que se había leído al empezar la operación. Todo lo que no cambiaba se
+   volvía a escribir con el valor de esa foto, así que cualquier cosa que
+   hubiera tocado esa fila entremedio quedaba deshecha sin que nadie se
+   enterara.
+
+   Y entremedio pasan cosas: guardar una reserva encadena cuatro escrituras
+   —los datos, la marca de exento, la conversión del alojamiento y el total de
+   las noches—, y además corren solos el sincronizador de Booking cada pocos
+   minutos, el bot de Telegram y el cierre de medianoche. Bastaba con que uno
+   de ellos escribiera en la misma fila entre la foto y la escritura para que
+   el cambio recién guardado volviera atrás. Desde afuera se veía como que la
+   app "no guarda": decía que sí, la planilla mostraba lo viejo, y repetirlo
+   no servía de nada porque el próximo intento tenía la misma carrera.
+
+   Ahora se tocan únicamente las celdas pedidas. Las columnas seguidas se
+   agrupan en un solo rango, así que en la práctica sigue siendo una o dos
+   llamadas y no una por campo. Lo que esta operación no cambió, no se toca. */
+function escribirCeldas_(sh, filaN, fila, tocadas) {
+  var cols = Object.keys(tocadas).map(Number).sort(function (a, b) { return a - b; });
+  if (!cols.length) return false;
+  var ini = cols[0], fin = cols[0];
+  for (var n = 1; n <= cols.length; n++) {
+    if (n < cols.length && cols[n] === fin + 1) { fin = cols[n]; continue; }
+    var trozo = [];
+    for (var c = ini; c <= fin; c++) trozo.push(fila[c] === undefined ? '' : fila[c]);
+    sh.getRange(filaN, ini + 1, 1, trozo.length).setValues([trozo]);
+    if (n < cols.length) { ini = cols[n]; fin = cols[n]; }
+  }
+  return true;
 }
 
 function actualizar_(nombre, campoId, valorId, cambios) {
@@ -368,25 +403,21 @@ function actualizar_(nombre, campoId, valorId, cambios) {
   if (ci === -1) return false;
   for (var i = 1; i < v.length; i++) {
     if (String(v[i][ci]) === String(valorId)) {
-      // Se escribe el bloque completo de la fila de una vez: una llamada a
-      // Sheets en lugar de una por cada campo que cambia.
       var fila = v[i].slice();
-      var cambio = false;
+      var tocadas = {};
       Object.keys(cambios).forEach(function (k) {
         /* A TODAS las columnas que se llamen así, no solo a la primera.
            Leer y escribir tienen que mirar lo mismo: al armar el objeto de una
            fila gana la ÚLTIMA columna con ese nombre, y al escribir se usaba la
            PRIMERA. Con un encabezado repetido —que puede aparecer editando la
-           planilla a mano— se guardaba en una columna y se leía de la otra, así
-           que el cambio parecía no ocurrir nunca por más veces que se apretara
-           Guardar. */
+           planilla a mano— se guardaba en una columna y se leía de la otra. */
         for (var c = 0; c < cab.length; c++) {
           if (cab[c] !== k) continue;
           fila[c] = cambios[k];
-          cambio = true;
+          tocadas[c] = true;
         }
       });
-      if (cambio) sh.getRange(i + 1, 1, 1, fila.length).setValues([fila]);
+      escribirCeldas_(sh, i + 1, fila, tocadas);
       olvidar_(nombre);
       return true;
     }
@@ -2587,7 +2618,20 @@ function comprobarCasilla_(idReserva, deberia, quien) {
    venden aparte y llevan IVA igual. */
 function marcarExentoIva(token, idReserva, exento, docTurismo) {
   var u = sesion_(token);
-  return marcarExentoIva_(idReserva, exento, docTurismo, u.nombre, 'la cuenta del huésped');
+  /* Con candado, igual que guardar una reserva: esto toca la reserva, sus
+     noches y su cuenta, una detrás de otra. Sin candado se podía cruzar con el
+     sincronizador de Booking o con alguien guardando desde el calendario, y
+     entonces cada uno escribía sobre lo que había leído el otro.
+     El candado va SOLO acá, en la puerta de entrada: marcarExentoIva_() lo
+     llama también guardarReserva(), que ya lo tiene tomado, y pedirlo dos
+     veces en la misma ejecución se queda esperándose a sí mismo. */
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    return marcarExentoIva_(idReserva, exento, docTurismo, u.nombre, 'la cuenta del huésped');
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /* El mismo trabajo, sin sesión y sabiendo desde qué pantalla se pidió: el
