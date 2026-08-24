@@ -454,6 +454,20 @@
     .mo header{padding:14px 16px}
     .mo .body{padding:14px 16px}
     .mo footer{padding:12px 16px;padding-bottom:max(12px, env(safe-area-inset-bottom))}
+    /* En el teléfono el pie se parte en dos renglones y el botón principal
+       quedaba solo, colgando a la derecha, con el resto arriba. Ahora las
+       acciones secundarias ocupan su renglón y el de guardar va entero abajo:
+       es el que se aprieta, y a una mano se llega mejor a lo ancho. */
+    .mo footer{flex-wrap:wrap;gap:10px}
+    /* Las acciones secundarias toman su propio renglón completo... */
+    .mo footer .left{flex:0 0 100%;margin-right:0;justify-content:flex-start}
+    /* ...y las de cerrar y guardar se reparten el de abajo, anchas y del
+       mismo tamaño. Si hay una sola, se lleva el renglón entero. */
+    .mo footer > .btn{flex:1 1 0;min-width:0}
+
+    /* El selector de rango medía 31px de alto: por debajo de lo que un dedo
+       acierta sin mirar. */
+    #cRng{min-height:40px}
 
     /* Todo lo que se toca tiene que ser tocable: 44px es el mínimo cómodo. */
     .btn{padding:12px 16px;font-size:14px}
@@ -1890,7 +1904,12 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-18';
+var VERSION_ESPERADA = '2026-09-19';
+
+/* Qué reserva abrir apenas se entra, si se llegó desde el enlace de un aviso
+   del grupo. Lo pone el servidor en la plantilla: dentro del marco de Apps
+   Script la página no puede leer la dirección del navegador. */
+var IR_A = '<?= irA ?>';
 
 /* Qué versión contestó el servidor la última vez que se le preguntó. Se guarda
    para poder ponerlo en la pista de la tarjeta, que se dibuja después. */
@@ -2213,6 +2232,29 @@ function iniciar(){
   opcionesDias();
   ver(mias[0].id);
   autoRefresco();
+  saltarAReserva();
+}
+
+/* Abre de una la reserva que venía en el enlace. Se pregunta al servidor en
+   qué fecha cae, porque puede ser de dentro de seis meses y el calendario
+   arranca en hoy: sin eso el enlace dejaría al huésped fuera de la pantalla. */
+function saltarAReserva(){
+  var id = IR_A; IR_A = '';        // una sola vez, no en cada recarga
+  if(!id) return;
+  srv('ubicarReserva')(id).then(function(u){
+    if(!u){ toast('Esa reserva ya no existe.', true); return; }
+    ver('cal');
+    CAL.inicio = mas(u.checkIn, -1);
+    recargarCal();
+    // El calendario tarda en volver: se espera a que la reserva esté cargada
+    // en vez de adivinar un tiempo fijo.
+    var intentos = 0;
+    var mirar = setInterval(function(){
+      var r = (CAL.reservas||[]).filter(function(x){ return x.id===id; })[0];
+      if(r){ clearInterval(mirar); abrirReserva(r); return; }
+      if(++intentos > 40){ clearInterval(mirar); toast('No se pudo abrir esa reserva.', true); }
+    }, 250);
+  }).catch(function(){ toast('No se pudo abrir esa reserva.', true); });
 }
 
 function ver(id){

@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-18';
+var VERSION = '2026-09-19';
 
 function version() { return VERSION; }
 
@@ -173,6 +173,13 @@ function doGet(e) {
     titulo = 'Casona Peumayén — Aseo';
   } else {
     pagina = HtmlService.createTemplateFromFile('Index');
+    /* ?r=<id> abre esa reserva apenas se entra. Es lo que hace que el aviso
+       del grupo lleve a la reserva y no solo a la app: quien lo recibe está
+       en el teléfono, y buscarla a mano en el calendario es justo lo que
+       hace que no la revise nadie.
+       Se limpia a caracteres de identificador y nada más: esto entra por la
+       dirección y termina dentro de la página. */
+    pagina.irA = String(p.r || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
     titulo = 'Casona Peumayén';
   }
 
@@ -5218,6 +5225,41 @@ function lineasReserva_(r) {
   ];
 }
 
+/* Los enlaces que van al final de un aviso de reserva.
+
+   Uno a la reserva acá y otro a la del canal, cuando lo hay. La gracia es que
+   el aviso llega al teléfono: si desde ahí no se puede llegar a la reserva de
+   un toque, hay que abrir la app, buscar el mes, encontrar la barra… y eso es
+   exactamente lo que hace que nadie la revise. */
+function lineasEnlaces_(r) {
+  var out = [];
+  var app = '';
+  try { app = ScriptApp.getService().getUrl(); } catch (e) {}
+  if (app) {
+    out.push('🔗 <a href="' + app + '?r=' + encodeURIComponent(r.id) +
+             '">Abrir en el PMS</a>');
+  }
+  var num = String(r.refExterna || '');
+  if (num) {
+    var canal = String(r.canal || '');
+    var link = bookingLinkReserva_(num, canal);
+    if (link) {
+      out.push('🔗 <a href="' + link + '">Ver en ' + escTg_(canalNombre_(canal)) +
+               '</a>  ·  N° ' + escTg_(num));
+    }
+  }
+  return out.length ? [''].concat(out) : [];
+}
+
+/* Dónde cae una reserva en el calendario, para poder saltar a ella desde el
+   enlace del aviso aunque sea de dentro de seis meses. */
+function ubicarReserva(token, idReserva) {
+  sesion_(token);
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) return null;
+  return { id: r.id, checkIn: ymd_(r.checkIn), recurso: String(r.recurso || '') };
+}
+
 /* ---------- Reserva nueva ---------- */
 function avisarReservaNueva_(idReserva, quien) {
   var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
@@ -5227,6 +5269,7 @@ function avisarReservaNueva_(idReserva, quien) {
               (r.extranjero ? '  ·  exenta de IVA' : ''));
   if (r.programaNombre) lineas.push('🎁 Programa: ' + escTg_(r.programaNombre));
   lineas.push('📲 ' + escTg_(r.canal || 'directo') + '  ·  la cargó ' + escTg_(quien));
+  lineas = lineas.concat(lineasEnlaces_(r));
   return avisar_('reserva', lineas.join('\n'));
 }
 
@@ -5253,6 +5296,9 @@ function avisarGrupoNuevo_(ids, quien) {
   lineas.push('💵 <b>' + plataTg_(r, total) + '</b> en total' +
               (r.extranjero ? '  ·  exenta de IVA' : ''));
   lineas.push('📲 ' + escTg_(r.canal || 'directo') + '  ·  lo cargó ' + escTg_(quien));
+  // Del grupo va el enlace de la primera: desde ahí se llega a las demás, y
+  // cuatro enlaces seguidos serían ruido.
+  lineas = lineas.concat(lineasEnlaces_(r));
   return avisar_('reserva', lineas.join('\n'));
 }
 
@@ -5840,6 +5886,9 @@ function avisarBookingNueva_(idReserva, numero, sinNombre, deQuien) {
   lineas.push('💵 ' + plataTg_(r, Number(r.total) || 0) + '  ·  a la tarifa de la casa');
   lineas.push('⚠️ Hay que revisarla: ' + escTg_(quien) + ' no manda el precio' +
               (sinNombre ? ' ni el nombre' : '') + ' ni cuántas personas vienen.');
+  // Los dos enlaces juntos: acá para corregirla, y allá para ver el nombre.
+  // Es justo lo que hay que hacer con una reserva que entró sola.
+  lineas = lineas.concat(lineasEnlaces_(r));
   return avisar_('booking', lineas.join('\n'));
 }
 
