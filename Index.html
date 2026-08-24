@@ -962,6 +962,14 @@
           habitación — al pegar cada dirección en su fila queda dicho qué pieza es.
         </p>
 
+        <p class="muted" style="font-size:12px;margin:12px 0 0">
+          <b>Una habitación puede tener varios.</b> Si la misma pieza está publicada en
+          Booking y en Airbnb, pega las dos direcciones: cada canal necesita la suya.
+          La app reconoce sola de cuál es cada una y anota en cada reserva por dónde
+          entró, así que si un canal deja de publicar algo, solo se revisan las reservas
+          de <em>ese</em> canal y las del otro no se tocan.
+        </p>
+
         <div id="impLista" style="margin-top:14px"></div>
 
         <div class="docFila" style="margin-top:12px;gap:10px;flex-wrap:wrap">
@@ -1882,7 +1890,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-15';
+var VERSION_ESPERADA = '2026-09-16';
 
 /* Qué versión contestó el servidor la última vez que se le preguntó. Se guarda
    para poder ponerlo en la pista de la tarjeta, que se dibuja después. */
@@ -1940,7 +1948,11 @@ var SEL = null;               // selección en curso sobre el calendario
 var RANGO = { in:null, out:null };
 var DRAG = null;
 
-var $ = function(id){ return document.getElementById(id); };
+/* Acepta un id o directamente el elemento: así ocupado() y compañía sirven
+   igual con un botón creado a mano, que no tiene id. */
+var $ = function(id){
+  return (id && id.nodeType === 1) ? id : document.getElementById(id);
+};
 var MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 var DIAS = ['dom','lun','mar','mié','jue','vie','sáb'];
 
@@ -5176,30 +5188,71 @@ function pintarBookingEntrada(d){
       t.className='ctaTit'; t.style.marginTop='12px'; t.textContent=grupo;
       c.appendChild(t);
     }
+    /* Un alojamiento puede estar publicado en Booking Y en Airbnb, así que
+       lleva una LISTA de calendarios y no uno solo. Los que ya están se ven
+       como filas con su canal y su botón de quitar; abajo queda siempre un
+       campo vacío para pegar el siguiente. */
     var f=document.createElement('div');
     f.className='docFila';
+    f.style.cssText='display:block;padding:10px 0';
+
     var et=document.createElement('b');
-    et.style.cssText='font-size:12.5px;min-width:150px';
+    et.style.cssText='font-size:12.5px;display:block;margin-bottom:6px';
     et.textContent=r.nombre;
+    f.appendChild(et);
+
+    (r.feeds||[]).forEach(function(feed){
+      var fila=document.createElement('div');
+      fila.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:5px';
+
+      var canal=document.createElement('span');
+      canal.style.cssText='flex:0 0 auto;min-width:62px;font-size:11.5px;font-weight:600';
+      canal.textContent=feed.canalNombre||'';
+      canal.title='Deducido de la propia dirección';
+
+      var dir=document.createElement('span');
+      dir.style.cssText='flex:1;min-width:0;font-size:11.5px;color:var(--tx3);'+
+        'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      dir.textContent=feed.url;
+      dir.title=feed.url;
+
+      var quitar=document.createElement('button');
+      quitar.className='btn gh sm';
+      quitar.textContent='Quitar';
+      quitar.style.cssText='flex:0 0 auto;font-size:11px;padding:3px 9px';
+      quitar.onclick=function(){
+        if(!confirm('¿Quitar el calendario de '+feed.canalNombre+' de '+r.nombre+'?\n\n'+
+                    'Las reservas que ya entraron por ahí se quedan como están.')) return;
+        ocupado(quitar, srv('bookingQuitarUrl')(r.id, feed.url))
+          .then(function(){ cargarBookingEntrada(); toast('Quitado · '+r.nombre); })
+          .catch(fallo);
+      };
+
+      fila.appendChild(canal); fila.appendChild(dir); fila.appendChild(quitar);
+      f.appendChild(fila);
+    });
+
+    var linea=document.createElement('div');
+    linea.style.cssText='display:flex;gap:8px;align-items:center';
     var inp=document.createElement('input');
-    inp.type='text'; inp.value=r.url||'';
-    inp.placeholder='Pega acá el calendario de Booking o de Airbnb';
-    inp.style.cssText='flex:1;min-width:180px;font-size:12px';
-    // Se guarda al salir del campo y solo si cambió: pegar una dirección y
-    // seguir a la siguiente no debería obligar a apretar nada.
-    inp.onchange=function(){
-      srv('bookingGuardarUrl')(r.id, inp.value)
-        .then(function(){ cargarBookingEntrada();
-                          toast(inp.value.trim() ? 'Guardada · '+r.nombre
-                                                 : 'Quitada · '+r.nombre); })
-        .catch(function(e){ inp.value=r.url||''; fallo(e); });
+    inp.type='text';
+    inp.placeholder=(r.feeds||[]).length
+      ? 'Agregar otro calendario de este alojamiento'
+      : 'Pega acá el calendario de Booking o de Airbnb';
+    inp.style.cssText='flex:1;min-width:160px;font-size:12px';
+    var agregar=function(){
+      var v=inp.value.trim();
+      if(!v) return;
+      srv('bookingAgregarUrl')(r.id, v)
+        .then(function(){ cargarBookingEntrada(); toast('Agregado · '+r.nombre); })
+        .catch(function(e){ fallo(e); inp.focus(); });
     };
-    // De qué canal es, deducido de la propia dirección.
-    var canal=document.createElement('span');
-    canal.className='quien';
-    canal.style.cssText='flex:0 0 auto;min-width:58px;text-align:right';
-    canal.textContent=r.canalNombre||'';
-    f.appendChild(et); f.appendChild(inp); f.appendChild(canal);
+    // Se guarda al salir del campo y también con Enter: pegar una dirección y
+    // seguir a la siguiente no debería obligar a apretar nada.
+    inp.onchange=agregar;
+    inp.onkeydown=function(e){ if(e.key==='Enter'){ e.preventDefault(); agregar(); } };
+    linea.appendChild(inp);
+    f.appendChild(linea);
     c.appendChild(f);
   });
 

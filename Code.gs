@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-15';
+var VERSION = '2026-09-16';
 
 function version() { return VERSION; }
 
@@ -5642,8 +5642,51 @@ function enlacesIcal(token) {
    leer el mismo archivo y, comparando UIDs, se sabe qué es nuevo, qué se movió
    de fecha y qué desapareció, sin crear dos veces lo mismo. */
 
+/* ---------- Un alojamiento, VARIOS calendarios ----------
+   Una pieza publicada en Booking y en Airbnb tiene dos calendarios que leer, y
+   antes cabía uno solo. La app es el centro: importa el de cada canal y exporta
+   uno que todos los canales importan. Con una sola ranura eso no cerraba, y las
+   reservas del segundo canal no llegaban nunca.
+
+   Se guardan en la misma clave de configuración, una por línea. Una dirección
+   sola ya es una lista de un elemento, así que lo que estaba pegado sigue
+   funcionando sin migrar nada. */
+function bookingUrlsDe_(idRecurso) {
+  return String(config_('bookingIcal_' + idRecurso, '') || '')
+    .split('\n')
+    .map(function (s) { return String(s).trim(); })
+    .filter(function (s) { return !!s; });
+}
+
+/* La primera, para lo que todavía habla de "el" calendario de una pieza. */
 function bookingUrlDe_(idRecurso) {
-  return String(config_('bookingIcal_' + idRecurso, '') || '').trim();
+  return bookingUrlsDe_(idRecurso)[0] || '';
+}
+
+/* Los calendarios de una pieza, cada uno con su canal y su CLAVE.
+
+   La clave importa más de lo que parece. Cuando una reserva desaparece de un
+   calendario, la app la cancela; con dos calendarios eso tiene que mirar solo
+   el calendario del que vino, o una reserva de Airbnb se cancelaría sola por
+   no aparecer en el de Booking. La clave es lo que queda escrito en la reserva
+   —columna feedExterno— y lo que hace que cada barrido se ocupe únicamente de
+   lo suyo.
+
+   Va por canal y no por posición en la lista: quitar una dirección y volver a
+   pegarla no puede dejar huérfanas a las reservas que entraron por ella. Si
+   alguien pega dos calendarios del mismo canal en la misma pieza —raro, pero
+   posible— el segundo lleva un número para no pisar al primero. */
+function feedsDe_(idRecurso) {
+  var vistos = {}, out = [];
+  bookingUrlsDe_(idRecurso).forEach(function (url) {
+    var canal = feedCanal_(url);
+    var n = (vistos[canal] = (vistos[canal] || 0) + 1);
+    out.push({
+      url: url, canal: canal, nombre: canalNombre_(canal),
+      clave: idRecurso + '·' + canal + (n > 1 ? n : '')
+    });
+  });
+  return out;
 }
 
 /* Los rótulos que ponen Booking y compañía cuando NO quieren decir quién es.
@@ -5680,7 +5723,9 @@ function canalNombre_(canal) {
   return CANAL_NOMBRE_[canal] || CANAL_NOMBRE_.otro;
 }
 
-/* El canal del calendario pegado a un alojamiento. */
+/* El canal del primer calendario de un alojamiento. Sirve para rotular, no
+   para decidir de dónde vino una reserva: eso lo dice su propia columna
+   feedExterno, porque una pieza puede tener calendarios de varios canales. */
 function feedCanalDe_(idRecurso) { return feedCanal_(bookingUrlDe_(idRecurso)); }
 
 function bookingNombre_(ev) {
@@ -5833,10 +5878,10 @@ function bookingAvisarChoque_(pieza, ev, num, detalle, res) {
    Reconocerla es escribirle el identificador del evento. Desde ese momento
    son la misma cosa: si Booking la mueve o la cancela, esta reserva la sigue,
    con su ficha firmada y su cuenta intactas. */
-function bookingAdoptar_(ya, ev, rec, res, num) {
+function bookingAdoptar_(ya, ev, rec, feed, res, num) {
   var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
   var ci = ymd_(ya.checkIn), co = ymd_(ya.checkOut);
-  var cambios = { uidExterno: ev.uid, feedExterno: rec.id };
+  var cambios = { uidExterno: ev.uid, feedExterno: feed.clave };
   if (num && !String(ya.refExterna || '')) cambios.refExterna = num;
 
   // Si el que la cargó a mano le puso otras fechas —el correo de Booking solo
@@ -5865,10 +5910,12 @@ function bookingAdoptar_(ya, ev, rec, res, num) {
 }
 
 /* ---------- Crear lo que Booking vendió ---------- */
-function bookingCrear_(ev, rec, res) {
+function bookingCrear_(ev, rec, feed, res) {
   var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
-  var canal = feedCanalDe_(rec.id);
-  var deQuien = canalNombre_(canal);
+  // El canal viene del calendario que se está leyendo, no de la pieza: una
+  // pieza puede tener el de Booking y el de Airbnb, y la reserva es de uno.
+  var canal = feed.canal;
+  var deQuien = feed.nombre;
   var num = bookingNumero_(ev, canal);
   var choques = bookingChoques_(rec, ev);
 
@@ -5880,7 +5927,7 @@ function bookingCrear_(ev, rec, res) {
     var suelta = c && String(c.recurso) === String(rec.id) && !String(c.uidExterno || '');
 
     if (suelta && String(c.canal || '') === canal) {
-      return bookingAdoptar_(c, ev, rec, res, num);
+      return bookingAdoptar_(c, ev, rec, feed, res, num);
     }
 
     /* El eco. Le cerramos el día a Booking porque acá hay una reserva directa,
@@ -5918,7 +5965,7 @@ function bookingCrear_(ev, rec, res) {
       ' descuenta su comisión' + (nombre ? '' : ', ' + deQuien + ' no mandó el nombre') +
       ', y las personas quedaron en 1 porque el calendario no lo dice.',
     creado: ahora_(), creadoPor: deQuien, tokenFicha: '',
-    uidExterno: ev.uid, refExterna: num, feedExterno: rec.id
+    uidExterno: ev.uid, refExterna: num, feedExterno: feed.clave
   });
   insertarVarias_('Noches', plan.noches);
   res.creadas++;
@@ -6020,23 +6067,37 @@ function sincronizarBooking() {
 function bookingSincronizar_() {
   var res = { cuando: ahora_(), creadas: 0, adoptadas: 0, movidas: 0, canceladas: 0,
               chocadas: 0, ecos: 0, revisadas: 0, numeradas: 0, sinCargar: 0, avisos: [] };
-  var conUrl = recursos_().filter(function (r) { return !!bookingUrlDe_(r.id); });
-  if (!conUrl.length) {
-    res.avisos.push('Todavía no hay ninguna dirección de Booking pegada.');
+  /* Una pieza puede tener varios calendarios, así que la vuelta es por
+     CALENDARIO y no por pieza: cada uno se lee, se compara y se barre por
+     separado. */
+  var tareas = [];
+  recursos_().forEach(function (rec) {
+    var feeds = feedsDe_(rec.id);
+    feeds.forEach(function (feed) {
+      tareas.push({ rec: rec, feed: feed, solo: feeds.length === 1 });
+    });
+  });
+  if (!tareas.length) {
+    res.avisos.push('Todavía no hay ninguna dirección de calendario pegada.');
     actualizarConfig_('bookingUltima', JSON.stringify(res));
     bookingCorreoDeLaPasada_(res);
     return res;
   }
+  res.calendarios = tareas.length;
   var hoy = hoy_();
 
-  conUrl.forEach(function (rec) {
-    var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '');
+  tareas.forEach(function (tarea) {
+    var rec = tarea.rec, feed = tarea.feed;
+    // El rótulo lleva el canal: con dos calendarios en la misma pieza, "no se
+    // pudo leer el calendario" sin decir cuál no sirve de nada.
+    var pieza = rec.unidad + (rec.nombre ? ' — ' + rec.nombre : '') +
+                (tarea.solo ? '' : ' (' + feed.nombre + ')');
     var texto;
     try {
-      var r = UrlFetchApp.fetch(bookingUrlDe_(rec.id),
+      var r = UrlFetchApp.fetch(feed.url,
                                 { muteHttpExceptions: true, followRedirects: true });
       if (r.getResponseCode() !== 200) {
-        res.avisos.push(pieza + ': Booking contestó ' + r.getResponseCode() + '.');
+        res.avisos.push(pieza + ': ' + feed.nombre + ' contestó ' + r.getResponseCode() + '.');
         return;
       }
       texto = r.getContentText();
@@ -6066,21 +6127,42 @@ function bookingSincronizar_() {
        'mias' son las que llegaron por ESTE calendario —de ahí la columna
        feedExterno, que no cambia aunque la reserva se mude de pieza—, y sirve
        solo para el barrido de cancelaciones: desaparecer de este archivo dice
-       algo de estas y de ninguna otra. */
+       algo de estas y de ninguna otra. Con dos calendarios en la misma pieza
+       esto es lo que evita que una reserva de Airbnb se cancele sola por no
+       estar en el de Booking.
+
+       Las reservas de antes de que existieran varios calendarios tienen escrito
+       el id de la pieza en vez de la clave del calendario. Se aceptan como
+       propias solo si la pieza tiene UN calendario, que es el único caso en que
+       no hay ambigüedad; con dos, se dejan fuera del barrido hasta que la
+       primera pasada les escriba la clave que les corresponde. Nunca se cancela
+       por una duda. */
     var conocidas = {}, mias = {};
     leer_('Reservas').forEach(function (x) {
       var u = String(x.uidExterno || '');
       if (!u) return;
       conocidas[u] = x;
-      var feed = String(x.feedExterno || x.recurso);
-      if (feed === String(rec.id)) mias[u] = x;
+      var suyo = String(x.feedExterno || x.recurso);
+      if (suyo === feed.clave) mias[u] = x;
+      else if (tarea.solo && suyo === String(rec.id)) mias[u] = x;   // de las de antes
     });
 
     var vistos = {};
     eventos.forEach(function (ev) {
       vistos[ev.uid] = true;
-      if (conocidas[ev.uid]) bookingActualizar_(conocidas[ev.uid], ev, rec, res);
-      else bookingCrear_(ev, rec, res);
+      var ya = conocidas[ev.uid];
+      if (ya) {
+        /* Se le deja escrito de qué calendario vino. Para las reservas viejas
+           esto es la migración: en la primera pasada quedan marcadas y desde
+           ahí el barrido sabe cuáles son suyas sin tener que suponer. */
+        if (String(ya.feedExterno || '') !== feed.clave) {
+          actualizar_('Reservas', 'id', ya.id, { feedExterno: feed.clave });
+          ya.feedExterno = feed.clave;
+        }
+        bookingActualizar_(ya, ev, rec, res);
+      } else {
+        bookingCrear_(ev, rec, feed, res);
+      }
     });
 
     /* Lo que desapareció del calendario: Booking lo canceló.
@@ -6124,8 +6206,8 @@ function bookingSincronizar_() {
     });
 
     enCurso.forEach(function (x) {
-      res.avisos.push(nombreRecurso_(x.recurso) + ': Booking dejó de publicar la ' +
-        'reserva de ' + x.huesped + ', que está alojado. NO se canceló.');
+      res.avisos.push(nombreRecurso_(x.recurso) + ': ' + feed.nombre + ' dejó de ' +
+        'publicar la reserva de ' + x.huesped + ', que está alojado. NO se canceló.');
       if (bookingYaAvisado_('encurso@' + String(x.uidExterno))) return;
       bookingAnotarAviso_('encurso@' + String(x.uidExterno));
       avisarBookingCambio_('❓ <b>Booking dejó de publicar una reserva en curso</b>', [
@@ -6136,16 +6218,16 @@ function bookingSincronizar_() {
         'Revísalo en el extranet cuando puedas.'
       ]);
     });
-    if (eventos.length) bookingVaciasBorrar_(rec.id);
+    if (eventos.length) bookingVaciasBorrar_(feed.clave);
     if (!vivas.length) return;
-    if (!eventos.length && bookingVaciasSumar_(rec.id) < 2) {
+    if (!eventos.length && bookingVaciasSumar_(feed.clave) < 2) {
       res.avisos.push(pieza + ': el calendario vino vacío. Si sigue así en la ' +
         'próxima revisión se cancela' + (vivas.length === 1 ? ' la reserva que hay'
                                                             : 'n las ' + vivas.length + ' que hay') +
         '. Aprieta "Revisar ahora" otra vez si quieres que sea al tiro.');
       return;
     }
-    bookingVaciasBorrar_(rec.id);
+    bookingVaciasBorrar_(feed.clave);
     vivas.forEach(function (x) {
       actualizar_('Reservas', 'id', x.id, { estado: 'cancelada' });
       res.canceladas++;
@@ -6192,31 +6274,89 @@ function bookingEstado(token) {
     minutos: BOOKING_MINUTOS_,
     ultima: ultima,
     recursos: recursos_().map(function (r) {
+      var feeds = feedsDe_(r.id);
       return {
         id: r.id,
         nombre: r.unidad + (r.nombre ? ' — ' + r.nombre : ''),
         grupo: r.grupo,
-        url: bookingUrlDe_(r.id),
-        canal: bookingUrlDe_(r.id) ? feedCanalDe_(r.id) : '',
-        canalNombre: bookingUrlDe_(r.id) ? canalNombre_(feedCanalDe_(r.id)) : ''
+        feeds: feeds.map(function (f) {
+          return { url: f.url, canal: f.canal, canalNombre: f.nombre };
+        }),
+        // Lo de antes, para que una pantalla vieja no se quede en blanco
+        // mientras no se copie el Index nuevo.
+        url: feeds.length ? feeds[0].url : '',
+        canal: feeds.length ? feeds[0].canal : '',
+        canalNombre: feeds.length ? feeds[0].nombre : ''
       };
     })
   };
 }
 
-function bookingGuardarUrl(token, idRecurso, url) {
+/* Deja una dirección lista para guardar, o dice por qué no sirve. */
+function bookingNormalizarUrl_(url) {
+  var v = String(url || '').trim();
+  if (!v) return '';
+  // webcal:// es la misma dirección con otro nombre; UrlFetchApp solo entiende
+  // http. Booking y Airbnb a veces la ofrecen así y pegarla tal cual no
+  // funcionaría.
+  if (/^webcal:\/\//i.test(v)) v = 'https://' + v.slice(9);
+  if (!/^https?:\/\//i.test(v)) {
+    throw new Error('Esa no parece una dirección de calendario. Tiene que empezar con https://');
+  }
+  return v;
+}
+
+function bookingGuardarUrls_(idRecurso, urls, quien, que) {
+  actualizarConfig_('bookingIcal_' + idRecurso, urls.join('\n'));
+  logCambio_(quien, 'booking_url', idRecurso + ' · ' + que +
+    ' · quedan ' + plural_(urls.length, 'calendario', 'calendarios'));
+  return true;
+}
+
+/* Agrega un calendario a una pieza, sin tocar los que ya tenía. */
+function bookingAgregarUrl(token, idRecurso, url) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var v = bookingNormalizarUrl_(url);
+  if (!v) throw new Error('Falta la dirección del calendario.');
+  var urls = bookingUrlsDe_(idRecurso);
+  if (urls.indexOf(v) > -1) {
+    throw new Error('Esa dirección ya está puesta en este alojamiento.');
+  }
+  /* La misma dirección en dos piezas distintas es casi siempre un copiar y
+     pegar mal hecho, y el daño es feo: cada reserva del calendario entraría
+     dos veces, en dos piezas, y las dos se verían vendidas. Mejor pararlo acá
+     que explicarlo después. */
+  var enOtra = recursos_().filter(function (r) {
+    return String(r.id) !== String(idRecurso) && bookingUrlsDe_(r.id).indexOf(v) > -1;
+  })[0];
+  if (enOtra) {
+    throw new Error('Esa misma dirección ya está en ' +
+      (enOtra.unidad + (enOtra.nombre ? ' — ' + enOtra.nombre : '')) +
+      '. Cada alojamiento necesita el calendario de SU anuncio: si pegas el ' +
+      'mismo en dos, las reservas entrarían duplicadas.');
+  }
+  urls.push(v);
+  return bookingGuardarUrls_(idRecurso, urls, u.nombre, 'agregado ' + feedCanal_(v));
+}
+
+/* Quita uno y deja los demás. */
+function bookingQuitarUrl(token, idRecurso, url) {
   var u = sesion_(token);
   exigirAdmin_(u);
   var v = String(url || '').trim();
-  // webcal:// es la misma dirección con otro nombre; UrlFetchApp solo entiende
-  // http. Booking a veces la ofrece así y pegarla tal cual no funcionaría.
-  if (/^webcal:\/\//i.test(v)) v = 'https://' + v.slice(9);
-  if (v && !/^https?:\/\//i.test(v)) {
-    throw new Error('Esa no parece una dirección de calendario. Tiene que empezar con https://');
-  }
-  actualizarConfig_('bookingIcal_' + idRecurso, v);
-  logCambio_(u.nombre, 'booking_url', idRecurso + (v ? ' puesta' : ' borrada'));
-  return true;
+  var urls = bookingUrlsDe_(idRecurso).filter(function (x) { return x !== v; });
+  return bookingGuardarUrls_(idRecurso, urls, u.nombre, 'quitado ' + feedCanal_(v));
+}
+
+/* La de antes, que dejaba UNA dirección y borraba lo demás. Se mantiene para
+   que una pantalla que todavía no se haya copiado siga funcionando. */
+function bookingGuardarUrl(token, idRecurso, url) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  var v = bookingNormalizarUrl_(url);
+  return bookingGuardarUrls_(idRecurso, v ? [v] : [], u.nombre,
+                             v ? 'puesta una sola' : 'borradas todas');
 }
 
 function bookingSincronizarAhora(token) {
