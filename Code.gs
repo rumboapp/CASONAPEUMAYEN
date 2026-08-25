@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-20';
+var VERSION = '2026-09-21';
 
 function version() { return VERSION; }
 
@@ -1362,6 +1362,35 @@ function versionRecursos_() {
   return lista.length + '.' + h;
 }
 
+/* Una reserva tal como la quiere la pantalla. Vive aparte porque la pide el
+   calendario para todas las del rango y también ubicarReserva() para una
+   sola: si se armaran en dos lugares, tarde o temprano dirían cosas
+   distintas de la misma reserva. */
+function reservaParaPantalla_(r, ci, co, firmada, docs) {
+  return {
+      id: r.id, recurso: r.recurso, idUnidad: r.idUnidad, huesped: r.huesped,
+      telefono: String(r.telefono || ''), email: r.email || '', canal: r.canal,
+      firmada: !!firmada,
+      checkIn: ci, checkOut: co,
+      estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
+      programa: String(r.programa || ''),
+      programaNombre: String(r.programaNombre || ''),
+      refExterna: String(r.refExterna || ''),
+      // El enlace lo arma el servidor y no la pantalla: necesita el
+      // identificador del establecimiento, que solo vive acá. Armándolo en el
+      // navegador salía sin esa parte y Booking no sabía qué ficha abrir.
+      linkBooking: r.refExterna
+        ? bookingLinkReserva_(String(r.refExterna), String(r.canal || '')) : '',
+      notas: r.notas || '', grupo: String(r.grupo || ''),
+      pax: Number(r.pax) || 1, ninos: Number(r.ninos) || 0,
+      extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
+      // Si al total ya se le descontó el IVA. La pantalla no puede
+      // deducirlo del número: $45.000 puede ser con o sin impuesto.
+      sinIva: !!r.sinIva,
+      docs: estadoDocs_(docs, !!r.extranjero)
+  };
+}
+
 /* Todo lo que la pantalla del calendario necesita, en una sola llamada. */
 function cargarTablero(token, desde, hasta, versionQueTiene) {
   sesion_(token);
@@ -1383,28 +1412,8 @@ function cargarTablero(token, desde, hasta, versionQueTiene) {
     var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
     if (!ci || !co) { ilegibles++; return; }
     if (!chocan_(ci, co, d, h)) return;
-    reservas.push({
-      id: r.id, recurso: r.recurso, idUnidad: r.idUnidad, huesped: r.huesped,
-      telefono: String(r.telefono || ''), email: r.email || '', canal: r.canal,
-      firmada: !!firmadas[r.id],
-      checkIn: ci, checkOut: co,
-      estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
-      programa: String(r.programa || ''),
-      programaNombre: String(r.programaNombre || ''),
-      refExterna: String(r.refExterna || ''),
-      // El enlace lo arma el servidor y no la pantalla: necesita el
-      // identificador del establecimiento, que solo vive acá. Armándolo en el
-      // navegador salía sin esa parte y Booking no sabía qué ficha abrir.
-      linkBooking: r.refExterna
-        ? bookingLinkReserva_(String(r.refExterna), String(r.canal || '')) : '',
-      notas: r.notas || '', grupo: String(r.grupo || ''),
-      pax: Number(r.pax) || 1, ninos: Number(r.ninos) || 0,
-      extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
-      // Si al total ya se le descontó el IVA. La pantalla no puede
-      // deducirlo del número: $45.000 puede ser con o sin impuesto.
-      sinIva: !!r.sinIva,
-      docs: estadoDocs_(docsPorReserva[String(r.id)], !!r.extranjero)
-    });
+    reservas.push(reservaParaPantalla_(r, ci, co, !!firmadas[r.id],
+                                      docsPorReserva[String(r.id)]));
   });
 
   var version = versionRecursos_();
@@ -5279,13 +5288,31 @@ function lineasEnlaces_(r) {
   return out.length ? [''].concat(out) : [];
 }
 
-/* Dónde cae una reserva en el calendario, para poder saltar a ella desde el
-   enlace del aviso aunque sea de dentro de seis meses. */
+/* La reserva que abre el enlace de un aviso, entera y lista para mostrar.
+
+   Devuelve la reserva ARMADA y no solo su fecha. La primera versión mandaba
+   la fecha, la pantalla movía el calendario y después buscaba la reserva
+   entre las que hubieran quedado cargadas… y ahí estaba el error: al entrar
+   hay varias cargas del calendario en vuelo a la vez, y la que contesta
+   última decide qué quedó en pantalla. Si contestaba la de la semana de hoy,
+   la reserva de enero no estaba en la lista y el cuadro no se abría nunca.
+
+   Con la reserva viniendo de acá no hay nada que adivinar ni a quién
+   esperarle.
+
+   Las canceladas también se devuelven: si el aviso dice que hubo una
+   cancelación, ir a verla es exactamente lo que uno quiere hacer. */
 function ubicarReserva(token, idReserva) {
   sesion_(token);
   var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
   if (!r) return null;
-  return { id: r.id, checkIn: ymd_(r.checkIn), recurso: String(r.recurso || '') };
+  var ci = ymd_(r.checkIn), co = ymd_(r.checkOut);
+  if (!ci || !co) return null;
+  var docs = {};
+  try { docs = agrupar_('Documentos', 'idReserva'); } catch (e) {}
+  return {
+    reserva: reservaParaPantalla_(r, ci, co, !!firmadas_()[r.id], docs[String(r.id)])
+  };
 }
 
 /* ---------- Reserva nueva ---------- */

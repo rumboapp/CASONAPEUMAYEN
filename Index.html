@@ -1922,7 +1922,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-20';
+var VERSION_ESPERADA = '2026-09-21';
 
 /* Qué reserva abrir apenas se entra, si se llegó desde el enlace de un aviso
    del grupo. Lo pone el servidor en la plantilla: dentro del marco de Apps
@@ -2259,19 +2259,30 @@ function iniciar(){
 function saltarAReserva(){
   var id = IR_A; IR_A = '';        // una sola vez, no en cada recarga
   if(!id) return;
-  srv('ubicarReserva')(id).then(function(u){
-    if(!u){ toast('Esa reserva ya no existe.', true); return; }
+  // Se avisa que se está yendo a buscarla: si algo falla después, quien
+  // apretó el enlace sabe que la app sí lo entendió y no que no pasó nada.
+  toast('Abriendo la reserva…');
+  srv('ubicarReserva')(id).then(function(d){
+    if(!d || !d.reserva){ toast('Esa reserva ya no existe.', true); return; }
+    var r = d.reserva;
+    // El calendario se mueve a su semana para que al cerrar el cuadro quede
+    // algo con sentido detrás, pero la reserva se abre con lo que trajo el
+    // servidor y NO con lo que haya quedado en pantalla: al entrar hay varias
+    // cargas del calendario en vuelo, y esperar a que la reserva apareciera
+    // entre ellas era justo lo que fallaba.
     ver('cal');
-    CAL.inicio = mas(u.checkIn, -1);
-    recargarCal();
-    // El calendario tarda en volver: se espera a que la reserva esté cargada
-    // en vez de adivinar un tiempo fijo.
-    var intentos = 0;
-    var mirar = setInterval(function(){
-      var r = (CAL.reservas||[]).filter(function(x){ return x.id===id; })[0];
-      if(r){ clearInterval(mirar); abrirReserva(r); return; }
-      if(++intentos > 40){ clearInterval(mirar); toast('No se pudo abrir esa reserva.', true); }
-    }, 250);
+    CAL.inicio = mas(r.checkIn, -1);
+    // Se espera a la carga solo por los alojamientos, que el cuadro necesita
+    // para armar el selector de habitación. Y se comprueba que hayan llegado
+    // en vez de confiar en cómo terminó la promesa: cargarCal reintenta sola
+    // cuando el servidor falla, así que puede resolver sin haber traído nada.
+    recargarCal().then(function(){
+      if(!(CAL.recursos||[]).length){
+        toast('No se pudo abrir esa reserva: el calendario no cargó.', true);
+        return;
+      }
+      abrirReserva(r);
+    });
   }).catch(function(){ toast('No se pudo abrir esa reserva.', true); });
 }
 
@@ -2404,7 +2415,7 @@ function dentroDeLoCargado(){
          mas(CAL.inicio, CAL.dias) <= CAL.ventana.hasta;
 }
 
-function recargarCal(){ CAL.ventana=null; cargarCal(); }
+function recargarCal(){ CAL.ventana=null; return cargarCal(); }
 
 function cargarCal(intento, silencioso){
   intento = intento || 1;
@@ -2414,7 +2425,7 @@ function cargarCal(intento, silencioso){
   if(dentroDeLoCargado() && !silencioso){
     pintarCal(true);
     refrescarSilencioso();
-    return;
+    return Promise.resolve();
   }
 
   var desde = mas(CAL.inicio, -MARGEN);
@@ -2422,7 +2433,10 @@ function cargarCal(intento, silencioso){
   if(!silencioso) $('cal').classList.add('recargando');
   var quitar=function(){ $('cal').classList.remove('recargando'); };
 
-  srv('cargarTablero')(desde, hasta, CAL.recursosVer||'').then(function(d){
+  // Se devuelve la promesa para poder encadenar: hay un caso —abrir la
+  // reserva que venía en el enlace de un aviso— que necesita saber cuándo
+  // terminó de cargar y no adivinarlo.
+  return srv('cargarTablero')(desde, hasta, CAL.recursosVer||'').then(function(d){
     quitar();
     $('avisoCarga').classList.add('hide');
     if(!d || !d.hoy || (!d.recursos && !CAL.recursos.length)){
