@@ -861,6 +861,22 @@
           <button class="btn gh sm" id="colProbar">Revisar las columnas</button>
           <div id="colCuerpo" style="margin-top:12px"></div>
         </div>
+
+        <!-- Desde que el lodge, el glamping y la cabaña mandan sus correos al
+             mismo buzón hay TRES establecimientos de Booking. Cada reserva
+             tiene que saber de cuál es, o su enlace abre la ficha de otro y el
+             extranet muestra una página incompleta. Las que se numeraron antes
+             de esto no lo saben, y su correo ya quedó marcado como leído: este
+             botón lo vuelve a mirar una vez y se las escribe. -->
+        <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line)">
+          <div class="ctaTit">Si el enlace a Booking abre una página incompleta</div>
+          <p class="muted" style="font-size:12.5px;margin-bottom:10px">
+            Es que esa reserva no sabe de cuál de los tres establecimientos es.
+            Esto relee los correos de Booking y se lo escribe a las que les falte.
+          </p>
+          <button class="btn gh sm" id="bkReparar">Reparar los enlaces de Booking</button>
+          <div id="bkRepCuerpo" style="margin-top:12px"></div>
+        </div>
       </div>
 
       <!-- El cambio lo fijan ellos, así que va primero y no escondido. -->
@@ -1922,7 +1938,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-22';
+var VERSION_ESPERADA = '2026-09-30';
 
 /* Qué reserva abrir apenas se entra, si se llegó desde el enlace de un aviso
    del grupo. Lo pone el servidor en la plantilla: dentro del marco de Apps
@@ -3952,6 +3968,38 @@ $('colProbar').onclick=function(){
       f.appendChild(i); f.appendChild(t);
       c.appendChild(f);
     });
+  }).catch(fallo);
+};
+
+$('bkReparar').onclick=function(){
+  var c=$('bkRepCuerpo'); c.innerHTML='';
+  var linea=function(txt, malo){
+    var f=document.createElement('div');
+    f.className='docFila';
+    if(malo) f.style.borderColor='var(--dan)';
+    f.style.cssText+=';white-space:pre-wrap;font-size:12.5px';
+    f.textContent=txt;
+    c.appendChild(f);
+  };
+  ocupado('bkReparar', srv('repararEnlacesBooking')()).then(function(d){
+    if(!d || !d.ok){ linea('⚠️ '+((d&&d.motivo)||'No se pudo revisar el correo.'), true); return; }
+    var e=d.establecimientos||[];
+    if(d.arregladas){
+      linea('✅ '+d.arregladas+(d.arregladas===1
+        ? ' reserva quedó apuntando a su establecimiento.'
+        : ' reservas quedaron apuntando a su establecimiento.'));
+    } else {
+      linea('✅ No había ninguna reserva a la que le faltara el establecimiento.');
+    }
+    if(e.length){
+      linea('🏨 Establecimientos de Booking que llegan a este correo: '+e.length+
+            ' (N° '+e.join(', ')+').');
+    }
+    if(d.sinCorreo){
+      linea('ℹ️ '+d.sinCorreo+(d.sinCorreo===1
+        ? ' reserva numerada no tiene su correo a mano (más de 180 días): su enlace sigue usando el establecimiento guardado.'
+        : ' reservas numeradas no tienen su correo a mano (más de 180 días): sus enlaces siguen usando el establecimiento guardado.'));
+    }
   }).catch(fallo);
 };
 

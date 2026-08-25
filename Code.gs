@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-22';
+var VERSION = '2026-09-30';
 
 function version() { return VERSION; }
 
@@ -36,7 +36,13 @@ var HOJAS = {
   // número no hay forma de saberlo —$45.000 puede ser con o sin impuesto—,
   // y sin ese dato la pantalla mentía: le decía "sin IVA" a un precio que
   // todavía lo llevaba, y descontarlo dos veces habría sido cosa de un clic.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc', 'programa', 'programaNombre', 'uidExterno', 'refExterna', 'feedExterno'],
+  // 'hotelExterno' es el establecimiento de Booking al que pertenece la
+  // reserva. Se guarda POR RESERVA y no una sola vez para todo, porque desde
+  // que el lodge, el glamping y la cabaña mandan sus correos al mismo buzón
+  // hay tres establecimientos distintos: guardando uno solo, el enlace de una
+  // reserva del glamping apuntaba al identificador del lodge y Booking abría
+  // una ficha que no existe.
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc', 'programa', 'programaNombre', 'uidExterno', 'refExterna', 'feedExterno', 'hotelExterno'],
   /* Los programas especiales. Un programa NO es un extra que se suma al
      alojamiento: es una TARIFA distinta que lo reemplaza. "Programa
      romántico" a $95.000 la noche se cobra en vez de los $70.000 de la
@@ -81,7 +87,7 @@ var HOJAS = {
    Esto era el origen del bug de reservas duplicadas: Sheets convertía
    "2026-08-07" en un objeto Date con hora local y las comparaciones fallaban. */
 var COLS_TEXTO = {
-  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo', 'refExterna'],
+  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo', 'refExterna', 'hotelExterno'],
   Programas: ['creado'],
   Noches: ['fecha'],
   Acompanantes: ['nacimiento', 'creado'],
@@ -1405,7 +1411,8 @@ function reservaParaPantalla_(r, ci, co, firmada, docs) {
       // identificador del establecimiento, que solo vive acá. Armándolo en el
       // navegador salía sin esa parte y Booking no sabía qué ficha abrir.
       linkBooking: r.refExterna
-        ? bookingLinkReserva_(String(r.refExterna), String(r.canal || '')) : '',
+        ? bookingLinkReserva_(String(r.refExterna), String(r.canal || ''),
+                              String(r.hotelExterno || '')) : '',
       notas: r.notas || '', grupo: String(r.grupo || ''),
       pax: Number(r.pax) || 1, ninos: Number(r.ninos) || 0,
       extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
@@ -5304,9 +5311,12 @@ function lineasEnlaces_(r) {
   var num = String(r.refExterna || '');
   if (num) {
     var canal = String(r.canal || '');
-    var link = bookingLinkReserva_(num, canal);
+    var link = bookingLinkReserva_(num, canal, String(r.hotelExterno || ''));
     if (link) {
-      out.push('🔗 <a href="' + link + '">Ver en ' + escTg_(canalNombre_(canal)) +
+      // El enlace va escapado como cualquier otro texto. Lleva '&' entre sus
+      // parámetros, y un '&' crudo dentro de un atributo es HTML inválido:
+      // Telegram lo puede cortar ahí y mandar media dirección.
+      out.push('🔗 <a href="' + escTg_(link) + '">Ver en ' + escTg_(canalNombre_(canal)) +
                '</a>  ·  N° ' + escTg_(num));
     }
   }
@@ -6681,7 +6691,11 @@ function bookingLeerCorreo_(asunto, cuerpo) {
     num = (String(cuerpo).match(/res_id=(\d{9,10})/) || [])[1] ||
           (String(cuerpo).match(/\b(\d{9,10})\b/) || [])[1] || '';
   }
-  return { tipo: tipo, numero: num, fecha: bookingFechaTexto_(asunto) };
+  // De qué establecimiento es. Cada correo lo trae, y es lo único que
+  // distingue una reserva del lodge de una del glamping ahora que los tres
+  // llegan al mismo buzón.
+  var hotel = (String(cuerpo || '').match(/hotel_id=(\d+)/) || [])[1] || '';
+  return { tipo: tipo, numero: num, fecha: bookingFechaTexto_(asunto), hotel: hotel };
 }
 
 /* El identificador del establecimiento, para armar el enlace al extranet. No
@@ -6694,13 +6708,23 @@ function bookingHotelId_(cuerpo) {
   return '';
 }
 
-function bookingLinkReserva_(num, canal) {
+/* El enlace a la reserva en el canal.
+
+   'hotel' es el establecimiento de ESA reserva. Antes no existía y se usaba
+   uno solo guardado en la configuración, que era el primero que se hubiera
+   visto pasar. Mientras hubo un solo establecimiento daba igual; con tres
+   mandando al mismo buzón, una reserva del glamping salía con el
+   identificador del lodge y el extranet abría una ficha vacía.
+
+   Si la reserva todavía no tiene el suyo —las viejas no lo tienen— se cae al
+   guardado, que para ellas es el correcto. */
+function bookingLinkReserva_(num, canal, hotel) {
   if (!num) return '';
   if (canal === 'airbnb' || /^HM[A-Z0-9]/i.test(num)) {
     return 'https://www.airbnb.com/hosting/reservations/details/' + encodeURIComponent(num);
   }
   if (canal && canal !== 'booking') return '';   // no sabemos armar el suyo
-  var h = String(config_('bookingHotelId', '') || '');
+  var h = String(hotel || '') || String(config_('bookingHotelId', '') || '');
   return 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/booking.html' +
          '?res_id=' + encodeURIComponent(num) +
          (h ? '&hotel_id=' + encodeURIComponent(h) : '') + '&lang=es';
@@ -6755,12 +6779,15 @@ function bookingRevisarCorreo_() {
       var datos = bookingLeerCorreo_(asunto, '');
       if (!datos) { vistos.mapa[id] = 1; vistos.lista.push(id); return; }
 
-      // El cuerpo solo se pide si hace falta: es lo caro de leer un correo.
-      if (!datos.numero || !config_('bookingHotelId', '')) {
-        try { cuerpo = m.getPlainBody() || ''; } catch (e) {}
-        datos = bookingLeerCorreo_(asunto, cuerpo);
-        bookingHotelId_(cuerpo);
-      }
+      /* El cuerpo se pide siempre que el correo sea de una reserva. Antes se
+         saltaba cuando el asunto ya traía el número y la configuración ya
+         tenía un establecimiento guardado… y así nunca se aprendía a qué
+         establecimiento pertenecía ESTE correo. Con tres establecimientos
+         mandando al mismo buzón eso dejó de ser un ahorro y pasó a ser el
+         motivo de que los enlaces apuntaran al lugar equivocado. */
+      try { cuerpo = m.getPlainBody() || ''; } catch (e) {}
+      datos = bookingLeerCorreo_(asunto, cuerpo);
+      bookingHotelId_(cuerpo);
       res.mirados++;
       if (!datos.numero) { vistos.mapa[id] = 1; vistos.lista.push(id); return; }
 
@@ -6781,6 +6808,61 @@ function bookingRevisarCorreo_() {
   return res;
 }
 
+/* Le pone el establecimiento a las reservas que ya estaban numeradas.
+
+   Hace falta una sola vez, al pasar de un establecimiento a tres. Las reservas
+   viejas tienen su número pero no de qué establecimiento son, y su correo ya
+   quedó marcado como visto, así que la pasada normal no lo vuelve a mirar
+   nunca. Esto lo mira igual, sin tocar la lista de vistos.
+
+   Solo rellena lo que está vacío. Si una reserva ya tiene su establecimiento
+   no se le cambia: lo que diga su propio correo manda sobre cualquier cosa
+   que se deduzca acá. */
+function repararEnlacesBooking(token) {
+  var u = sesion_(token);
+  exigirAdmin_(u);
+  if (typeof GmailApp === 'undefined') {
+    return { ok: false, motivo: 'Este script todavía no tiene permiso para leer el correo.' };
+  }
+
+  var hilos;
+  try { hilos = GmailApp.search('from:booking.com newer_than:180d', 0, 200); }
+  catch (e) { return { ok: false, motivo: 'No se pudo leer el correo: ' + (e.message || e) }; }
+
+  var porNumero = {}, establecimientos = {};
+  hilos.forEach(function (h) {
+    h.getMessages().forEach(function (m) {
+      var asunto = '';
+      try { asunto = m.getSubject() || ''; } catch (e) { return; }
+      if (!bookingTipoCorreo_(asunto)) return;
+      var cuerpo = '';
+      try { cuerpo = m.getPlainBody() || ''; } catch (e) {}
+      var d = bookingLeerCorreo_(asunto, cuerpo);
+      if (!d || !d.numero || !d.hotel) return;
+      porNumero[d.numero] = d.hotel;
+      establecimientos[d.hotel] = 1;
+    });
+  });
+
+  var arregladas = 0, sinCorreo = 0;
+  leer_('Reservas').forEach(function (r) {
+    var num = String(r.refExterna || '');
+    if (!num || String(r.canal || '') !== 'booking') return;
+    if (String(r.hotelExterno || '')) return;
+    if (!porNumero[num]) { sinCorreo++; return; }
+    actualizar_('Reservas', 'id', r.id, { hotelExterno: porNumero[num] });
+    arregladas++;
+  });
+  olvidar_('Reservas');
+
+  return {
+    ok: true,
+    arregladas: arregladas,
+    sinCorreo: sinCorreo,
+    establecimientos: Object.keys(establecimientos)
+  };
+}
+
 /* Cruza UN correo con lo que hay acá. Devuelve true si el correo ya se puede
    dar por procesado, false si conviene reintentarlo más tarde. */
 function bookingCruzarCorreo_(datos, edad, res) {
@@ -6790,6 +6872,12 @@ function bookingCruzarCorreo_(datos, edad, res) {
   })[0];
 
   if (conNumero) {
+    // Si la reserva todavía no sabe de qué establecimiento es, este correo lo
+    // dice. Vale también para las que se numeraron antes de que existiera la
+    // columna: al primer correo de modificación quedan completas.
+    if (datos.hotel && !String(conNumero.hotelExterno || '')) {
+      actualizar_('Reservas', 'id', conNumero.id, { hotelExterno: datos.hotel });
+    }
     if (datos.tipo === 'cancelada' &&
         conNumero.estado !== 'cancelada' && conNumero.estado !== 'no_show') {
       /* Si el huésped ya está adentro, esto no se resuelve solo. Un correo de
@@ -6837,14 +6925,15 @@ function bookingCruzarCorreo_(datos, edad, res) {
   });
 
   if (candidatas.length === 1) {
-    actualizar_('Reservas', 'id', candidatas[0].id, { refExterna: datos.numero });
+    actualizar_('Reservas', 'id', candidatas[0].id,
+      { refExterna: datos.numero, hotelExterno: datos.hotel || '' });
     res.numeradas++;
-    var link = bookingLinkReserva_(datos.numero, 'booking');
+    var link = bookingLinkReserva_(datos.numero, 'booking', datos.hotel);
     avisarBookingCambio_('🔖 <b>Reserva de Booking N° ' + escTg_(datos.numero) + '</b>', [
       '🛏 ' + escTg_(nombreRecurso_(candidatas[0].recurso)),
       '📅 ' + fechaTg_(candidatas[0].checkIn) + ' → ' + fechaTg_(candidatas[0].checkOut),
       '', 'Booking no manda el nombre del huésped en ninguna parte. Acá se ve:',
-      link
+      '🔗 <a href="' + escTg_(link) + '">Abrir la reserva en Booking</a>'
     ]);
     return true;
   }
