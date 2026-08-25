@@ -1922,7 +1922,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-21';
+var VERSION_ESPERADA = '2026-09-22';
 
 /* Qué reserva abrir apenas se entra, si se llegó desde el enlace de un aviso
    del grupo. Lo pone el servidor en la plantilla: dentro del marco de Apps
@@ -2487,7 +2487,7 @@ function aplicarTablero(d){
     av.textContent = plural(d.ilegibles,'reserva está guardada','reservas están guardadas')+
       ' en la planilla pero no se '+
       (d.ilegibles===1?'puede':'pueden')+' mostrar porque su fecha quedó ilegible. '+
-      'Ejecuta repararReservas() desde el editor de Apps Script para revisarlas.';
+      'Ejecuta repararReservas_() desde el editor de Apps Script para revisarlas.';
     av.classList.remove('hide');
   } else av.classList.add('hide');
 }

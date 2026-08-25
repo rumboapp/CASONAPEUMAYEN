@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-21';
+var VERSION = '2026-09-22';
 
 function version() { return VERSION; }
 
@@ -113,12 +113,21 @@ var COLS_TEXTO = {
    siempre como booleanos de verdad: 'sí' y 'no' no pueden depender de cómo
    quedó formateada una celda. */
 var COLS_BOOL = {
-  Reservas: ['exentoIva', 'extranjero', 'sinIva'],
+  // 'addon' es la marca vieja de tinaja + sushi. Ya no se usa para nada salvo
+  // la migración a programas, que corre en setup() y decide por ella: si la
+  // celda dijera "FALSE" se le pondría el programa a una reserva que no lo
+  // tenía.
+  Reservas: ['exentoIva', 'extranjero', 'sinIva', 'addon'],
   Unidades: ['porCama', 'activa'],
   Camas: ['activa'],
   Noches: ['ajustada'],
   Cuenta: ['exento', 'anulado'],
-  Programas: ['activo']
+  Programas: ['activo'],
+  Acompanantes: ['menor'],
+  // La de Usuarios es la que más importa: entrar() mira 'activo' para dejar
+  // pasar. Con la palabra "FALSE" en la celda, un usuario dado de baja seguía
+  // pudiendo entrar.
+  Usuarios: ['activo']
 };
 
 /* Qué cuenta como sí. Va por lista blanca a propósito: en una columna de sí o
@@ -974,13 +983,13 @@ function migrarAddonAPrograma_() {
 
 /* Repara las reservas que quedaron con las columnas corridas.
    Ejecutar desde el editor. Sin argumentos solo INFORMA lo que encontró;
-   con repararReservas(true) borra las filas que no se pueden recuperar.
+   con repararReservas_(true) borra las filas que no se pueden recuperar.
 
    El caso conocido: una versión anterior agregó columnas en medio del
    encabezado, así que las filas guardadas antes quedaron desplazadas y sus
    fechas dejaron de leerse. Esas reservas existen en la planilla pero el
    calendario no puede dibujarlas. */
-function repararReservas(borrar) {
+function repararReservas_(borrar) {
   var malas = leer_('Reservas').filter(function (r) {
     return !ymd_(r.checkIn) || !ymd_(r.checkOut);
   });
@@ -996,7 +1005,7 @@ function repararReservas(borrar) {
 
   if (!borrar) {
     Logger.log('\nNo se borró nada. Puedes corregir esas filas a mano en la planilla, ' +
-      'o volver a ejecutar como repararReservas(true) para eliminarlas y cargarlas de nuevo.');
+      'o volver a ejecutar como repararReservas_(true) para eliminarlas y cargarlas de nuevo.');
     return { revisadas: malas.length, borradas: 0 };
   }
   malas.forEach(function (r) { borrar_('Reservas', 'id', r.id); });
@@ -1004,8 +1013,24 @@ function repararReservas(borrar) {
   return { revisadas: malas.length, borradas: malas.length };
 }
 
-/* Crear o cambiar el PIN de un usuario desde el editor si te quedas fuera del sistema. */
-function crearUsuario(nombre, pin, rol) {
+/* ---------- Herramientas de mantenimiento: SOLO desde el editor ----------
+   Estas tres terminan en guión bajo a propósito, y no es un capricho de
+   nombre: la app está publicada como "cualquiera puede acceder" —tiene que
+   estarlo, porque Booking y Airbnb leen el calendario sin clave y el huésped
+   abre su ficha desde el celular—, y desde una página así se puede llamar por
+   nombre a cualquier función del servidor que NO sea privada.
+
+   crearUsuario creaba un usuario con el rol que se le pidiera, incluido
+   administración, sin comprobar absolutamente nada. Con la dirección de la
+   app —que anda en Telegram, en los correos y en los enlaces de los
+   calendarios— alcanzaba para hacerse un admin y entrar a ver los pasaportes,
+   los teléfonos y la caja.
+
+   Para agregar gente está Equipo, que sí pide sesión de administración. Estas
+   quedan para una emergencia, ejecutándolas a mano desde Apps Script. */
+
+/* Crear o cambiar el PIN de un usuario, si te quedas fuera del sistema. */
+function crearUsuario_(nombre, pin, rol) {
   guardarOCrear_('Usuarios', 'nombre', nombre, {
     nombre: nombre, rol: rol || 'recepcion', pinHash: pin_(String(pin)), activo: true
   });
@@ -6863,7 +6888,7 @@ function bookingCruzarCorreo_(datos, edad, res) {
    Por eso existe esta función. No hace nada útil aparte de tocar el correo,
    que es justo lo que obliga a Google a pedir el permiso que falta. Se elige
    desde el editor de Apps Script, se aprieta Ejecutar, se acepta, y listo. */
-function autorizarCorreo() {
+function autorizarCorreo_() {
   var n = GmailApp.search('from:booking.com newer_than:14d', 0, 10).length;
   var msg = 'Listo: el permiso está concedido. Se ven ' + n +
             ' conversación(es) de Booking de los últimos 14 días.' +
@@ -7146,7 +7171,7 @@ function diagnostico() {
       out.ok = false;
       out.mensaje = plural_(out.ilegibles, 'reserva tiene', 'reservas tienen') +
         ' fechas ilegibles y por eso no ' + (out.ilegibles === 1 ? 'aparece' : 'aparecen') + ' ' +
-        'en el calendario. Ejecuta repararReservas() desde el editor para revisarlas.';
+        'en el calendario. Ejecuta repararReservas_() desde el editor para revisarlas.';
       return out;
     }
     out.mensaje = 'Todo en orden: ' + plural_(out.usuarios, 'usuario', 'usuarios') + ', ' +
