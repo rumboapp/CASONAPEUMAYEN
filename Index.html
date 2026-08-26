@@ -1938,7 +1938,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-09-30';
+var VERSION_ESPERADA = '2026-10-01';
 
 /* Qué reserva abrir apenas se entra, si se llegó desde el enlace de un aviso
    del grupo. Lo pone el servidor en la plantilla: dentro del marco de Apps
@@ -5942,30 +5942,87 @@ $('cGuardar').onclick=function(){
 /* ==================================================================
    Ficha de registro + firma
    ================================================================== */
-var CTX=null, pintando=false;
+/* La firma del check-in en recepción. Mismo cuidado que la del enlace del
+   huésped: el lienzo tiene una medida en pantalla y otra por dentro, y si no
+   coinciden el trazo sale corrido y lo que cae pasado el borde de la medida
+   chica no se dibuja. Acá además el lienzo nace dentro de un cuadro cerrado,
+   así que al prepararlo todavía no tiene medida que copiar. */
+var CTX=null, pintando=false, hayTrazo=false;
+// Vuelve a calzar la medida del lienzo con la que ocupa en pantalla. Se deja
+// a mano acá afuera porque el cuadro de la ficha lo abre y lo cierra, y cada
+// vez que se abre hay que medirlo de nuevo.
+var ajustarFirma=function(){ return false; };
+// Borrar de verdad: el contexto está escalado, así que hay que soltar la
+// escala un momento o queda un pedazo sin borrar.
+function limpiarFirma(){
+  var c=$('firma');
+  if(!CTX) return;
+  CTX.save(); CTX.setTransform(1,0,0,1,0,0);
+  CTX.clearRect(0,0,c.width,c.height);
+  CTX.restore();
+  hayTrazo=false;
+}
 function prepararFirma(){
   var c=$('firma');
   CTX=c.getContext('2d');
-  var ajustar=function(){
-    if(!c.clientWidth) return;
-    c.width=c.clientWidth; c.height=c.clientHeight;
+
+  var estilo=function(){
     CTX.lineWidth=2; CTX.lineCap='round'; CTX.lineJoin='round'; CTX.strokeStyle='#16191d';
   };
-  ajustar(); window.addEventListener('resize', ajustar);
+
+  var medir=function(){
+    var r=c.getBoundingClientRect();
+    if(!r.width || !r.height) return false;
+    var dpr=Math.min(window.devicePixelRatio||1, 3);
+    var an=Math.round(r.width*dpr), al=Math.round(r.height*dpr);
+    if(c.width===an && c.height===al){ estilo(); return true; }
+    var previo = hayTrazo ? c.toDataURL() : null;
+    c.width=an; c.height=al;
+    CTX.setTransform(dpr,0,0,dpr,0,0);
+    estilo();
+    if(previo){
+      var img=new Image();
+      img.onload=function(){ CTX.drawImage(img,0,0,r.width,r.height); };
+      img.src=previo;
+    }
+    return true;
+  };
+
+  ajustarFirma=medir;
+
+  var intentos=0;
+  (function esperar(){
+    if(medir() || ++intentos>60) return;
+    requestAnimationFrame(esperar);
+  })();
+
+  window.addEventListener('resize', medir);
+  window.addEventListener('orientationchange', medir);
+  if(window.ResizeObserver){ try{ new ResizeObserver(medir).observe(c); }catch(_){} }
+
   var pos=function(e){ var r=c.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; };
   c.addEventListener('pointerdown', function(e){
-    if(!c.width) ajustar();
-    pintando=true; c.setPointerCapture(e.pointerId);
-    var p=pos(e); CTX.beginPath(); CTX.moveTo(p.x,p.y);
+    e.preventDefault();
+    if(document.activeElement && document.activeElement!==c &&
+       document.activeElement.blur){ try{ document.activeElement.blur(); }catch(_){} }
+    if(!hayTrazo) medir();
+    pintando=true; hayTrazo=true;
+    try{ c.setPointerCapture(e.pointerId); }catch(_){}
+    var p=pos(e);
+    CTX.beginPath(); CTX.moveTo(p.x,p.y);
+    CTX.lineTo(p.x+0.1,p.y); CTX.stroke();
   });
   c.addEventListener('pointermove', function(e){
     if(!pintando) return;
     e.preventDefault();
     var p=pos(e); CTX.lineTo(p.x,p.y); CTX.stroke();
   });
-  c.addEventListener('pointerup', function(){ pintando=false; });
+  var soltar=function(){ pintando=false; };
+  c.addEventListener('pointerup', soltar);
+  c.addEventListener('pointercancel', soltar);
+  c.addEventListener('lostpointercapture', soltar);
 }
-$('fLimpiar').onclick=function(){ var c=$('firma'); CTX.clearRect(0,0,c.width,c.height); };
+$('fLimpiar').onclick=function(){ limpiarFirma(); };
 
 var REGLAS=null;
 function pintarReglas(){
@@ -5986,14 +6043,10 @@ function abrirFicha(r){
   $('fMot').value=''; $('fEme').value=''; $('fAcc').checked=false;
   $('fErr').classList.add('hide');
   abrir('mFicha');
-  setTimeout(function(){
-    var c=$('firma');
-    if(c.clientWidth && c.width!==c.clientWidth){
-      c.width=c.clientWidth; c.height=c.clientHeight;
-      CTX.lineWidth=2; CTX.lineCap='round'; CTX.lineJoin='round'; CTX.strokeStyle='#16191d';
-    }
-    CTX.clearRect(0,0,c.width,c.height);
-  }, 60);
+  /* El lienzo recién ahora está en pantalla y recién ahora tiene medida. Se
+     mide antes de borrar, porque medir cambia el tamaño y eso borra igual. */
+  hayTrazo=false;
+  setTimeout(function(){ ajustarFirma(); limpiarFirma(); }, 60);
 }
 
 $('fGuardar').onclick=function(){

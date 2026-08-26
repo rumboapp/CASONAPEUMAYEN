@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-09-30';
+var VERSION = '2026-10-01';
 
 function version() { return VERSION; }
 
@@ -42,7 +42,11 @@ var HOJAS = {
   // hay tres establecimientos distintos: guardando uno solo, el enlace de una
   // reserva del glamping apuntaba al identificador del lodge y Booking abría
   // una ficha que no existe.
-  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc', 'programa', 'programaNombre', 'uidExterno', 'refExterna', 'feedExterno', 'hotelExterno'],
+  // 'avisada' es cuándo se mandó al grupo el aviso de que esta reserva entró
+  // sola. Existe para que el aviso salga UNA vez: la reserva la trae el
+  // calendario y el número lo trae el correo, y avisando en cada paso salían
+  // dos mensajes seguidos de la misma reserva.
+  Reservas: ['id', 'recurso', 'idUnidad', 'huesped', 'telefono', 'canal', 'checkIn', 'checkOut', 'estado', 'total', 'anticipo', 'addon', 'addonFecha', 'notas', 'creado', 'creadoPor', 'email', 'tokenFicha', 'checkInReal', 'checkOutReal', 'grupo', 'pax', 'exentoIva', 'docTurismo', 'ninos', 'extranjero', 'dolar', 'sinIva', 'codigoDoc', 'programa', 'programaNombre', 'uidExterno', 'refExterna', 'feedExterno', 'hotelExterno', 'avisada'],
   /* Los programas especiales. Un programa NO es un extra que se suma al
      alojamiento: es una TARIFA distinta que lo reemplaza. "Programa
      romántico" a $95.000 la noche se cobra en vez de los $70.000 de la
@@ -87,7 +91,7 @@ var HOJAS = {
    Esto era el origen del bug de reservas duplicadas: Sheets convertía
    "2026-08-07" en un objeto Date con hora local y las comparaciones fallaban. */
 var COLS_TEXTO = {
-  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo', 'refExterna', 'hotelExterno'],
+  Reservas: ['checkIn', 'checkOut', 'addonFecha', 'creado', 'telefono', 'checkInReal', 'checkOutReal', 'docTurismo', 'refExterna', 'hotelExterno', 'avisada'],
   Programas: ['creado'],
   Noches: ['fecha'],
   Acompanantes: ['nacimiento', 'creado'],
@@ -542,6 +546,24 @@ function hora_(v, porDefecto) {
 
 function ahora_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd HH:mm'); }
 function hoy_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
+
+/* Lo que ahora_() guardó, de vuelta a un Date. Sirve para medir cuánto lleva
+   algo pasado. Devuelve null si no se entiende, y quien llama decide: nunca
+   una fecha inventada, que en una resta se ve igual que una de verdad.
+
+   El "T" del medio es a propósito: sin él, Safari no lee "2026-09-30 17:05". */
+function fechaHora_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return isNaN(v.getTime()) ? null : v;
+  }
+  var s = String(v == null ? '' : v).trim();
+  var m = /^(\d{4}-\d{2}-\d{2})[ T](\d{1,2}):(\d{2})/.exec(s);
+  if (m) s = m[1] + 'T' + ('0' + m[2]).slice(-2) + ':' + m[3];
+  else if (/^\d{4}-\d{2}-\d{2}$/.test(s)) s = s + 'T00:00';
+  else return null;
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
 
 /* Dos estadías chocan si se pisan. El día de check-out queda libre para el siguiente. */
 function chocan_(inA, outA, inB, outB) { return inA < outB && inB < outA; }
@@ -5542,6 +5564,7 @@ var CONFIG_EDITABLE = [
   { clave: 'telegramAvisa_reserva', rotulo: 'Avisar las reservas nuevas', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_cambio', rotulo: 'Avisar cancelaciones y cambios de fecha o pieza', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_check', rotulo: 'Avisar los check-in y check-out', tipo: 'si_no', grupo: 'telegram' },
+  { clave: 'telegramAvisa_ficha', rotulo: 'Avisar cuando un huésped firma su ficha', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_booking', rotulo: 'Avisar lo que Booking mete solo', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_aseo', rotulo: 'Avisar cuando una habitación cambia de estado de aseo', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'reglasEs', rotulo: 'Normas de convivencia', tipo: 'texto_largo', grupo: 'normas' },
@@ -5986,6 +6009,58 @@ function avisarBookingCambio_(titulo, lineas) {
   return avisar_('booking', [titulo, ''].concat(lineas).join('\n'));
 }
 
+/* Cuánto se le espera al correo antes de avisar sin número de reserva. Casi
+   siempre el correo llega en la misma pasada y no se espera nada; esto es
+   para el caso en que Booking no lo mande o se demore. */
+var ESPERA_NUMERO_MIN_ = 20;
+
+/* Manda el aviso de las reservas que entraron solas y todavía no se avisaron.
+
+   Corre al final de la pasada, cuando el calendario ya trajo la reserva y el
+   correo ya le puso su número: así el grupo recibe UN mensaje completo en vez
+   de dos a medias. Si el correo no llegó, se le espera un rato y después se
+   avisa igual sin número — mejor un aviso incompleto que ninguno.
+
+   Solo mira las que dicen 'pendiente'. Una casilla vacía NO es lo mismo: así
+   están las reservas de antes de que existiera la columna y las que se cargan
+   a mano, y ésas ya avisaron por su cuenta. */
+function avisarNuevasPendientes_() {
+  var ahora = new Date().getTime();
+  var mandados = 0;
+
+  leer_('Reservas').forEach(function (r) {
+    if (String(r.avisada || '') !== 'pendiente') return;
+
+    // Si se canceló antes de alcanzar a avisarla, no se avisa: el aviso de la
+    // cancelación ya salió por su lado y anunciar ahora una reserva muerta
+    // solo confunde.
+    if (r.estado === 'cancelada' || r.estado === 'no_show') {
+      actualizar_('Reservas', 'id', r.id, { avisada: ahora_() });
+      return;
+    }
+
+    /* Todavía puede llegarle el número por correo: se le espera un rato.
+
+       Solo si el correo se está leyendo, claro. Con esa opción apagada no hay
+       número que esperar, y esperarlo sería dejar el aviso de una reserva
+       nueva veinte minutos guardado en un cajón para nada. */
+    if (!String(r.refExterna || '') && bookingCorreoActivo_()) {
+      var nacio = fechaHora_(r.creado);
+      var edad = nacio ? (ahora - nacio.getTime()) / 60000 : 1e9;
+      if (edad < ESPERA_NUMERO_MIN_) return;
+    }
+
+    var deQuien = String(r.creadoPor || '') || canalNombre_(String(r.canal || ''));
+    // Booking no manda el nombre: cuando falta, la reserva quedó a nombre del
+    // canal y hay que decirlo en el aviso.
+    var sinNombre = String(r.huesped || '').indexOf(deQuien) === 0;
+    if (avisarBookingNueva_(r.id, String(r.refExterna || ''), sinNombre, deQuien)) mandados++;
+    actualizar_('Reservas', 'id', r.id, { avisada: ahora_() });
+  });
+
+  return mandados;
+}
+
 /* ---------- ¿Con qué se topa este evento? ----------
    Antes de crear nada hay que mirar qué hay en esa pieza en esas fechas.
    Devuelve las reservas vivas que chocan, para poder distinguir tres cosas
@@ -6137,11 +6212,19 @@ function bookingCrear_(ev, rec, feed, res) {
       ' descuenta su comisión' + (nombre ? '' : ', ' + deQuien + ' no mandó el nombre') +
       ', y las personas quedaron en 1 porque el calendario no lo dice.',
     creado: ahora_(), creadoPor: deQuien, tokenFicha: '',
-    uidExterno: ev.uid, refExterna: num, feedExterno: feed.clave
+    uidExterno: ev.uid, refExterna: num, feedExterno: feed.clave,
+    // Se le debe un aviso al grupo. La palabra va explícita y no se deduce de
+    // la casilla vacía: vacía están también las reservas viejas y las que se
+    // cargan a mano, y ésas ya avisaron por su cuenta o no tienen que avisar.
+    avisada: 'pendiente'
   });
   insertarVarias_('Noches', plan.noches);
   res.creadas++;
-  avisarBookingNueva_(id, num, !nombre, deQuien);
+  /* El aviso NO sale acá. La reserva la trae el calendario y el número de
+     reserva lo trae el correo, que se lee al final de esta misma pasada: si
+     se avisa en cada paso salen dos mensajes seguidos de la misma reserva,
+     uno sin número y otro con él. Queda pendiente y lo manda
+     avisarNuevasPendientes_ cuando ya no falta nada. */
 }
 
 /* ---------- La que ya estaba: ¿se movió, revivió, o no cambió nada? ----------
@@ -6461,6 +6544,11 @@ function bookingSincronizar_() {
   });
 
   bookingCorreoDeLaPasada_(res);
+  /* Último de todo: recién acá la reserva está completa —el calendario le puso
+     las fechas y el correo el número— y el aviso al grupo sale entero y una
+     sola vez. */
+  try { res.avisadas = avisarNuevasPendientes_(); }
+  catch (e) { res.avisos.push('No se pudo avisar al grupo: ' + (e.message || e)); }
   actualizarConfig_('bookingUltima', JSON.stringify(res));
   return res;
 }
@@ -6928,13 +7016,22 @@ function bookingCruzarCorreo_(datos, edad, res) {
     actualizar_('Reservas', 'id', candidatas[0].id,
       { refExterna: datos.numero, hotelExterno: datos.hotel || '' });
     res.numeradas++;
-    var link = bookingLinkReserva_(datos.numero, 'booking', datos.hotel);
-    avisarBookingCambio_('🔖 <b>Reserva de Booking N° ' + escTg_(datos.numero) + '</b>', [
-      '🛏 ' + escTg_(nombreRecurso_(candidatas[0].recurso)),
-      '📅 ' + fechaTg_(candidatas[0].checkIn) + ' → ' + fechaTg_(candidatas[0].checkOut),
-      '', 'Booking no manda el nombre del huésped en ninguna parte. Acá se ve:',
-      '🔗 <a href="' + escTg_(link) + '">Abrir la reserva en Booking</a>'
-    ]);
+    /* Si la reserva todavía no se avisó, este número le va a salir dentro del
+       aviso que se manda al final de la pasada. Avisar acá también era lo que
+       hacía llegar dos mensajes seguidos de la misma reserva.
+
+       Cuando SÍ estaba avisada, el número es novedad y se dice: es una reserva
+       que llevaba días sin él. */
+    var pendiente = String(candidatas[0].avisada || '') === 'pendiente';
+    if (!pendiente) {
+      var link = bookingLinkReserva_(datos.numero, 'booking', datos.hotel);
+      avisarBookingCambio_('🔖 <b>Reserva de Booking N° ' + escTg_(datos.numero) + '</b>', [
+        '🛏 ' + escTg_(nombreRecurso_(candidatas[0].recurso)),
+        '📅 ' + fechaTg_(candidatas[0].checkIn) + ' → ' + fechaTg_(candidatas[0].checkOut),
+        '', 'Booking no manda el nombre del huésped en ninguna parte. Acá se ve:',
+        '🔗 <a href="' + escTg_(link) + '">Abrir la reserva en Booking</a>'
+      ]);
+    }
     return true;
   }
 
@@ -7002,6 +7099,11 @@ function bookingCorreoAhora(token) {
   var u = sesion_(token);
   exigirAdmin_(u);
   var r = bookingRevisarCorreo_();
+  /* Si este correo era el que le faltaba a una reserva recién entrada, ya
+     está completa y el aviso puede salir ahora mismo. Sin esto, apretar
+     "revisar el correo" numeraba la reserva y el grupo se enteraba recién en
+     la pasada siguiente. */
+  try { r.avisadas = avisarNuevasPendientes_(); } catch (e) {}
   actualizarConfig_('bookingCorreoUltima', JSON.stringify(
     { cuando: ahora_(), mirados: r.mirados, numeradas: r.numeradas,
       canceladas: r.canceladas, sinCargar: r.sinCargar, dudosas: r.dudosas,
@@ -7059,7 +7161,48 @@ function fichaPublicaCargar(t) {
 function fichaPublicaFirmar(t, d) {
   var r = porTokenFicha_(t);
   guardarFicha_(r.id, d);
+  /* Solo se avisa la firma que llega por el enlace. La que se hace en el
+     mostrador no se avisa: la persona está ahí parada, y un mensaje al grupo
+     contando lo que uno acaba de ver hacer es ruido. */
+  try { avisarFichaFirmada_(r.id, d); } catch (e) {}
   return true;
+}
+
+/* El huésped firmó desde su teléfono, antes de llegar.
+
+   Lo que interesa del aviso no es la firma en sí: es que la llegada de ese día
+   ya no necesita papeleo, y que si trae acompañantes ya se sabe cuántos son
+   sin tener que abrir nada. */
+function avisarFichaFirmada_(idReserva, d) {
+  var r = leer_('Reservas').filter(function (x) { return x.id === idReserva; })[0];
+  if (!r) return false;
+
+  var quien = String((d && d.nombre) || r.huesped || '').trim();
+  var acom = ((d && d.acompanantes) || []).filter(function (a) {
+    return String((a && a.nombre) || '').trim();
+  }).length;
+  var docs = 0;
+  try {
+    docs = leer_('Documentos').filter(function (x) {
+      return String(x.idReserva) === String(idReserva);
+    }).length;
+  } catch (e) {}
+
+  var lineas = ['✍️ <b>Ficha firmada</b>', '',
+    '👤 <b>' + escTg_(quien) + '</b>',
+    '🛏 ' + escTg_(nombreRecurso_(r.recurso)),
+    '📅 ' + fechaTg_(r.checkIn) + ' → ' + fechaTg_(r.checkOut)];
+  if (acom) lineas.push('👥 y ' + plural_(acom, 'acompañante', 'acompañantes') + ' registrados');
+  lineas.push(docs ? '📄 ' + plural_(docs, 'documento adjunto', 'documentos adjuntos')
+                   : '📄 Sin documentos todavía: se le piden al llegar');
+  // Si el nombre con que firmó no es el de la reserva, hay que mirarlo: puede
+  // ser que reservó una persona y viene otra.
+  if (quien && String(r.huesped || '').trim() &&
+      quien.toLowerCase() !== String(r.huesped).trim().toLowerCase()) {
+    lineas.push('ℹ️ La reserva está a nombre de ' + escTg_(String(r.huesped).trim()) + '.');
+  }
+  lineas = lineas.concat(lineasEnlaces_(r));
+  return avisar_('ficha', lineas.join('\n'));
 }
 
 /* ===================== ALOJAMIENTO (habitaciones y carpas) =====================

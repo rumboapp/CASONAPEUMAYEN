@@ -588,34 +588,89 @@ function subirDoc(tipo, archivo, caja){
   });
 }
 
+/* La pantalla de firma.
+
+   El lienzo tiene DOS medidas: la que ocupa en pantalla y la de su dibujo por
+   dentro. Si no coinciden, el trazo sale corrido, y lo que se dibuja pasado el
+   borde de la medida chica no aparece: el dedo se mueve y no pinta nada. Eso
+   era lo que hacía que en el teléfono la firma "no pescara" y en el computador
+   sí — allá las dos medidas coincidían por casualidad.
+
+   Y medirlo una sola vez al abrir no alcanza: si en ese momento el lienzo
+   todavía no está en pantalla no hay medida que copiar, y quedaba con la
+   medida de fábrica para siempre. Por eso se vuelve a medir cuando cambia de
+   tamaño y en el primer toque. */
 function prepararLienzo(){
   var c = $('lienzo');
   CTX = c.getContext('2d');
-  var ajustar = function(){
-    if (!c.clientWidth) return;
-    var datos = c.width ? CTX.getImageData(0,0,c.width,c.height) : null;
-    c.width = c.clientWidth; c.height = c.clientHeight;
+
+  var estilo = function(){
     CTX.lineWidth=2.2; CTX.lineCap='round'; CTX.lineJoin='round'; CTX.strokeStyle='#16191d';
-    if (datos) CTX.putImageData(datos,0,0);
   };
-  ajustar();
-  window.addEventListener('resize', ajustar);
+
+  var medir = function(){
+    var r = c.getBoundingClientRect();
+    if (!r.width || !r.height) return false;
+    // En pantallas densas se dibuja al doble y se compensa con la escala, para
+    // que la firma no salga pixelada en la boleta.
+    var dpr = Math.min(window.devicePixelRatio || 1, 3);
+    var an = Math.round(r.width * dpr), al = Math.round(r.height * dpr);
+    if (c.width === an && c.height === al) { estilo(); return true; }
+    var previo = firmado ? c.toDataURL() : null;
+    c.width = an; c.height = al;
+    CTX.setTransform(dpr, 0, 0, dpr, 0, 0);   // de acá en adelante se dibuja en medida de pantalla
+    estilo();
+    if (previo) {
+      var img = new Image();
+      img.onload = function(){ CTX.drawImage(img, 0, 0, r.width, r.height); };
+      img.src = previo;
+    }
+    return true;
+  };
+
+  var intentos = 0;
+  (function esperar(){
+    if (medir() || ++intentos > 60) return;
+    requestAnimationFrame(esperar);
+  })();
+
+  window.addEventListener('resize', medir);
+  window.addEventListener('orientationchange', medir);
+  if (window.ResizeObserver) { try { new ResizeObserver(medir).observe(c); } catch(_){} }
 
   var pos = function(e){ var r=c.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; };
+
   c.addEventListener('pointerdown', function(e){
+    // Sin esto, el dedo apoyado sobre el lienzo puede terminar seleccionando
+    // texto o haciendo zoom en vez de firmar.
+    e.preventDefault();
+    // Si venía escribiendo, cerrar el teclado antes: con el teclado abierto la
+    // página está corrida y el primer trazo cae en otro lado.
+    if (document.activeElement && document.activeElement !== c &&
+        document.activeElement.blur) { try { document.activeElement.blur(); } catch(_){} }
+    if (!firmado) medir();
     pintando=true; firmado=true;
     $('err').classList.add('hide');
     // Si el navegador no puede capturar el puntero, la firma igual funciona:
     // no vale la pena romper el registro por esto.
     try { c.setPointerCapture(e.pointerId); } catch(_){}
-    var p=pos(e); CTX.beginPath(); CTX.moveTo(p.x,p.y);
+    var p=pos(e);
+    CTX.beginPath(); CTX.moveTo(p.x,p.y);
+    // Un toque sin arrastre también deja marca: si no, un punto no dibuja nada
+    // y el huésped cree que la pantalla está muerta.
+    CTX.lineTo(p.x+0.1,p.y); CTX.stroke();
   });
   c.addEventListener('pointermove', function(e){
     if(!pintando) return;
     e.preventDefault();
     var p=pos(e); CTX.lineTo(p.x,p.y); CTX.stroke();
   });
-  c.addEventListener('pointerup', function(){ pintando=false; });
+  // Soltar también cuando el sistema se lleva el gesto —una llamada, el menú
+  // de la pantalla—, o el trazo siguiente arranca pegado al anterior.
+  var soltar = function(){ pintando=false; };
+  c.addEventListener('pointerup', soltar);
+  c.addEventListener('pointercancel', soltar);
+  c.addEventListener('lostpointercapture', soltar);
 }
 
 $('bLimpiar').onclick=function(){
