@@ -1938,7 +1938,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-10-01';
+var VERSION_ESPERADA = '2026-10-02';
 
 /* Qué reserva abrir apenas se entra, si se llegó desde el enlace de un aviso
    del grupo. Lo pone el servidor en la plantilla: dentro del marco de Apps
@@ -5472,6 +5472,8 @@ function pintarUltimaBooking(u){
                                  ?' reserva falsa borrada, que salía de un bloqueo'
                                  :' reservas falsas borradas, que salían de bloqueos'));
   if(u.numeradas)  partes.push(u.numeradas+' con su número de Booking');
+  if(u.mensajes)   partes.push(u.mensajes+(u.mensajes===1?' mensaje de un huésped'
+                                                         :' mensajes de huéspedes'));
   if(u.sinCargar)  partes.push(u.sinCargar+' que llegó por correo y no está acá');
   // Todo por textContent y no por innerHTML: acá adentro viajan mensajes de
   // error de Booking y nombres de habitación, que son texto ajeno.
@@ -5514,12 +5516,23 @@ $('impCorreoAhora').onclick=function(){
       var partes=[];
       if(c.numeradas)  partes.push(c.numeradas+' con su número');
       if(c.canceladas) partes.push(c.canceladas+' cancelada'+(c.canceladas===1?'':'s'));
+      if(c.mensajes)   partes.push(c.mensajes+' mensaje'+(c.mensajes===1?'':'s')+' de huéspedes');
       if(c.sinCargar)  partes.push(c.sinCargar+' que no están acá');
       toast(partes.length ? partes.join(', ')
                           : 'Correos revisados, sin novedad');
-      if(c.numeradas||c.canceladas) recargarCal();
-      if((c.avisos||[]).length){
-        $('impErr').textContent=c.avisos.join(' · ');
+      // Un mensaje puede haberle puesto nombre a una reserva que se llamaba
+      // "Booking 5740383651", así que el calendario también cambia.
+      if(c.numeradas||c.canceladas||c.mensajes) recargarCal();
+      var avisos=(c.avisos||[]).slice();
+      /* Los asuntos que llegaron de Booking y no se supieron leer. Van acá
+         abajo para que se puedan mirar el día que algo deje de reconocerse:
+         casi siempre son promociones y facturas, y no hay nada que hacer. */
+      if((c.raros||[]).length){
+        avisos.push('De Booking llegaron otros correos que no son de reservas: '+
+                    c.raros.slice(0,4).join(' · '));
+      }
+      if(avisos.length){
+        $('impErr').textContent=avisos.join(' · ');
         $('impErr').classList.remove('hide');
       } else { $('impErr').classList.add('hide'); }
     }).catch(fallo);

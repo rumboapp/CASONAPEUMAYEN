@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-10-01';
+var VERSION = '2026-10-02';
 
 function version() { return VERSION; }
 
@@ -5565,6 +5565,7 @@ var CONFIG_EDITABLE = [
   { clave: 'telegramAvisa_cambio', rotulo: 'Avisar cancelaciones y cambios de fecha o pieza', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_check', rotulo: 'Avisar los check-in y check-out', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_ficha', rotulo: 'Avisar cuando un huésped firma su ficha', tipo: 'si_no', grupo: 'telegram' },
+  { clave: 'telegramAvisa_mensaje', rotulo: 'Avisar los mensajes que mandan los huéspedes por Booking', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_booking', rotulo: 'Avisar lo que Booking mete solo', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'telegramAvisa_aseo', rotulo: 'Avisar cuando una habitación cambia de estado de aseo', tipo: 'si_no', grupo: 'telegram' },
   { clave: 'reglasEs', rotulo: 'Normas de convivencia', tipo: 'texto_largo', grupo: 'normas' },
@@ -6563,6 +6564,7 @@ function bookingCorreoDeLaPasada_(res) {
     res.numeradas = c.numeradas;
     res.canceladas += c.canceladas;
     res.sinCargar = c.sinCargar;
+    res.mensajes = c.mensajes || 0;
     (c.avisos || []).forEach(function (a) { res.avisos.push(a); });
   } catch (e) {
     res.avisos.push('No se pudo revisar el correo: ' + (e.message || e));
@@ -6765,7 +6767,72 @@ function bookingTipoCorreo_(asunto) {
   if (/cancelad|cancelled|canceled/.test(a)) return 'cancelada';
   if (/modificad|modified|cambio en la reserva/.test(a)) return 'modificada';
   if (/nueva reserva|new booking|new reservation/.test(a)) return 'nueva';
+  /* El huésped escribió por el chat de Booking. El asunto de verdad es
+     "Hemos recibido este mensaje de Fulano"; los demás son las formas que usa
+     Booking cuando la cuenta está en otro idioma. */
+  if (/hemos recibido este mensaje|tienes un mensaje nuevo|nuevo mensaje de|we received this message|you have a new message|new message from/.test(a)) {
+    return 'mensaje';
+  }
   return '';                                   // promociones, avisos, facturas
+}
+
+/* De quién es el mensaje. Va en el asunto —"Hemos recibido este mensaje de
+   Ronald Jofré"— y otra vez en el cuerpo, bajo "Nombre del cliente". */
+function bookingNombreCorreo_(asunto, cuerpo) {
+  var m = String(asunto || '').match(
+    /(?:mensaje de|message from)\s+(.+?)\s*$/i);
+  var n = m ? m[1] : '';
+  if (!n) {
+    m = String(cuerpo || '').match(
+      /(?:Nombre del cliente|Guest name|Nombre del hu[eé]sped)\s*:?\s*\n?\s*(.+)/i);
+    n = m ? m[1] : '';
+  }
+  n = String(n).replace(/[\s:·|-]+$/, '').trim();
+  // Un asunto raro no puede terminar poniéndole a una reserva un nombre de
+  // trescientas letras.
+  return n.length > 60 ? '' : n;
+}
+
+/* El texto que escribió el huésped.
+
+   En el correo va así, cada cosa en su línea:
+
+     Ronald Jofré:
+     Consulta, que tipo de calefacción tiene?
+     Responder
+
+   Así que se busca la línea del nombre y se toma lo de abajo hasta el botón
+   de responder. Si el formato cambia y no se encuentra, se devuelve vacío: el
+   aviso sale igual, sin la cita, que es mejor que no avisar. */
+function bookingTextoMensaje_(cuerpo, nombre) {
+  var lineas = String(cuerpo || '').split('\n').map(function (l) { return l.trim(); });
+  var corta = /^(responder|reply|datos de la reserva|booking\.com|reservation details)\b/i;
+  var desde = -1;
+
+  if (nombre) {
+    for (var i = 0; i < lineas.length; i++) {
+      if (lineas[i] === nombre + ':') { desde = i + 1; break; }
+    }
+  }
+  if (desde === -1) {
+    for (var j = 0; j < lineas.length; j++) {
+      if (/^(tienes un mensaje nuevo|you have a new message)/i.test(lineas[j])) {
+        desde = j + 1;
+        // La línea del nombre viene justo después del título.
+        if (/:$/.test(lineas[desde] || '')) desde++;
+        break;
+      }
+    }
+  }
+  if (desde === -1) return '';
+
+  var out = [];
+  for (var k = desde; k < lineas.length && out.length < 12; k++) {
+    if (corta.test(lineas[k])) break;
+    if (!lineas[k] && !out.length) continue;      // los blancos de arriba no cuentan
+    out.push(lineas[k]);
+  }
+  return out.join('\n').trim().slice(0, 900);
 }
 
 /* Todo lo que se le puede sacar a un correo, sin abrirlo entero. */
@@ -6774,16 +6841,24 @@ function bookingLeerCorreo_(asunto, cuerpo) {
   if (!tipo) return null;
   var num = (String(asunto).match(/\b(\d{9,10})\b/) || [])[1] || '';
   if (!num && cuerpo) {
-    // En el cuerpo el número viaja dos veces: en el título de la confirmación
-    // y dentro del enlace al extranet. El del enlace es el más fiable.
-    num = (String(cuerpo).match(/res_id=(\d{9,10})/) || [])[1] ||
+    /* En el cuerpo el número viaja varias veces. Se prueba primero por su
+       rótulo y después dentro del enlace al extranet: los dos son seguros. El
+       "cualquier número largo" queda al final porque un teléfono también lo
+       es. */
+    num = (String(cuerpo).match(/(?:N[uú]mero de confirmaci[oó]n|Confirmation number)\s*:?\s*(\d{9,10})/i) || [])[1] ||
+          (String(cuerpo).match(/res_id=(\d{9,10})/) || [])[1] ||
           (String(cuerpo).match(/\b(\d{9,10})\b/) || [])[1] || '';
   }
   // De qué establecimiento es. Cada correo lo trae, y es lo único que
   // distingue una reserva del lodge de una del glamping ahora que los tres
   // llegan al mismo buzón.
   var hotel = (String(cuerpo || '').match(/hotel_id=(\d+)/) || [])[1] || '';
-  return { tipo: tipo, numero: num, fecha: bookingFechaTexto_(asunto), hotel: hotel };
+  var d = { tipo: tipo, numero: num, fecha: bookingFechaTexto_(asunto), hotel: hotel };
+  if (tipo === 'mensaje') {
+    d.nombre = bookingNombreCorreo_(asunto, cuerpo);
+    d.mensaje = bookingTextoMensaje_(cuerpo, d.nombre);
+  }
+  return d;
 }
 
 /* El identificador del establecimiento, para armar el enlace al extranet. No
@@ -6839,7 +6914,8 @@ function bookingCorreosGuardar_(v) {
 
 /* ---------- La pasada por el correo ---------- */
 function bookingRevisarCorreo_() {
-  var res = { mirados: 0, numeradas: 0, canceladas: 0, sinCargar: 0, dudosas: 0, avisos: [] };
+  var res = { mirados: 0, numeradas: 0, canceladas: 0, sinCargar: 0, dudosas: 0,
+              mensajes: 0, avisos: [] };
   if (typeof GmailApp === 'undefined') {
     res.avisos.push('Este script todavía no tiene permiso para leer el correo.');
     return res;
@@ -6847,11 +6923,20 @@ function bookingRevisarCorreo_() {
 
   var hilos;
   try {
-    hilos = GmailApp.search('from:booking.com newer_than:14d', 0, 40);
+    /* Los avisos de reserva vienen de booking.com, pero los mensajes de los
+       huéspedes llegan a nombre del huésped "vía" un subdominio. Se buscan los
+       dos para que ninguno se quede afuera. */
+    hilos = GmailApp.search(
+      'newer_than:14d (from:booking.com OR from:guest.booking.com)', 0, 40);
   } catch (e) {
     res.avisos.push('No se pudo leer el correo: ' + (e.message || e));
     return res;
   }
+
+  // Lo que llegó de Booking y no se supo qué era. No se usa para nada acá: es
+  // para poder mirarlo después, si algún día Booking cambia cómo escribe sus
+  // asuntos y algo deja de reconocerse sin que nadie se entere.
+  var raros = [];
 
   var vistos = bookingCorreosVistos_();
   var ahora = new Date().getTime();
@@ -6865,7 +6950,10 @@ function bookingRevisarCorreo_() {
       var asunto = '', cuerpo = '';
       try { asunto = m.getSubject() || ''; } catch (e) {}
       var datos = bookingLeerCorreo_(asunto, '');
-      if (!datos) { vistos.mapa[id] = 1; vistos.lista.push(id); return; }
+      if (!datos) {
+        if (asunto && raros.length < 10) raros.push(String(asunto).slice(0, 120));
+        vistos.mapa[id] = 1; vistos.lista.push(id); return;
+      }
 
       /* El cuerpo se pide siempre que el correo sea de una reserva. Antes se
          saltaba cuando el asunto ya traía el número y la configuración ya
@@ -6877,6 +6965,17 @@ function bookingRevisarCorreo_() {
       datos = bookingLeerCorreo_(asunto, cuerpo);
       bookingHotelId_(cuerpo);
       res.mirados++;
+
+      /* Un mensaje del huésped no se cruza con nada por fecha: trae su número
+         de confirmación y con eso basta. Y si la reserva todavía no está acá,
+         el aviso sale igual: alguien está escribiendo y hay que contestarle. */
+      if (datos.tipo === 'mensaje') {
+        try { if (bookingMensajeCliente_(datos)) res.mensajes++; } catch (e) {
+          res.avisos.push('No se pudo avisar un mensaje de huésped: ' + (e.message || e));
+        }
+        vistos.mapa[id] = 1; vistos.lista.push(id); return;
+      }
+
       if (!datos.numero) { vistos.mapa[id] = 1; vistos.lista.push(id); return; }
 
       var edad = 0;
@@ -6893,7 +6992,74 @@ function bookingRevisarCorreo_() {
   });
 
   bookingCorreosGuardar_(vistos);
+  if (raros.length) actualizarConfig_('bookingAsuntosRaros', JSON.stringify(raros));
   return res;
+}
+
+/* Un huésped escribió por el chat de Booking.
+
+   El correo trae tres cosas que acá no se tenían: el texto, el número de
+   confirmación y —lo más valioso— el NOMBRE del huésped. Booking no lo manda
+   por el calendario, así que la reserva se llamaba "Booking 5740383651" hasta
+   que alguien la abría a mano. Con esto se bautiza sola.
+
+   El nombre solo se escribe si la reserva todavía se llama como el canal. Si
+   alguien ya la corrigió a mano, esa decisión es de una persona y manda. */
+function bookingMensajeCliente_(datos) {
+  var r = null;
+  if (datos.numero) {
+    r = leer_('Reservas').filter(function (x) {
+      return String(x.refExterna || '') === datos.numero;
+    })[0];
+  }
+
+  var nombre = String(datos.nombre || '').trim();
+  var rebautizada = false;
+  if (r && nombre) {
+    var actual = String(r.huesped || '').trim();
+    if (!actual || /^(booking|airbnb)\b/i.test(actual)) {
+      actualizar_('Reservas', 'id', r.id, { huesped: nombre });
+      rebautizada = true;
+      r.huesped = nombre;
+    }
+  }
+
+  var lineas = ['💬 <b>Mensaje de un huésped por Booking</b>', '',
+                '👤 <b>' + escTg_(nombre || (r && r.huesped) || 'Sin nombre') + '</b>'];
+  if (r) {
+    lineas.push('🛏 ' + escTg_(nombreRecurso_(r.recurso)));
+    lineas.push('📅 ' + fechaTg_(r.checkIn) + ' → ' + fechaTg_(r.checkOut));
+  } else if (datos.numero) {
+    lineas.push('🔖 N° ' + escTg_(datos.numero) + '  ·  esa reserva no está en el PMS');
+  }
+  if (datos.mensaje) {
+    lineas.push('');
+    /* En cursiva y entre comillas, no en <blockquote>: la cita plegable es de
+       las versiones nuevas de la API del bot, y si el bot es más viejo
+       Telegram rechaza el mensaje entero y no llega nada. */
+    lineas.push('<i>«' + escTg_(datos.mensaje).replace(/\n/g, '\n') + '»</i>');
+  }
+  if (rebautizada) {
+    lineas.push('');
+    lineas.push('✅ La reserva se llamaba «Booking ' + escTg_(datos.numero) +
+                '»: ya quedó a nombre de <b>' + escTg_(nombre) + '</b>.');
+  }
+
+  if (r) {
+    lineas = lineas.concat(lineasEnlaces_(r));
+  } else if (datos.numero) {
+    var link = bookingLinkReserva_(datos.numero, 'booking', datos.hotel);
+    if (link) {
+      lineas.push('');
+      lineas.push('🔗 <a href="' + escTg_(link) + '">Ver en Booking</a>');
+    }
+  }
+  // Contestar se contesta allá, así que el recordatorio va explícito: por acá
+  // el mensaje solo se lee.
+  lineas.push('');
+  lineas.push('↩️ Se responde desde la bandeja de Booking o desde el correo.');
+
+  return avisar_('mensaje', lineas.join('\n'));
 }
 
 /* Le pone el establecimiento a las reservas que ya estaban numeradas.
@@ -7107,7 +7273,12 @@ function bookingCorreoAhora(token) {
   actualizarConfig_('bookingCorreoUltima', JSON.stringify(
     { cuando: ahora_(), mirados: r.mirados, numeradas: r.numeradas,
       canceladas: r.canceladas, sinCargar: r.sinCargar, dudosas: r.dudosas,
-      avisos: r.avisos }));
+      mensajes: r.mensajes || 0, avisos: r.avisos }));
+  /* Los asuntos que llegaron de Booking y no se supieron leer. Van de vuelta
+     a la pantalla para que se puedan mirar: el día que Booking cambie cómo
+     escribe sus asuntos, esto es lo único que lo delata. */
+  try { r.raros = JSON.parse(String(config_('bookingAsuntosRaros', '') || '[]')); }
+  catch (e) { r.raros = []; }
   return r;
 }
 
