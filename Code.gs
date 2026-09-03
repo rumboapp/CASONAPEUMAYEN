@@ -16,7 +16,7 @@ var TZ = 'America/Santiago';
    quedó publicando una versión anterior. Ese descalce daba errores raros
    ("runner[fn] is undefined") que costaba entender; ahora se dice derecho.
    Al cambiar el código, subir la fecha en LOS DOS archivos. */
-var VERSION = '2026-10-02';
+var VERSION = '2026-10-03';
 
 function version() { return VERSION; }
 
@@ -24,7 +24,12 @@ var HOJAS = {
   // 'modo' dice cómo se vende cada pieza: entera, por camas, o las dos cosas.
   // Se agrega al final y convive con el 'porCama' antiguo, que sigue sirviendo
   // de respaldo para las instalaciones que vienen de antes.
-  Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa', 'categoria', 'modo', 'tipo', 'dormitorios'],
+  /* 'sinFicha' dice que a esa unidad NO se le exige la ficha firmada. Va en
+     negativo a propósito: una casilla vacía se lee como falso, y así todo lo
+     que ya está cargado —y todo lo que se cargue sin pensar en esto— sigue
+     pidiendo la ficha, que es el lado seguro. Al revés, estrenar la columna
+     habría dejado la casa entera sin exigir nada de un día para otro. */
+  Unidades: ['id', 'nombre', 'grupo', 'capacidad', 'bano', 'porCama', 'precioBase', 'precioAlta', 'orden', 'activa', 'categoria', 'modo', 'tipo', 'dormitorios', 'sinFicha'],
   Camas: ['id', 'idUnidad', 'nombre', 'precioBase', 'precioAlta', 'orden', 'activa'],
   // Las columnas nuevas SIEMPRE se agregan al final: si se insertan en medio,
   // las filas ya guardadas quedan corridas y sus fechas se vuelven ilegibles.
@@ -128,7 +133,7 @@ var COLS_BOOL = {
   // celda dijera "FALSE" se le pondría el programa a una reserva que no lo
   // tenía.
   Reservas: ['exentoIva', 'extranjero', 'sinIva', 'addon'],
-  Unidades: ['porCama', 'activa'],
+  Unidades: ['porCama', 'activa', 'sinFicha'],
   Camas: ['activa'],
   Noches: ['ajustada'],
   Cuenta: ['exento', 'anulado'],
@@ -1314,6 +1319,21 @@ function tipoDe_(u) {
   return String(u.grupo) === 'Glamping' ? 'carpa' : 'habitacion';
 }
 
+/* Si a esta unidad hay que exigirle la ficha firmada.
+
+   No es lo mismo una habitación de la casona, donde recepción entrega la
+   llave en mano y el registro de huéspedes se lleva ahí, que una carpa o una
+   cabaña en otro terreno, donde el huésped llega y entra. Perseguir una firma
+   que nadie va a pedir solo llena el cierre del día de avisos que se aprenden
+   a ignorar, y un aviso que se ignora deja de servir para los que sí
+   importan.
+
+   La ficha SIGUE existiendo para esas unidades: el enlace se manda igual y si
+   el huésped la firma, se guarda. Lo que se apaga es la exigencia. */
+function pideFicha_(u) {
+  return !esSi_(u && u.sinFicha);
+}
+
 var TIPO_NOMBRE_ = { habitacion: 'Habitación', carpa: 'Carpa', cabana: 'Cabaña' };
 
 /* Si nadie escribió una categoría, se arma una razonable con lo que ya se
@@ -1368,6 +1388,7 @@ function recursosDesdePlanilla_() {
         precioBase: Number(u.precioBase) || 0, precioAlta: Number(u.precioAlta) || 0,
         capacidad: Number(u.capacidad) || 2, bano: u.bano || 'privado',
         tipo: tipoDe_(u), dormitorios: Number(u.dormitorios) || 0,
+        pideFicha: pideFicha_(u),
         categoria: cat, modo: modo, esUnidad: true,
         // Vender la pieza completa deja sin cupo a todas sus camas.
         bloquea: modo === 'ambas' ? mias.map(function (c) { return c.id; }) : []
@@ -1380,6 +1401,9 @@ function recursosDesdePlanilla_() {
           precioBase: Number(c.precioBase) || 0, precioAlta: Number(c.precioAlta) || 0,
           capacidad: 1, bano: u.bano || 'compartido',
           tipo: tipoDe_(u), dormitorios: 0,
+          // La cama hereda lo de su pieza: la exigencia es del alojamiento,
+          // no de dónde duerma cada uno.
+          pideFicha: pideFicha_(u),
           categoria: cat, modo: modo, esUnidad: false,
           // Vender una cama deja sin cupo a la pieza completa.
           bloquea: modo === 'ambas' ? [u.id] : []
@@ -1424,6 +1448,9 @@ function reservaParaPantalla_(r, ci, co, firmada, docs) {
       id: r.id, recurso: r.recurso, idUnidad: r.idUnidad, huesped: r.huesped,
       telefono: String(r.telefono || ''), email: r.email || '', canal: r.canal,
       firmada: !!firmada,
+      // Para que el calendario no le pinte la franja de "sin firmar" a una
+      // carpa a la que nunca se le pidió firmar nada.
+      pideFicha: pideFichaRecurso_(r.recurso),
       checkIn: ci, checkOut: co,
       estado: r.estado, total: Number(r.total) || 0, anticipo: Number(r.anticipo) || 0,
       programa: String(r.programa || ''),
@@ -3154,13 +3181,21 @@ function resumenDia_(dia, reservas) {
       avisos.push({ tipo: 'sin_salir', idReserva: r.id, huesped: r.huesped,
         texto: 'Salía hoy y no se marcó el check-out.' });
     }
-    if (ci <= dia && co > dia && !firmadas[r.id]) {
+    /* La ficha solo se echa de menos donde se pide. En una carpa o una cabaña
+       de otro terreno el huésped llega y entra, y perseguir una firma que
+       nadie va a pedir solo llena el cierre de avisos que se aprenden a
+       ignorar — y un aviso que se ignora deja de servir para los que sí
+       importan. */
+    var exige = pideFichaRecurso_(r.recurso);
+    if (exige && ci <= dia && co > dia && !firmadas[r.id]) {
       avisos.push({ tipo: 'sin_firma', idReserva: r.id, huesped: r.huesped,
         texto: 'Está alojado y no ha firmado la ficha de registro.' });
     }
     // El registro de huéspedes tiene que nombrar a todos los que duermen. La
     // ficha los pide pero no obliga, así que acá se avisa de los que faltan.
-    if (ci <= dia && co > dia) {
+    // Va con la misma llave: los acompañantes se registran EN la ficha, así
+    // que sin ficha exigida tampoco hay a quién reclamarle la lista.
+    if (exige && ci <= dia && co > dia) {
       var esperados = Math.max((Number(r.pax) || 1) - 1, 0);
       var anotados = acompanantesDe_(r.id).length;
       if (esperados > anotados) {
@@ -3713,7 +3748,7 @@ function panelHoy_(dia) {
     return {
       id: r.id, huesped: r.huesped, telefono: String(r.telefono || ''), canal: r.canal,
       recurso: nombre(r.recurso), estado: r.estado, notas: r.notas || '',
-      firmada: !!firmadas[r.id],
+      firmada: !!firmadas[r.id], pideFicha: pideFichaRecurso_(r.recurso),
       programa: String(r.programaNombre || ''),
       saldo: (Number(r.total) || 0) - (Number(r.anticipo) || 0),
       // Con qué moneda se le habla a este huésped. Es la pantalla que mira
@@ -4457,7 +4492,7 @@ function armarResumenDia_(dia) {
       var s = saldoTg_(r);
       if (s) detalle.push('quedan ' + s + ' por cobrar');
       lineas.push('   ' + escTg_(detalle.join('  ·  ')));
-      if (!r.firmada) lineas.push('   ⚠️ ficha sin firmar');
+      if (r.pideFicha !== false && !r.firmada) lineas.push('   ⚠️ ficha sin firmar');
     });
     if (lleg.resto) lineas.push('   …y ' + lleg.resto + ' más');
   }
@@ -5300,6 +5335,16 @@ function plataTg_(reserva, pesos) {
 function nombreRecurso_(recursoId) {
   var r = recursos_().filter(function (x) { return x.id === recursoId; })[0];
   return r ? (r.unidad + (r.nombre ? ' — ' + r.nombre : '')) : String(recursoId || '');
+}
+
+/* Si a la pieza de esta reserva se le exige la ficha firmada.
+
+   Si la pieza ya no existe —se archivó, se renombró— se contesta que sí. Es
+   el lado seguro: se avisa de una firma que quizás no hacía falta, en vez de
+   callar una que sí. */
+function pideFichaRecurso_(recursoId) {
+  var r = recursos_().filter(function (x) { return x.id === recursoId; })[0];
+  return r ? r.pideFicha !== false : true;
 }
 
 /* Las líneas que comparten todos los avisos de una reserva. */
@@ -7392,6 +7437,7 @@ function inventarioAdmin(token) {
         id: x.id, nombre: x.nombre, grupo: x.grupo, capacidad: Number(x.capacidad) || 0,
         bano: x.bano, porCama: !!x.porCama, modo: modoDe_(x),
         tipo: tipoDe_(x), dormitorios: Number(x.dormitorios) || 0,
+        pideFicha: pideFicha_(x),
         categoria: String(x.categoria || '') || categoriaPorDefecto_(x),
         precioBase: Number(x.precioBase) || 0, precioAlta: Number(x.precioAlta) || 0,
         // El precio en dólares va SIN IVA: es lo que se le cotiza a un
@@ -7444,6 +7490,9 @@ function guardarUnidad(token, d) {
     // Se mantiene al día para no romper nada que todavía lo mire.
     porCama: modo === 'camas',
     precioBase: Number(d.precioBase) || 0, precioAlta: Number(d.precioAlta) || 0,
+    // Guardado en negativo, como está en la planilla. Lo que llega de la
+    // pantalla es "pide ficha", que es como se piensa el asunto.
+    sinFicha: d.pideFicha === false,
     activa: d.activa === false ? false : true
   };
   if (modo !== 'camas' && !campos.precioBase) {
@@ -7864,7 +7913,11 @@ function huespedes(token, texto, desde, hasta) {
       // La misma cuenta vista desde el historial es la misma cuenta: si esa
       // estadía se cobró en dólares, acá también se lee en dólares.
       extranjero: !!r.extranjero, dolar: Number(r.dolar) || 0,
-      firmada: !!ficha, grupo: String(r.grupo || ''),
+      // El historial también respeta el ajuste: si a esa pieza no se le pide
+      // ficha, marcar cada estadía como "sin firmar" es llenar la ficha del
+      // huésped de pendientes que nunca lo fueron.
+      firmada: !!ficha, pideFicha: pideFichaRecurso_(r.recurso),
+      grupo: String(r.grupo || ''),
       notas: String(r.notas || '')
     });
   });

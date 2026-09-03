@@ -1858,6 +1858,21 @@
         <div class="fld"><label>Precio temporada baja</label><input id="uPb" type="number" min="0" step="1000"></div>
         <div class="fld"><label>Precio temporada alta</label><input id="uPa" type="number" min="0" step="1000"></div>
       </div>
+      <!-- La ficha no se apaga: se deja de EXIGIR. El enlace se sigue
+           mandando y, si el huésped la firma, se guarda igual. -->
+      <div class="fld">
+        <label class="chk" style="font-weight:500">
+          <input type="checkbox" id="uFicha" checked>
+          <span>Exigir la ficha de registro firmada</span>
+        </label>
+        <div class="muted" style="font-size:11.5px;margin-top:5px">
+          Con esto marcado, el calendario le pinta el borde de "sin firmar" a
+          quien no haya firmado, y el cierre del día y el resumen de la mañana
+          lo reclaman. Desmárcalo donde no tenga sentido perseguir la firma
+          —una carpa o una cabaña donde el huésped llega y entra—: el enlace de
+          la ficha se sigue mandando igual y, si la firma, se guarda.
+        </div>
+      </div>
       <div class="err hide" id="uErr"></div>
     </div>
     <footer>
@@ -1938,7 +1953,7 @@
 /* Tiene que ser igual a la VERSION de Code.gs. Si no calzan, es que se copió
    un archivo y no el otro, o que la implementación quedó en una versión
    anterior: la app lo avisa arriba en vez de fallar de a poco. */
-var VERSION_ESPERADA = '2026-10-02';
+var VERSION_ESPERADA = '2026-10-03';
 
 /* Qué reserva abrir apenas se entra, si se llegó desde el enlace de un aviso
    del grupo. Lo pone el servidor en la plantilla: dentro del marco de Apps
@@ -2773,8 +2788,14 @@ function pintarCal(animar){
                                             : 'FALTAN documentos por escanear') : '');
     // Un tilde blanco cuando la ficha está firmada, para no tener que abrir
     // una por una y ver quién falta por registrar.
+    /* El punto es "falta esta firma". Donde la firma no se pide, no falta
+       nada y no va marca ninguna: un punto que nunca se va a convertir en
+       tilde es una tarea eterna, y de esas uno aprende a no mirar. El tilde
+       sí se muestra siempre, porque una firma que llegó sin pedirla igual es
+       una buena noticia. */
     b.innerHTML = (r.firmada ? '<span class="ok" title="Ficha firmada">✓</span>'
-                             : '<span class="dot" title="Ficha sin firmar"></span>')
+                   : r.pideFicha===false ? ''
+                   : '<span class="dot" title="Ficha sin firmar"></span>')
                   + r.huesped + (r.programa ? ' 🎁' : '')
                   // Al extranjero se le exigen pasaporte y tarjeta PDI para la
                   // exención de IVA. Antes eso solo se veía abriendo la
@@ -2782,7 +2803,9 @@ function pintarCal(animar){
                   // medias, que es cuando todavía se puede pedir la foto.
                   + (r.docs && r.docs.exige && !r.docs.completo
                      ? ' <span title="Faltan pasaporte o PDI por escanear">🛂</span>' : '');
-    if(!r.firmada) b.classList.add('sinfirma');
+    // La franja de "sin firmar" solo donde la firma se pide: en una carpa
+    // marcaría como pendiente algo que nadie va a hacer nunca.
+    if(!r.firmada && r.pideFicha!==false) b.classList.add('sinfirma');
     b.draggable=true;
     b.dataset.id=r.id;
 
@@ -3384,9 +3407,13 @@ function pintarPaso(r){
   };
   $('rPasoTxt').textContent = textos[estado] || estado;
 
+  // Sin firma y sin exigencia no es un pendiente: es cómo se decidió que
+  // funcione esa pieza. Se dice, para que nadie la salga a buscar.
   $('rPasoFicha').innerHTML = (r.firmada
     ? '<span class="tag en_casa">Ficha firmada</span>'
-    : '<span class="tag tentativa">Ficha sin firmar</span>')
+    : r.pideFicha===false
+      ? '<span class="tag checkout">Sin ficha: acá no se exige</span>'
+      : '<span class="tag tentativa">Ficha sin firmar</span>')
     + (r.grupo ? ' <span class="tag checkout" id="rEsGrupo">Parte de un grupo</span>' : '');
 
   // Si es parte de un grupo se ofrece aplicar el paso a todas de una vez.
@@ -4545,7 +4572,8 @@ function pintarHuesped(g){
         '<b>'+largo(r.checkIn)+' → '+largo(r.checkOut)+'</b>'+
         '<span class="tag '+r.estado+'">'+etq(r.estado)+'</span>'+
         (r.firmada?'<span class="tag en_casa">ficha firmada</span>'
-                  :'<span class="tag tentativa">sin firmar</span>')+
+          : r.pideFicha===false ? ''
+          : '<span class="tag tentativa">sin firmar</span>')+
       '</div>'+
       '<div class="muted" style="font-size:12.5px;margin:4px 0 8px">'+
         r.alojamiento+' · '+plural(r.noches,'noche','noches')+' · '+r.pax+' pax'+
@@ -5107,6 +5135,8 @@ function abrirUnidad(u){
   $('uDorm').value=u&&Number(u.dormitorios)?u.dormitorios:2;
   $('uModo').value=u?(u.modo||(u.porCama?'camas':'entera')):'entera';
   $('uCat').value=u?(u.categoria||''):'';
+  // Las unidades cargadas antes no traen la casilla: se exige, como siempre.
+  $('uFicha').checked = u ? (u.pideFicha!==false) : true;
   $('uPb').value=u?u.precioBase:'';
   $('uPa').value=u?u.precioAlta:'';
   segunTipoUnidad();
@@ -5926,7 +5956,7 @@ $('uGuardar').onclick=function(){
     id: UNI?UNI.id:'', nombre:$('uNom').value.trim(), grupo:$('uGrupo').value,
     tipo:$('uTipo').value, dormitorios:+$('uDorm').value||0,
     bano:$('uBano').value, capacidad:+$('uCap').value||1, modo:$('uModo').value,
-    categoria:$('uCat').value.trim(),
+    categoria:$('uCat').value.trim(), pideFicha:$('uFicha').checked,
     precioBase:+$('uPb').value||0, precioAlta:+$('uPa').value||0
   })).then(function(){
     cerrar('mUni'); toast('Guardado'); cargarInventario(); recargarCal();
